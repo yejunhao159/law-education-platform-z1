@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+// import { FileUploader } from "@/components/FileUploader"
+import { MinimalFileUploader } from "@/components/MinimalFileUploader"
 import {
   Upload,
   FileText,
@@ -137,9 +139,23 @@ const socraticQuestions = {
   },
 }
 
+interface ParsedDocument {
+  text: string;
+  metadata: {
+    fileName: string;
+    fileType: string;
+    pageCount?: number;
+    caseNumber?: string;
+    parties?: string;
+    court?: string;
+    date?: string;
+  };
+}
+
 export default function LawTeachingSystem() {
   const [currentAct, setCurrentAct] = useState(0)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [parsedDocument, setParsedDocument] = useState<ParsedDocument | null>(null)
   const [processingStage, setProcessingStage] = useState("")
   const [selectedElement, setSelectedElement] = useState<string | null>(null)
   const [timelinePosition, setTimelinePosition] = useState(0)
@@ -273,38 +289,17 @@ export default function LawTeachingSystem() {
             </div>
 
             <div className="max-w-2xl mx-auto">
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center bg-gray-50 hover:bg-gray-100 transition-colors">
-                <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-700 mb-2">上传判决书</h3>
-                <p className="text-gray-500 mb-6">支持 PDF、Word 格式文件</p>
-
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  id="file-upload"
-                />
-                <label htmlFor="file-upload">
-                  <Button className="bg-blue-600 hover:bg-blue-700 cursor-pointer">选择文件</Button>
-                </label>
-
-                {processingStage && (
-                  <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <div className="flex items-center justify-center gap-3 mb-3">
-                      <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
-                      <span className="text-blue-700">{processingStage}</span>
-                    </div>
-                    {uploadedFile && processingStage !== "解析完成" && (
-                      <div className="text-sm text-gray-600 space-y-1">
-                        <p>✓ 识别案件类型：民事纠纷</p>
-                        <p>✓ 提取当事人：张某、李某</p>
-                        <p>✓ 确定争议标的：房屋买卖合同</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              <MinimalFileUploader 
+                onFileProcessed={(document) => {
+                  setParsedDocument(document)
+                  setUploadedFile(new File([document.text], document.metadata.fileName))
+                  setProcessingStage("正在提取案件要素...")
+                  setTimeout(() => {
+                    setProcessingStage("解析完成")
+                    setCurrentAct(1)
+                  }, 1500)
+                }}
+              />
             </div>
           </div>
         )
@@ -315,6 +310,18 @@ export default function LawTeachingSystem() {
             <div className="text-center mb-8">
               <h2 className="text-3xl font-bold text-gray-800 mb-2">案件要素分析</h2>
               <p className="text-gray-600">按照司法三段论结构分解案件</p>
+              {parsedDocument && (
+                <div className="mt-4 inline-flex items-center gap-2 text-sm text-gray-500">
+                  <FileText className="w-4 h-4" />
+                  <span>{parsedDocument.metadata.fileName}</span>
+                  {parsedDocument.metadata.caseNumber && (
+                    <>
+                      <span>•</span>
+                      <span>{parsedDocument.metadata.caseNumber}</span>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
