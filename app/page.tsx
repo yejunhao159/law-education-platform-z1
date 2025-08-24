@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-// import { FileUploader } from "@/components/FileUploader"
-import { MinimalFileUploader } from "@/components/MinimalFileUploader"
+import { ThreeElementsExtractor } from "@/components/ThreeElementsExtractor"
 import {
   Upload,
   FileText,
@@ -155,7 +154,7 @@ interface ParsedDocument {
 export default function LawTeachingSystem() {
   const [currentAct, setCurrentAct] = useState(0)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
-  const [parsedDocument, setParsedDocument] = useState<ParsedDocument | null>(null)
+  const [extractedElements, setExtractedElements] = useState<any>(null)
   const [processingStage, setProcessingStage] = useState("")
   const [selectedElement, setSelectedElement] = useState<string | null>(null)
   const [timelinePosition, setTimelinePosition] = useState(0)
@@ -284,48 +283,32 @@ export default function LawTeachingSystem() {
         return (
           <div className="space-y-8">
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-gray-800 mb-4">案例导入系统</h2>
-              <p className="text-gray-600 text-lg">请上传判决书文件，系统将自动进行结构化分析</p>
+              <h2 className="text-3xl font-bold text-gray-800 mb-4">判决书智能解析与三要素提取</h2>
+              <p className="text-gray-600 text-lg">上传判决书文件，AI将自动提取事实认定、证据质证、法官说理三要素</p>
             </div>
 
-            <div className="max-w-2xl mx-auto">
-              <MinimalFileUploader 
-                onFileProcessed={(document) => {
-                  setParsedDocument(document)
-                  setUploadedFile(new File([document.text], document.metadata.fileName))
-                  setProcessingStage("正在提取案件要素...")
-                  setTimeout(() => {
-                    setProcessingStage("解析完成")
-                    setCurrentAct(1)
-                  }, 1500)
-                }}
-              />
+            <div className="max-w-5xl mx-auto">
+              <ThreeElementsExtractor />
             </div>
           </div>
         )
 
       case "act1":
+        const elements = extractedElements?.data?.threeElements || mockCase.threeElements
         return (
           <div className="space-y-8">
             <div className="text-center mb-8">
               <h2 className="text-3xl font-bold text-gray-800 mb-2">案件要素分析</h2>
               <p className="text-gray-600">按照司法三段论结构分解案件</p>
-              {parsedDocument && (
-                <div className="mt-4 inline-flex items-center gap-2 text-sm text-gray-500">
-                  <FileText className="w-4 h-4" />
-                  <span>{parsedDocument.metadata.fileName}</span>
-                  {parsedDocument.metadata.caseNumber && (
-                    <>
-                      <span>•</span>
-                      <span>{parsedDocument.metadata.caseNumber}</span>
-                    </>
-                  )}
-                </div>
+              {extractedElements && (
+                <Badge variant="outline" className="mt-2">
+                  AI智能提取 • 置信度 {extractedElements.confidence}%
+                </Badge>
               )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
-              {Object.entries(mockCase.threeElements).map(([key, element]) => (
+              {Object.entries(elements).map(([key, element]: [string, any]) => (
                 <Card
                   key={key}
                   className={`border-2 p-6 cursor-pointer transition-all duration-200 hover:shadow-lg ${
@@ -341,14 +324,33 @@ export default function LawTeachingSystem() {
                       {key === "law" && <Scale className="w-8 h-8 text-green-600 mx-auto" />}
                       {key === "reasoning" && <Brain className="w-8 h-8 text-purple-600 mx-auto" />}
                     </div>
-                    <h3 className="text-xl font-bold text-gray-800 mb-4">{element.title}</h3>
-                    <p className="text-sm text-gray-600 leading-relaxed">{element.content}</p>
+                    <h3 className="text-xl font-bold text-gray-800 mb-4">
+                      {key === 'facts' ? '事实认定' : key === 'evidence' ? '证据质证' : '法官说理'}
+                    </h3>
+                    <p className="text-sm text-gray-600 leading-relaxed">
+                      {element.summary || element.content || '暂无内容'}
+                    </p>
 
                     {selectedElement === key && (
                       <div className="mt-4 pt-4 border-t border-gray-200">
                         <h4 className="font-semibold text-gray-700 mb-2">关键要素：</h4>
                         <div className="flex flex-wrap gap-2 justify-center">
-                          {element.keywords.map((keyword, idx) => (
+                          {key === 'facts' && element.keyFacts && element.keyFacts.slice(0, 3).map((fact: string, idx: number) => (
+                            <Badge key={idx} variant="secondary" className="text-xs">
+                              {fact.substring(0, 20)}...
+                            </Badge>
+                          ))}
+                          {key === 'evidence' && element.items && element.items.slice(0, 3).map((item: any, idx: number) => (
+                            <Badge key={idx} variant="secondary" className="text-xs">
+                              {item.name}
+                            </Badge>
+                          ))}
+                          {key === 'reasoning' && element.keyArguments && element.keyArguments.slice(0, 3).map((arg: string, idx: number) => (
+                            <Badge key={idx} variant="secondary" className="text-xs">
+                              {arg.substring(0, 20)}...
+                            </Badge>
+                          ))}
+                          {element.keywords && element.keywords.map((keyword: string, idx: number) => (
                             <Badge key={idx} variant="secondary" className="text-xs">
                               {keyword}
                             </Badge>
@@ -364,32 +366,65 @@ export default function LawTeachingSystem() {
         )
 
       case "act2":
+        const timeline = extractedElements?.data?.threeElements?.facts?.timeline || mockCase.timeline
         return (
           <div className="space-y-8">
             <div className="text-center mb-8">
               <h2 className="text-3xl font-bold text-gray-800 mb-2">案件事实梳理</h2>
               <p className="text-gray-600">按时间顺序重构案件发生过程</p>
+              {extractedElements && (
+                <Badge variant="outline" className="mt-2">
+                  共 {timeline.length} 个关键事件
+                </Badge>
+              )}
             </div>
 
             <div className="max-w-4xl mx-auto">
               <div className="space-y-4">
-                {mockCase.timeline.map((item, index) => (
+                {timeline.map((item: any, index: number) => (
                   <Card
                     key={index}
                     className={`p-4 border-l-4 transition-all duration-300 ${
-                      item.importance === "关键" ? "border-l-red-500 bg-red-50" : "border-l-gray-300 bg-gray-50"
+                      item.importance === "critical" || item.importance === "关键" 
+                        ? "border-l-red-500 bg-red-50" 
+                        : item.importance === "important" || item.importance === "重要"
+                        ? "border-l-yellow-500 bg-yellow-50"
+                        : "border-l-gray-300 bg-gray-50"
                     } ${index <= timelinePosition ? "opacity-100" : "opacity-40"}`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <Badge variant={item.importance === "关键" ? "destructive" : "secondary"}>{item.date}</Badge>
+                        <Badge 
+                          variant={
+                            item.importance === "critical" || item.importance === "关键" 
+                              ? "destructive" 
+                              : item.importance === "important" || item.importance === "重要"
+                              ? "default"
+                              : "secondary"
+                          }
+                        >
+                          {item.date}
+                        </Badge>
                         <span className="font-medium text-gray-800">{item.event}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs">
-                          {item.type}
-                        </Badge>
-                        {item.importance === "关键" && <Star className="w-4 h-4 text-yellow-500" />}
+                        {item.actors && item.actors.length > 0 && (
+                          <div className="flex gap-1">
+                            {item.actors.map((actor: string, idx: number) => (
+                              <Badge key={idx} variant="outline" className="text-xs">
+                                {actor}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                        {item.type && (
+                          <Badge variant="outline" className="text-xs">
+                            {item.type}
+                          </Badge>
+                        )}
+                        {(item.importance === "critical" || item.importance === "关键") && (
+                          <Star className="w-4 h-4 text-yellow-500" />
+                        )}
                       </div>
                     </div>
                   </Card>

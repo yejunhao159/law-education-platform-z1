@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>直接测试mammoth库</title>
+    <meta charset="UTF-8">
+    <script src="https://unpkg.com/mammoth@1.6.0/mammoth.browser.min.js"></script>
+</head>
+<body>
+    <h1>直接测试mammoth库功能</h1>
+    <input type="file" id="docxFile" accept=".docx" />
+    <div id="result" style="margin-top: 20px; padding: 10px; border: 1px solid #ccc; white-space: pre-wrap;"></div>
+    
+    <script>
+        console.log('mammoth库加载状态:', typeof mammoth !== 'undefined' ? '✅ 已加载' : '❌ 未加载');
+        
+        document.getElementById('docxFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const resultDiv = document.getElementById('result');
+            
+            if (!file) {
+                resultDiv.textContent = '没有选择文件';
+                return;
+            }
+            
+            if (!file.name.toLowerCase().endsWith('.docx')) {
+                resultDiv.textContent = '请选择DOCX文件';
+                return;
+            }
+            
+            console.log('开始处理文件:', file.name);
+            resultDiv.textContent = '正在处理DOCX文件...';
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const arrayBuffer = e.target.result;
+                console.log('文件读取完成，大小:', arrayBuffer.byteLength);
+                
+                if (typeof mammoth === 'undefined') {
+                    resultDiv.textContent = '❌ mammoth库未加载';
+                    return;
+                }
+                
+                mammoth.extractRawText({arrayBuffer})
+                    .then(function(result) {
+                        const text = result.value.trim();
+                        console.log('提取成功，文本长度:', text.length);
+                        
+                        resultDiv.innerHTML = `
+                            <strong>✅ DOCX解析成功!</strong><br>
+                            文件名: ${file.name}<br>
+                            文本长度: ${text.length} 字符<br><br>
+                            <strong>内容预览:</strong><br>
+                            ${text.substring(0, 500)}${text.length > 500 ? '...' : ''}
+                        `;
+                        
+                        if (result.messages && result.messages.length > 0) {
+                            console.log('解析警告:', result.messages);
+                        }
+                    })
+                    .catch(function(error) {
+                        console.error('mammoth解析失败:', error);
+                        resultDiv.innerHTML = `
+                            <strong>❌ 解析失败</strong><br>
+                            错误信息: ${error.message}
+                        `;
+                    });
+            };
+            
+            reader.onerror = function() {
+                resultDiv.textContent = '❌ 文件读取失败';
+            };
+            
+            reader.readAsArrayBuffer(file);
+        });
+    </script>
+</body>
+</html>

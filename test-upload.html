@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DOCX上传测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .upload-area { border: 2px dashed #ccc; padding: 20px; text-align: center; margin: 20px 0; }
+        .error { color: red; background: #ffe6e6; padding: 10px; border-radius: 4px; }
+        .success { color: green; background: #e6ffe6; padding: 10px; border-radius: 4px; }
+        .log { font-family: monospace; background: #f5f5f5; padding: 10px; max-height: 200px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>DOCX上传调试测试</h1>
+    
+    <div class="upload-area">
+        <input type="file" id="fileInput" accept=".docx,.pdf,.txt,.md" />
+        <p>选择DOCX、PDF、TXT或MD文件进行测试</p>
+    </div>
+    
+    <div id="result"></div>
+    <div id="log" class="log"></div>
+
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${time}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function showResult(message, isError = false) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `<div class="${isError ? 'error' : 'success'}">${message}</div>`;
+        }
+
+        // 模拟FileParser.canParse
+        function canParse(file) {
+            const supportedTypes = ['txt', 'md', 'docx', 'pdf'];
+            const fileType = file.name.split('.').pop()?.toLowerCase();
+            return supportedTypes.includes(fileType || '');
+        }
+
+        // 测试mammoth库加载
+        async function testMammoth() {
+            try {
+                log('测试mammoth库加载...');
+                // 在浏览器中使用CDN版本
+                const script = document.createElement('script');
+                script.src = 'https://unpkg.com/mammoth@1.6.0/mammoth.browser.min.js';
+                document.head.appendChild(script);
+                
+                script.onload = () => {
+                    log('✅ mammoth库加载成功');
+                    if (window.mammoth) {
+                        log('✅ window.mammoth可用');
+                    }
+                };
+                
+                script.onerror = () => {
+                    log('❌ mammoth库加载失败');
+                };
+            } catch (error) {
+                log(`❌ mammoth库测试错误: ${error.message}`);
+            }
+        }
+
+        document.getElementById('fileInput').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            log(`📄 选择文件: ${file.name} (${file.size} bytes)`);
+            
+            // Step 1: 检查文件类型
+            const supported = canParse(file);
+            log(`🔍 文件类型检查: ${supported ? '✅ 支持' : '❌ 不支持'}`);
+            
+            if (!supported) {
+                showResult('不支持的文件格式', true);
+                return;
+            }
+
+            // Step 2: 检查文件大小
+            const maxSize = 10 * 1024 * 1024; // 10MB
+            if (file.size > maxSize) {
+                log(`❌ 文件过大: ${(file.size / 1024 / 1024).toFixed(1)}MB > 10MB`);
+                showResult('文件过大，请使用小于10MB的文件', true);
+                return;
+            }
+
+            log(`✅ 文件大小检查通过: ${(file.size / 1024 / 1024).toFixed(1)}MB`);
+
+            // Step 3: 尝试解析文件
+            try {
+                if (file.name.toLowerCase().endsWith('.docx')) {
+                    log('🔄 开始解析DOCX文件...');
+                    await parseDocxFile(file);
+                } else if (file.name.toLowerCase().endsWith('.txt')) {
+                    log('🔄 开始解析TXT文件...');
+                    const text = await file.text();
+                    log(`✅ TXT解析成功，内容长度: ${text.length}`);
+                    showResult(`TXT文件解析成功！内容长度: ${text.length} 字符`);
+                } else {
+                    log('ℹ️ 其他格式文件，跳过解析测试');
+                    showResult('文件格式支持，但此测试页面仅测试DOCX和TXT解析');
+                }
+            } catch (error) {
+                log(`❌ 文件解析失败: ${error.message}`);
+                showResult(`文件解析失败: ${error.message}`, true);
+            }
+        });
+
+        async function parseDocxFile(file) {
+            return new Promise((resolve, reject) => {
+                if (!window.mammoth) {
+                    reject(new Error('mammoth库未加载'));
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const arrayBuffer = e.target.result;
+                    log('📖 文件读取完成，开始提取文本...');
+                    
+                    window.mammoth.extractRawText({arrayBuffer})
+                        .then(function(result) {
+                            const text = result.value.trim();
+                            log(`✅ DOCX解析成功，文本长度: ${text.length}`);
+                            log(`📝 文本预览: ${text.substring(0, 100)}...`);
+                            
+                            if (result.messages && result.messages.length > 0) {
+                                log(`⚠️ 解析警告: ${result.messages.length} 条消息`);
+                                result.messages.forEach(msg => log(`   - ${msg.message}`));
+                            }
+                            
+                            showResult(`DOCX文件解析成功！文本长度: ${text.length} 字符`);
+                            resolve(text);
+                        })
+                        .catch(function(error) {
+                            log(`❌ mammoth解析失败: ${error.message}`);
+                            reject(error);
+                        });
+                };
+                
+                reader.onerror = function() {
+                    reject(new Error('文件读取失败'));
+                };
+                
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // 页面加载时测试mammoth
+        testMammoth();
+        log('🚀 DOCX上传调试测试已启动');
+    </script>
+</body>
+</html>

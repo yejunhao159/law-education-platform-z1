@@ -6,8 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { LegalParser } from '@/lib/legal-parser';
 // 使用DeepSeek版本的AI Agent
-import { LegalAIAgent, DeepSeekLegalAgent } from '@/lib/ai-legal-agent-deepseek';
-import { IntelligentMerger } from '@/lib/ai-legal-agent';
+import { LegalAIAgent, DeepSeekLegalAgent, IntelligentMerger } from '@/lib/ai-legal-agent-deepseek';
 
 export async function POST(request: NextRequest) {
   try {
@@ -48,12 +47,13 @@ export async function POST(request: NextRequest) {
         success: true,
         method: 'ai-enhanced',
         data: {
-          // 基础信息（来自规则引擎）
+          // 基础信息（优先使用AI提取，规则引擎作为补充）
           basicInfo: {
-            caseNumber: ruleBasedResult.caseNumber,
-            court: ruleBasedResult.court,
-            date: ruleBasedResult.date,
-            parties: ruleBasedResult.parties
+            ...aiResult.basicInfo,
+            // 如果AI未能提取某些字段，使用规则引擎的结果
+            caseNumber: aiResult.basicInfo.caseNumber || ruleBasedResult.caseNumber || '',
+            court: aiResult.basicInfo.court || ruleBasedResult.court || '',
+            judgeDate: aiResult.basicInfo.judgeDate || ruleBasedResult.date || ''
           },
           
           // 三要素（AI深度分析）
