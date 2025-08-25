@@ -5,6 +5,7 @@
  */
 
 import { PDFParser } from './pdf-parser';
+import { DocConverter } from './doc-converter';
 
 export interface ParseProgress {
   stage: string;
@@ -39,7 +40,7 @@ export class FileParser {
           return await this.parsePdfFile(file, onProgress);
           
         case 'doc':
-          throw new Error(`❌ 不支持旧版 .doc 格式\n\n💡 解决方案：\n1. 使用 Word 打开 ${fileName}\n2. 点击"文件" → "另存为"\n3. 选择"Word文档(.docx)"格式\n4. 重新上传新文件`);
+          return await this.parseDocFile(file, onProgress);
           
         default:
           throw new Error(`❌ 不支持的文件格式：.${fileType?.toUpperCase()}\n\n✅ 支持的格式：\n• PDF - 最通用的法律文档格式\n• DOCX - Word文档格式（推荐）\n• TXT - 纯文本格式（最稳定）\n• MD - Markdown格式`);
@@ -140,6 +141,32 @@ export class FileParser {
     }
   }
 
+  private static async parseDocFile(file: File, onProgress?: ProgressCallback): Promise<string> {
+    onProgress?.({ 
+      stage: 'checking', 
+      progress: 10, 
+      message: '检测DOC文件...' 
+    });
+
+    // 尝试提取文本内容
+    const extractedText = await DocConverter.tryReadAsText(file);
+    
+    if (extractedText && extractedText.length > 200) {
+      onProgress?.({ 
+        stage: 'complete', 
+        progress: 100, 
+        message: `提取成功（部分内容），共 ${extractedText.length} 字符` 
+      });
+      
+      // 返回提取的文本，并添加提示
+      return `⚠️ 注意：从DOC文件提取的内容可能不完整，建议转换为DOCX格式以获得最佳效果\n\n${extractedText}`;
+    }
+    
+    // 如果无法提取，显示转换指引
+    const guideHTML = DocConverter.getConversionGuideHTML();
+    throw new Error(guideHTML);
+  }
+
   private static async parsePdfFile(file: File, onProgress?: ProgressCallback): Promise<string> {
     try {
       return await PDFParser.parse(file, onProgress);
@@ -156,7 +183,7 @@ export class FileParser {
    * 检查文件是否可以解析
    */
   static canParse(file: File): boolean {
-    const supportedTypes = ['txt', 'md', 'docx', 'pdf'];
+    const supportedTypes = ['txt', 'md', 'docx', 'pdf', 'doc'];
     const fileType = file.name.split('.').pop()?.toLowerCase();
     return supportedTypes.includes(fileType || '');
   }

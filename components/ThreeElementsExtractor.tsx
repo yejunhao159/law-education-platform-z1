@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -9,7 +9,9 @@ import { SimpleFileUploader } from '@/components/SimpleFileUploader'
 import { FileParser, type ParseProgress } from '@/lib/file-parser'
 import { ElementEditor } from '@/components/ElementEditor'
 import { InlineEditor } from '@/components/InlineEditor'
-import { Loader2, FileText, CheckCircle, AlertCircle, Edit, Eye } from 'lucide-react'
+import { Loader2, FileText, CheckCircle, AlertCircle, Edit, Eye, ArrowRight } from 'lucide-react'
+import { useCaseStore } from '@/lib/stores/useCaseStore'
+import type { LegalCase } from '@/types/legal-case'
 
 interface ExtractedElements {
   basicInfo?: {
@@ -60,6 +62,61 @@ interface ExtractedElements {
   }
 }
 
+// 转换函数：将提取的数据转换为LegalCase格式
+function convertToLegalCase(extracted: ExtractedElements): LegalCase {
+  return {
+    basicInfo: {
+      caseNumber: extracted.basicInfo?.caseNumber || '',
+      court: extracted.basicInfo?.court || '',
+      date: extracted.basicInfo?.date || '',
+      parties: {
+        plaintiff: typeof extracted.basicInfo?.parties?.plaintiff === 'string' 
+          ? [{ name: extracted.basicInfo.parties.plaintiff, type: '自然人' }]
+          : extracted.basicInfo?.parties?.plaintiff 
+            ? [{ name: extracted.basicInfo.parties.plaintiff.name || '未知', type: '自然人' }]
+            : [],
+        defendant: typeof extracted.basicInfo?.parties?.defendant === 'string'
+          ? [{ name: extracted.basicInfo.parties.defendant, type: '自然人' }]
+          : extracted.basicInfo?.parties?.defendant
+            ? [{ name: extracted.basicInfo.parties.defendant.name || '未知', type: '自然人' }]
+            : []
+      }
+    },
+    threeElements: {
+      facts: {
+        summary: extracted.threeElements.facts.summary,
+        timeline: extracted.threeElements.facts.timeline || [],
+        keyFacts: extracted.threeElements.facts.keyFacts || [],
+        disputedFacts: extracted.threeElements.facts.disputedFacts || []
+      },
+      evidence: {
+        summary: extracted.threeElements.evidence.summary,
+        items: extracted.threeElements.evidence.items?.map(item => ({
+          id: item.name,
+          name: item.name,
+          type: item.type,
+          submittedBy: item.submittedBy,
+          credibilityScore: item.credibilityScore,
+          accepted: item.accepted,
+          content: ''
+        })) || []
+      },
+      reasoning: {
+        summary: extracted.threeElements.reasoning.summary,
+        legalBasis: extracted.threeElements.reasoning.legalBasis || [],
+        keyArguments: extracted.threeElements.reasoning.keyArguments || [],
+        judgment: extracted.threeElements.reasoning.judgment || ''
+      }
+    },
+    metadata: {
+      extractedAt: new Date().toISOString(),
+      confidence: extracted.metadata?.confidence || 0,
+      processingTime: extracted.metadata?.processingTime || 0,
+      aiModel: extracted.metadata?.aiModel || 'unknown'
+    }
+  }
+}
+
 export function ThreeElementsExtractor() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -69,6 +126,9 @@ export function ThreeElementsExtractor() {
   const [mode, setMode] = useState<'preview' | 'edit'>('preview')
   const [editedData, setEditedData] = useState<ExtractedElements | null>(null)
   const [parseProgress, setParseProgress] = useState<ParseProgress | null>(null)
+  
+  // Zustand store hooks
+  const { setCaseData, setCurrentAct } = useCaseStore()
 
   const handleFileSelect = useCallback(async (file: File) => {
     setError(null)
@@ -112,6 +172,9 @@ export function ThreeElementsExtractor() {
 
       if (result.success) {
         setExtractedData(result.data)
+        // 转换并保存到全局store
+        const legalCase = convertToLegalCase(result.data)
+        setCaseData(legalCase)
       } else {
         throw new Error(result.error || '提取失败')
       }
@@ -441,10 +504,20 @@ export function ThreeElementsExtractor() {
                 </div>
                 <div className="flex gap-2">
                   {mode === 'preview' ? (
-                    <Button variant="outline" size="sm" onClick={handleEditClick}>
-                      <Edit className="w-4 h-4 mr-1" />
-                      编辑内容
-                    </Button>
+                    <>
+                      <Button variant="outline" size="sm" onClick={handleEditClick}>
+                        <Edit className="w-4 h-4 mr-1" />
+                        编辑内容
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        onClick={() => setCurrentAct('act1')}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        进入要素分析
+                        <ArrowRight className="w-4 h-4 ml-1" />
+                      </Button>
+                    </>
                   ) : (
                     <Button variant="outline" size="sm" onClick={() => setMode('preview')}>
                       <Eye className="w-4 h-4 mr-1" />

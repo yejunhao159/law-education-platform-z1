@@ -1,11 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { ThreeElementsExtractor } from "@/components/ThreeElementsExtractor"
+import { Act2CaseIntro } from "@/components/acts/Act2CaseIntro"
+import { Act3FactDetermination } from "@/components/acts/Act3FactDetermination"
+import { useCaseStore, useCurrentAct, useCaseData } from "@/lib/stores/useCaseStore"
 import {
   Upload,
   FileText,
@@ -152,9 +155,35 @@ interface ParsedDocument {
 }
 
 export default function LawTeachingSystem() {
-  const [currentAct, setCurrentAct] = useState(0)
+  // Zustand store hooks
+  const currentActId = useCurrentAct()
+  const caseData = useCaseData()
+  const { setCurrentAct } = useCaseStore()
+  
+  // Map act ID to index for compatibility with existing code
+  const actIdToIndex: Record<string, number> = {
+    'prologue': 0,
+    'act1': 1,
+    'act2': 2,
+    'act3': 3,
+    'act4': 4,
+    'act5': 5,
+    'act6': 6
+  }
+  const currentAct = actIdToIndex[currentActId] || 0
+  
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [extractedElements, setExtractedElements] = useState<any>(null)
+  
+  // Sync extractedElements with caseData from store
+  useEffect(() => {
+    if (caseData) {
+      setExtractedElements({
+        data: caseData,
+        confidence: caseData.metadata?.confidence || 90
+      })
+    }
+  }, [caseData])
   const [processingStage, setProcessingStage] = useState("")
   const [selectedElement, setSelectedElement] = useState<string | null>(null)
   const [timelinePosition, setTimelinePosition] = useState(0)
@@ -366,143 +395,12 @@ export default function LawTeachingSystem() {
         )
 
       case "act2":
-        const timeline = extractedElements?.data?.threeElements?.facts?.timeline || mockCase.timeline
-        return (
-          <div className="space-y-8">
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-gray-800 mb-2">案件事实梳理</h2>
-              <p className="text-gray-600">按时间顺序重构案件发生过程</p>
-              {extractedElements && (
-                <Badge variant="outline" className="mt-2">
-                  共 {timeline.length} 个关键事件
-                </Badge>
-              )}
-            </div>
-
-            <div className="max-w-4xl mx-auto">
-              <div className="space-y-4">
-                {timeline.map((item: any, index: number) => (
-                  <Card
-                    key={index}
-                    className={`p-4 border-l-4 transition-all duration-300 ${
-                      item.importance === "critical" || item.importance === "关键" 
-                        ? "border-l-red-500 bg-red-50" 
-                        : item.importance === "important" || item.importance === "重要"
-                        ? "border-l-yellow-500 bg-yellow-50"
-                        : "border-l-gray-300 bg-gray-50"
-                    } ${index <= timelinePosition ? "opacity-100" : "opacity-40"}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <Badge 
-                          variant={
-                            item.importance === "critical" || item.importance === "关键" 
-                              ? "destructive" 
-                              : item.importance === "important" || item.importance === "重要"
-                              ? "default"
-                              : "secondary"
-                          }
-                        >
-                          {item.date}
-                        </Badge>
-                        <span className="font-medium text-gray-800">{item.event}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {item.actors && item.actors.length > 0 && (
-                          <div className="flex gap-1">
-                            {item.actors.map((actor: string, idx: number) => (
-                              <Badge key={idx} variant="outline" className="text-xs">
-                                {actor}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                        {item.type && (
-                          <Badge variant="outline" className="text-xs">
-                            {item.type}
-                          </Badge>
-                        )}
-                        {(item.importance === "critical" || item.importance === "关键") && (
-                          <Star className="w-4 h-4 text-yellow-500" />
-                        )}
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-
-              <div className="text-center mt-6">
-                <Button
-                  onClick={() => setTimelinePosition(Math.min(timelinePosition + 1, mockCase.timeline.length - 1))}
-                  className="mr-4"
-                  disabled={timelinePosition >= mockCase.timeline.length - 1}
-                >
-                  <Play className="w-4 h-4 mr-2" />
-                  显示下一事件
-                </Button>
-                <Button variant="outline" onClick={() => setTimelinePosition(0)}>
-                  重新开始
-                </Button>
-              </div>
-            </div>
-          </div>
-        )
+        // Use the new Act2CaseIntro component
+        return <Act2CaseIntro />
 
       case "act3":
-        return (
-          <div className="space-y-8">
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-gray-800 mb-2">证据审查分析</h2>
-              <p className="text-gray-600">评估证据的证明力和关联性</p>
-            </div>
-
-            <div className="max-w-5xl mx-auto">
-              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        证据名称
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        证据类型
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        证明力
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        关联性
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {mockCase.evidence.map((evidence) => (
-                      <tr key={evidence.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {evidence.name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Badge variant="outline">{evidence.type}</Badge>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <Progress value={evidence.credibility} className="w-20 h-2 mr-2" />
-                            <span className="text-sm text-gray-600">{evidence.credibility}%</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Badge variant={evidence.relevance === "直接证据" ? "default" : "secondary"}>
-                            {evidence.relevance}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )
+        // Use the new Act3FactDetermination component
+        return <Act3FactDetermination />
 
       case "act4":
         return (
@@ -1065,7 +963,7 @@ export default function LawTeachingSystem() {
                       ? "bg-green-100 text-green-800"
                       : "text-gray-500 hover:text-gray-700"
                 }`}
-                onClick={() => setCurrentAct(index)}
+                onClick={() => setCurrentAct(sevenActs[index].id)}
               >
                 <act.icon className="w-4 h-4" />
                 <span className="text-sm font-medium hidden lg:block">{act.name}</span>
@@ -1084,14 +982,20 @@ export default function LawTeachingSystem() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <Button
-                  onClick={() => setCurrentAct(Math.max(currentAct - 1, 0))}
+                  onClick={() => {
+                    const prevIndex = Math.max(currentAct - 1, 0)
+                    setCurrentAct(sevenActs[prevIndex].id)
+                  }}
                   variant="outline"
                   disabled={currentAct === 0}
                 >
                   上一步
                 </Button>
                 <Button
-                  onClick={() => setCurrentAct(Math.min(currentAct + 1, sevenActs.length - 1))}
+                  onClick={() => {
+                    const nextIndex = Math.min(currentAct + 1, sevenActs.length - 1)
+                    setCurrentAct(sevenActs[nextIndex].id)
+                  }}
                   disabled={currentAct >= sevenActs.length - 1}
                 >
                   下一步

@@ -151,16 +151,25 @@ export function SimpleFileUploader({ onFileSelect }: FileUploaderProps) {
             id="file-upload"
           />
           
-          <label htmlFor="file-upload">
-            <Button 
-              size="lg"
-              disabled={processing}
-              className="cursor-pointer"
-              variant={success ? "outline" : "default"}
+          <label 
+            htmlFor="file-upload"
+            className={`inline-block ${processing ? 'pointer-events-none' : ''}`}
+          >
+            <div 
+              className={`
+                inline-flex items-center justify-center px-6 py-3 
+                text-sm font-medium rounded-md transition-colors
+                ${processing 
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                  : success 
+                    ? 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 cursor-pointer'
+                    : 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
+                }
+              `}
             >
               <Upload className="w-4 h-4 mr-2" />
               {processing ? '处理中...' : success ? '重新上传' : '选择文件'}
-            </Button>
+            </div>
           </label>
           
           {fileName && (
@@ -186,10 +195,14 @@ export function SimpleFileUploader({ onFileSelect }: FileUploaderProps) {
       </Card>
 
       {error && (
-        <Alert variant="destructive">
+        <Alert variant={error.includes('DOC') ? "default" : "destructive"}>
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="whitespace-pre-line">
-            {error}
+          <AlertDescription>
+            {error.includes('<div') ? (
+              <div dangerouslySetInnerHTML={{ __html: error }} />
+            ) : (
+              <div className="whitespace-pre-line">{error}</div>
+            )}
           </AlertDescription>
         </Alert>
       )}
