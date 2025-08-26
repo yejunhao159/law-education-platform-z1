@@ -119,9 +119,16 @@ export class FileParser {
         throw new Error('❌ DOCX文件解析结果为空\n\n💡 可能原因：\n• 文件损坏或加密\n• 文档只包含图片或表格\n• 文档格式不标准\n\n🔧 解决方案：\n1. 尝试在Word中重新保存\n2. 复制文本内容到新文档\n3. 转换为TXT格式');
       }
 
-      // 检查警告信息
+      // 检查警告信息（过滤掉已知的无害警告）
       if (result.messages && result.messages.length > 0) {
-        console.warn('DOCX解析警告:', result.messages);
+        const filteredMessages = result.messages.filter((msg: any) => {
+          // 过滤掉w:tblPrEx警告（Word表格扩展属性，不影响文本提取）
+          return !msg.message?.includes('w:tblPrEx');
+        });
+        
+        if (filteredMessages.length > 0) {
+          console.warn('DOCX解析警告:', filteredMessages);
+        }
       }
 
       onProgress?.({ 

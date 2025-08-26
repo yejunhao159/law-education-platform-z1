@@ -18,7 +18,6 @@ import {
   User,
   ChevronRight,
   Loader2,
-  AlertCircle,
 } from "lucide-react"
 
 // 懒加载各幕组件 - 只有需要时才加载

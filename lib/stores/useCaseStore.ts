@@ -7,7 +7,11 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { persist } from 'zustand/middleware'
+import { enableMapSet } from 'immer'
 import type { LegalCase, TimelineEvent, EvidenceItem } from '@/types/legal-case'
+
+// 启用Immer的MapSet插件以支持Map和Set
+enableMapSet()
 
 // 争议级别类型
 export type DisputeLevel = 'agreed' | 'partial' | 'disputed'

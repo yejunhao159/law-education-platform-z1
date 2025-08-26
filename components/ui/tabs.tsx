@@ -15,6 +15,7 @@ const Tabs = React.forwardRef<
     onValueChange?.(newValue)
   }
 
+  // onValueChange已经被解构出来，不会传递给div
   return (
     <div
       ref={ref}
@@ -41,26 +42,29 @@ const TabsList = React.forwardRef<
     activeTab?: string
     onValueChange?: (value: string) => void
   }
->(({ className, activeTab, onValueChange, children, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn(
-      "inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground grid w-full",
-      className
-    )}
-    {...props}
-  >
-    {React.Children.map(children, (child) => {
-      if (React.isValidElement(child)) {
-        return React.cloneElement(child as React.ReactElement<any>, {
-          activeTab,
-          onValueChange,
-        })
-      }
-      return child
-    })}
-  </div>
-))
+>(({ className, activeTab, onValueChange, children, ...props }, ref) => {
+  // activeTab和onValueChange已经被解构出来，不会传递给div
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        "inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground grid w-full",
+        className
+      )}
+      {...props}
+    >
+      {React.Children.map(children, (child) => {
+        if (React.isValidElement(child)) {
+          return React.cloneElement(child as React.ReactElement<any>, {
+            activeTab,
+            onValueChange,
+          })
+        }
+        return child
+      })}
+    </div>
+  )
+})
 TabsList.displayName = "TabsList"
 
 const TabsTrigger = React.forwardRef<
@@ -93,8 +97,10 @@ const TabsContent = React.forwardRef<
   React.HTMLAttributes<HTMLDivElement> & {
     value: string
     activeTab?: string
+    onValueChange?: (value: string) => void  // 添加类型定义以便过滤
   }
->(({ className, value, activeTab, children, ...props }, ref) => {
+>(({ className, value, activeTab, onValueChange, children, ...props }, ref) => {
+  // activeTab, value 和 onValueChange 已经被解构出来，不会传递给div
   if (activeTab !== value) return null
   
   return (
