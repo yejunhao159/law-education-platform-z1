@@ -1,0 +1,59 @@
+[
+  {
+    "fileName": "S航运有限公司申请承认外国法院民事判决案——最高人民法院发布第四十一批指导性案例之六【指导性案例235号】.docx",
+    "success": true,
+    "processingTime": 1,
+    "ruleBasedResult": {
+      "hasBasicInfo": false,
+      "hasFacts": false,
+      "hasLaw": false,
+      "hasReasoning": false,
+      "score": 0
+    },
+    "aiResult": {
+      "confidence": 100,
+      "hasDetailedFacts": true,
+      "hasEvidenceAnalysis": true,
+      "hasLogicChain": true,
+      "score": 100
+    }
+  },
+  {
+    "fileName": "环某船舶租赁有限责任公司诉天某财富有限公司船舶碰撞损害责任纠纷案——最高人民法院发布第四十一批指导性案例之七【指导性案例236号】.pdf",
+    "success": true,
+    "processingTime": 2,
+    "ruleBasedResult": {
+      "hasBasicInfo": false,
+      "hasFacts": false,
+      "hasLaw": false,
+      "hasReasoning": false,
+      "score": 0
+    },
+    "aiResult": {
+      "confidence": 100,
+      "hasDetailedFacts": true,
+      "hasEvidenceAnalysis": true,
+      "hasLogicChain": true,
+      "score": 100
+    }
+  },
+  {
+    "fileName": "黄某辉、陈某等8人非法捕捞水产品刑事附带民事公益诉讼案——最高人民法院发布第38批指导性案例之二【指导性案例213号】.pdf",
+    "success": true,
+    "processingTime": 2,
+    "ruleBasedResult": {
+      "hasBasicInfo": false,
+      "hasFacts": false,
+      "hasLaw": false,
+      "hasReasoning": false,
+      "score": 0
+    },
+    "aiResult": {
+      "confidence": 100,
+      "hasDetailedFacts": true,
+      "hasEvidenceAnalysis": true,
+      "hasLogicChain": true,
+      "score": 100
+    }
+  }
+]

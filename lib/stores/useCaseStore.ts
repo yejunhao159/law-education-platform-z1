@@ -32,6 +32,15 @@ interface CaseStore {
   currentAct: string
   actProgress: Record<string, boolean>
   
+  // ========== 时间轴分析状态（优化版）==========
+  analysisComplete: boolean
+  socraticLevel: 1 | 2 | 3
+  timelineAnalyses: Map<string, any> // 缓存的分析结果
+  selectedTimelineNode: string | null
+  timelinePerspective: 'neutral' | 'plaintiff' | 'defendant' | 'judge'
+  teachingModeEnabled: boolean
+  completedLearningNodes: Set<string>
+  
   // ========== 事实认定状态（Issue #3）==========
   factDisputes: Map<string, DisputeLevel>
   evidenceLinks: Map<string, string[]>
@@ -67,6 +76,15 @@ interface CaseStore {
   setEditingField: (field: string, isEditing: boolean) => void
   setAutoTransition: (enabled: boolean) => void
   
+  // ========== Actions - 时间轴分析 ==========
+  markAnalysisComplete: () => void
+  progressSocraticLevel: () => void
+  setTimelinePerspective: (perspective: 'neutral' | 'plaintiff' | 'defendant' | 'judge') => void
+  setSelectedTimelineNode: (nodeId: string | null) => void
+  cacheTimelineAnalysis: (key: string, analysis: any) => void
+  toggleTeachingMode: () => void
+  markLearningNodeComplete: (nodeId: string) => void
+  
   // ========== 计算属性 ==========
   getDisputedFacts: () => TimelineEvent[]
   getEvidenceForFact: (factId: string) => EvidenceItem[]
@@ -79,6 +97,13 @@ const initialState = {
   caseData: null,
   currentAct: 'prologue',
   actProgress: {},
+  analysisComplete: false,
+  socraticLevel: 1 as const,
+  timelineAnalyses: new Map(),
+  selectedTimelineNode: null,
+  timelinePerspective: 'neutral' as const,
+  teachingModeEnabled: false,
+  completedLearningNodes: new Set<string>(),
   factDisputes: new Map(),
   evidenceLinks: new Map(),
   annotations: new Map(),
@@ -181,7 +206,9 @@ export const useCaseStore = create<CaseStore>()(
           {
             id: 'parties',
             title: '当事人关系',
-            content: `原告：${basicInfo.parties.plaintiff.map(p => p.name).join('、')}；被告：${basicInfo.parties.defendant.map(p => p.name).join('、')}`,
+            content: basicInfo.parties ? 
+              `原告：${basicInfo.parties.plaintiff?.map((p: any) => p.name).join('、') || '未知'}；被告：${basicInfo.parties.defendant?.map((p: any) => p.name).join('、') || '未知'}` :
+              `当事人：${basicInfo.plaintiff || '原告方'} 诉 ${basicInfo.defendant || '被告方'}`,
             icon: 'Users',
             color: 'green'
           },
@@ -221,6 +248,37 @@ export const useCaseStore = create<CaseStore>()(
       
       setAutoTransition: (enabled) => set((state) => {
         state.autoTransition = enabled
+      }),
+      
+      // ========== Actions - 时间轴分析 ==========
+      markAnalysisComplete: () => set((state) => {
+        state.analysisComplete = true
+      }),
+      
+      progressSocraticLevel: () => set((state) => {
+        if (state.socraticLevel < 3) {
+          state.socraticLevel = (state.socraticLevel + 1) as 1 | 2 | 3
+        }
+      }),
+      
+      setTimelinePerspective: (perspective) => set((state) => {
+        state.timelinePerspective = perspective
+      }),
+      
+      setSelectedTimelineNode: (nodeId) => set((state) => {
+        state.selectedTimelineNode = nodeId
+      }),
+      
+      cacheTimelineAnalysis: (key, analysis) => set((state) => {
+        state.timelineAnalyses.set(key, analysis)
+      }),
+      
+      toggleTeachingMode: () => set((state) => {
+        state.teachingModeEnabled = !state.teachingModeEnabled
+      }),
+      
+      markLearningNodeComplete: (nodeId) => set((state) => {
+        state.completedLearningNodes.add(nodeId)
       }),
       
       // ========== 计算属性 ==========
@@ -277,18 +335,27 @@ export const useCaseStore = create<CaseStore>()(
         caseData: state.caseData,
         currentAct: state.currentAct,
         actProgress: state.actProgress,
+        analysisComplete: state.analysisComplete,
+        socraticLevel: state.socraticLevel,
+        timelinePerspective: state.timelinePerspective,
+        selectedTimelineNode: state.selectedTimelineNode,
+        teachingModeEnabled: state.teachingModeEnabled,
         storyMode: state.storyMode,
         storyChapters: state.storyChapters,
         autoTransition: state.autoTransition,
         timelineView: state.timelineView,
-        // Map转Array进行持久化
+        // Map/Set转Array进行持久化
+        timelineAnalyses: Array.from(state.timelineAnalyses.entries()),
+        completedLearningNodes: Array.from(state.completedLearningNodes),
         factDisputes: Array.from(state.factDisputes.entries()),
         evidenceLinks: Array.from(state.evidenceLinks.entries()),
         annotations: Array.from(state.annotations.entries()),
       }),
-      // 恢复时将Array转回Map
+      // 恢复时将Array转回Map/Set
       onRehydrateStorage: () => (state) => {
         if (state) {
+          state.timelineAnalyses = new Map(state.timelineAnalyses as any)
+          state.completedLearningNodes = new Set(state.completedLearningNodes as any)
           state.factDisputes = new Map(state.factDisputes as any)
           state.evidenceLinks = new Map(state.evidenceLinks as any)
           state.annotations = new Map(state.annotations as any)

@@ -1,0 +1,31 @@
+{
+  "ruleResult": {
+    "threeElements": {
+      "facts": {
+        "title": "案件事实",
+        "content": "",
+        "keywords": [],
+        "timeline": []
+      },
+      "law": {
+        "title": "法律依据",
+        "content": "",
+        "keywords": [],
+        "provisions": []
+      },
+      "reasoning": {
+        "title": "裁判理由",
+        "content": "",
+        "keywords": [],
+        "conclusion": ""
+      }
+    }
+  },
+  "aiResult": {
+    "confidence": 100,
+    "hasDetailedFacts": true,
+    "hasEvidenceAnalysis": true,
+    "hasLogicChain": true,
+    "score": 100
+  }
+}

@@ -4,17 +4,17 @@ import React, { useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { StoryView } from './StoryView'
-import { DataFlowView } from './DataFlowView'
-import { QuickEdit } from './QuickEdit'
+import { CaseTimelineSimplified } from '../CaseTimelineSimplified'
+import { CaseTimelineEnhanced } from '../CaseTimelineEnhanced'
 import { useCaseStore, useStoryMode, useCaseData } from '@/lib/stores/useCaseStore'
-import { BookOpen, FileText, Edit, ArrowRight, ToggleLeft, ToggleRight } from 'lucide-react'
+import { BookOpen, FileText, ToggleLeft, ToggleRight, Clock, Maximize2 } from 'lucide-react'
 
 export function Act2CaseIntro() {
   const { toggleStoryMode, setCurrentAct, generateStoryChapters } = useCaseStore()
   const storyMode = useStoryMode()
   const caseData = useCaseData()
+  const [useEnhancedTimeline, setUseEnhancedTimeline] = React.useState(false)
 
   // 如果有案件数据且开启故事模式，生成故事章节
   useEffect(() => {
@@ -42,17 +42,18 @@ export function Act2CaseIntro() {
 
   return (
     <div className="space-y-6">
-      {/* 标题区域 */}
-      <div className="text-center">
-        <h2 className="text-3xl font-bold text-gray-800 mb-2">第二幕：案情导入</h2>
-        <p className="text-gray-600">理解案件背景，掌握事实脉络</p>
-      </div>
-
       {/* 模式切换 */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">展示模式</CardTitle>
+            <div>
+              <CardTitle className="text-lg">案件概况</CardTitle>
+              <CardDescription>
+                {storyMode 
+                  ? '以叙事方式呈现案件，更易理解案情发展' 
+                  : '以结构化数据呈现，便于快速查看关键信息'}
+              </CardDescription>
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -72,76 +73,64 @@ export function Act2CaseIntro() {
               )}
             </Button>
           </div>
-          <CardDescription>
-            {storyMode 
-              ? '以叙事方式呈现案件，更易理解案情发展' 
-              : '以结构化数据呈现，便于快速查看关键信息'}
-          </CardDescription>
         </CardHeader>
-      </Card>
-
-      {/* 内容展示 */}
-      <Tabs defaultValue="view" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="view" className="flex items-center gap-2">
-            <BookOpen className="w-4 h-4" />
-            案情展示
-          </TabsTrigger>
-          <TabsTrigger value="flow" className="flex items-center gap-2">
-            <FileText className="w-4 h-4" />
-            数据流转
-          </TabsTrigger>
-          <TabsTrigger value="edit" className="flex items-center gap-2">
-            <Edit className="w-4 h-4" />
-            快速编辑
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="view" className="mt-6">
+        <CardContent>
+          {/* 案件基本信息 */}
+          <div className="flex items-center gap-2 mb-4">
+            <Badge variant="outline">
+              案号：{caseData.basicInfo.caseNumber}
+            </Badge>
+            <Badge variant="secondary">
+              法院：{caseData.basicInfo.court}
+            </Badge>
+            {caseData.basicInfo.caseType && (
+              <Badge variant="default">
+                {caseData.basicInfo.caseType}
+              </Badge>
+            )}
+          </div>
+          
+          {/* 内容展示 - 时间轴作为主要呈现方式 */}
           {storyMode ? (
             <StoryView />
           ) : (
-            <DataFlowView />
+            <div className="space-y-4">
+              {/* 时间轴展示 - 法学思维驱动 */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-orange-600" />
+                    <h4 className="font-semibold">案件发展脉络</h4>
+                    <Badge variant="outline" className="text-xs">
+                      法学思维分析
+                    </Badge>
+                  </div>
+                  {/* 时间轴版本切换按钮 */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setUseEnhancedTimeline(!useEnhancedTimeline)}
+                    className="flex items-center gap-1"
+                  >
+                    <Maximize2 className="w-3 h-3" />
+                    {useEnhancedTimeline ? '简化视图' : '增强视图'}
+                  </Button>
+                </div>
+                {/* 根据切换显示不同版本的时间轴 */}
+                {useEnhancedTimeline ? (
+                  <div>
+                    {/* 增强版提示 */}
+                    <div className="mb-3 p-2 bg-blue-50 rounded-md text-xs text-blue-700">
+                      增强版支持：分组视图、事件筛选、分页显示、网格布局
+                    </div>
+                    <CaseTimelineEnhanced />
+                  </div>
+                ) : (
+                  <CaseTimelineSimplified />
+                )}
+              </div>
+            </div>
           )}
-        </TabsContent>
-
-        <TabsContent value="flow" className="mt-6">
-          <DataFlowView showFlowDiagram />
-        </TabsContent>
-
-        <TabsContent value="edit" className="mt-6">
-          <QuickEdit />
-        </TabsContent>
-      </Tabs>
-
-      {/* 操作按钮 */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">
-                案号：{caseData.basicInfo.caseNumber}
-              </Badge>
-              <Badge variant="secondary">
-                法院：{caseData.basicInfo.court}
-              </Badge>
-            </div>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline"
-                onClick={() => setCurrentAct('prologue')}
-              >
-                返回序幕
-              </Button>
-              <Button 
-                onClick={() => setCurrentAct('act3')}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                进入事实认定
-                <ArrowRight className="w-4 h-4 ml-1" />
-              </Button>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>

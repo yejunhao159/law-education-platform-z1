@@ -1,0 +1,530 @@
+'use client'
+
+import React, { useState } from 'react'
+import { Card } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Progress } from '@/components/ui/progress'
+import { useCaseStore } from '@/lib/stores/useCaseStore'
+import { 
+  Calendar, 
+  Clock, 
+  AlertCircle, 
+  CheckCircle, 
+  XCircle, 
+  User, 
+  FileText,
+  Scale,
+  Shield,
+  BookOpen,
+  ArrowRight,
+  Gavel,
+  AlertTriangle,
+  Brain,
+  Users,
+  TrendingUp
+} from 'lucide-react'
+
+interface LegalRelationChange {
+  before: string
+  after: string
+  trigger: string
+}
+
+interface BurdenOfProof {
+  party: string
+  fact: string
+  reason: string
+}
+
+interface LimitationPeriod {
+  startDate: string
+  period: string
+  status: string
+}
+
+interface RightsObligations {
+  party: string
+  type: 'right' | 'obligation'
+  content: string
+}
+
+interface PerspectiveContent {
+  title?: string
+  description?: string
+  analysis?: string
+  evidence?: string[]
+  strategy?: string
+}
+
+interface TimelineEvent {
+  id: string
+  date: string
+  title: string
+  description: string
+  type: 'fact' | 'procedure' | 'evidence' | 'decision'
+  importance: 'high' | 'medium' | 'low'
+  actor?: string
+  // 法学思维增强字段
+  legalRelationChange?: LegalRelationChange
+  burdenOfProof?: BurdenOfProof[]
+  limitationPeriod?: LimitationPeriod
+  rightsObligations?: RightsObligations[]
+  // 多视角内容
+  perspectives?: {
+    plaintiff?: PerspectiveContent
+    defendant?: PerspectiveContent
+    judge?: PerspectiveContent
+  }
+  // 教学模式
+  teachingPoints?: string[]
+  isKeyLearningNode?: boolean
+}
+
+export function CaseTimeline() {
+  const caseData = useCaseStore(state => state.caseData)
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [perspective, setPerspective] = useState<'neutral' | 'plaintiff' | 'defendant' | 'judge'>('neutral')
+  const [teachingMode, setTeachingMode] = useState(false)
+  const [completedNodes, setCompletedNodes] = useState<Set<string>>(new Set())
+  
+  // 从案件数据中提取时间线事件
+  const extractTimelineEvents = (): TimelineEvent[] => {
+    if (!caseData) return []
+    
+    const events: TimelineEvent[] = []
+    
+    // 从事实中提取时间点，增强法学思维要素
+    if (caseData.threeElements?.facts?.timeline) {
+      caseData.threeElements.facts.timeline.forEach((item: any, index: number) => {
+        const event: TimelineEvent = {
+          id: `fact-${index}`,
+          date: item.date,
+          title: item.event,
+          description: item.detail || '',
+          type: 'fact',
+          importance: item.isKeyEvent ? 'high' : 'medium',
+          actor: item.party,
+          isKeyLearningNode: item.isKeyEvent || false
+        }
+        
+        // 根据事件类型推断法学思维要素
+        if (item.event.includes('签订') || item.event.includes('合同')) {
+          event.legalRelationChange = {
+            before: '无合同关系',
+            after: '合同法律关系成立',
+            trigger: '双方签署合同'
+          }
+          event.teachingPoints = ['合同成立的要件', '意思表示的认定']
+        }
+        
+        if (item.event.includes('支付') || item.event.includes('款项')) {
+          event.burdenOfProof = [{
+            party: '主张方',
+            fact: '支付事实及金额',
+            reason: '证明履行义务或损失'
+          }]
+        }
+        
+        if (item.event.includes('违约') || item.event.includes('拒绝')) {
+          event.legalRelationChange = {
+            before: '正常履行状态',
+            after: '违约状态',
+            trigger: '一方不履行合同义务'
+          }
+          event.limitationPeriod = {
+            startDate: item.date,
+            period: '3年',
+            status: '诉讼时效期内'
+          }
+        }
+        
+        events.push(event)
+      })
+    }
+    
+    // 添加程序性事件
+    if (caseData.basicInfo?.filingDate) {
+      events.push({
+        id: 'filing',
+        date: caseData.basicInfo.filingDate,
+        title: '案件受理',
+        description: `${caseData.basicInfo.court}受理案件`,
+        type: 'procedure',
+        importance: 'high',
+        actor: '法院',
+        isKeyLearningNode: true,
+        legalRelationChange: {
+          before: '私人纠纷',
+          after: '诉讼法律关系成立',
+          trigger: '法院受理起诉'
+        },
+        teachingPoints: ['起诉条件', '诉讼主体资格', '管辖权确定']
+      })
+    }
+    
+    if (caseData.basicInfo?.judgmentDate) {
+      events.push({
+        id: 'judgment',
+        date: caseData.basicInfo.judgmentDate,
+        title: '作出判决',
+        description: '法院作出一审判决',
+        type: 'decision',
+        importance: 'high',
+        actor: '法院',
+        isKeyLearningNode: true,
+        legalRelationChange: {
+          before: '争议状态',
+          after: '司法确定状态',
+          trigger: '法院判决生效'
+        },
+        teachingPoints: ['判决书结构', '事实认定标准', '法律适用原则']
+      })
+    }
+    
+    // 按时间排序
+    return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  }
+  
+  const timelineEvents = extractTimelineEvents()
+  
+  // 已移除虚拟数据，现在使用真实提取的数据
+  
+  // 使用真实提取的数据，如果没有数据则显示空状态
+  const events = timelineEvents
+  
+  const getEventIcon = (type: string) => {
+    switch (type) {
+      case 'fact': return <FileText className="w-4 h-4" />
+      case 'procedure': return <Clock className="w-4 h-4" />
+      case 'evidence': return <AlertCircle className="w-4 h-4" />
+      case 'decision': return <CheckCircle className="w-4 h-4" />
+      default: return <Calendar className="w-4 h-4" />
+    }
+  }
+  
+  const getEventColor = (type: string) => {
+    switch (type) {
+      case 'fact': return 'bg-blue-100 text-blue-700 border-blue-300'
+      case 'procedure': return 'bg-purple-100 text-purple-700 border-purple-300'
+      case 'evidence': return 'bg-yellow-100 text-yellow-700 border-yellow-300'
+      case 'decision': return 'bg-green-100 text-green-700 border-green-300'
+      default: return 'bg-gray-100 text-gray-700 border-gray-300'
+    }
+  }
+  
+  const getImportanceDot = (importance: string) => {
+    switch (importance) {
+      case 'high': return 'bg-red-500'
+      case 'medium': return 'bg-yellow-500'
+      case 'low': return 'bg-gray-400'
+      default: return 'bg-gray-400'
+    }
+  }
+  
+  return (
+    <div className="space-y-6">
+      {/* 控制面板 */}
+      <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-lg">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-orange-600" />
+            <h3 className="text-lg font-semibold">交互式案件时间轴</h3>
+            <Badge variant="outline" className="bg-white">
+              法学思维导向
+            </Badge>
+          </div>
+          
+          {/* 视角切换 */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">视角：</span>
+            <div className="flex gap-1">
+              {(['neutral', 'plaintiff', 'defendant', 'judge'] as const).map((p) => (
+                <Button
+                  key={p}
+                  variant={perspective === p ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPerspective(p)}
+                  className="text-xs"
+                >
+                  {p === 'neutral' ? '中性' : 
+                   p === 'plaintiff' ? '原告' : 
+                   p === 'defendant' ? '被告' : '法官'}
+                </Button>
+              ))}
+            </div>
+          </div>
+          
+          {/* 教学模式切换 */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant={teachingMode ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setTeachingMode(!teachingMode)}
+              className="gap-2"
+            >
+              <Brain className="w-4 h-4" />
+              {teachingMode ? '退出教学' : '教学模式'}
+            </Button>
+          </div>
+        </div>
+      </div>
+      
+      {/* 教学模式进度条 */}
+      {teachingMode && (
+        <Card className="p-4 bg-yellow-50">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-yellow-900">学习进度</span>
+            <span className="text-sm text-yellow-800">
+              {completedNodes.size}/{events.filter(e => e.isKeyLearningNode).length} 关键节点
+            </span>
+          </div>
+          <Progress 
+            value={(completedNodes.size / events.filter(e => e.isKeyLearningNode).length) * 100} 
+            className="h-2" 
+          />
+        </Card>
+      )}
+      
+      {/* 交互式时间轴 */}
+      <div className="relative pl-8">
+        {/* 主要时间线 */}
+        <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gradient-to-b from-orange-200 via-blue-200 to-green-200"></div>
+        
+        {events.length === 0 ? (
+          <div className=\"text-center py-8 text-gray-500\">
+            <Clock className=\"w-12 h-12 mx-auto mb-4 text-gray-300\" />
+            <p className=\"text-lg font-medium mb-2\">暂无时间轴数据</p>
+            <p className=\"text-sm\">请确保判决书已成功解析并包含时间轴信息</p>
+          </div>
+        ) : events.map((event, index) => {
+          const isSelected = selectedNodeId === event.id
+          const isCompleted = completedNodes.has(event.id)
+          const isKeyNode = teachingMode ? event.isKeyLearningNode : true
+          
+          return (
+            <div 
+              key={event.id} 
+              className={`relative mb-6 last:mb-0 transition-all duration-300 ${
+                !isKeyNode ? 'opacity-50' : ''
+              }`}
+            >
+              {/* 时间节点 */}
+              <div 
+                className={`absolute left-2 w-4 h-4 rounded-full border-2 border-white cursor-pointer transition-all hover:scale-110 z-10 ${
+                  isSelected 
+                    ? 'ring-4 ring-blue-200 scale-125' 
+                    : isCompleted && teachingMode
+                      ? 'ring-2 ring-green-200'
+                      : ''
+                } ${
+                  getEventColor(event.type).split(' ')[0]
+                }`}
+                onClick={() => {
+                  setSelectedNodeId(isSelected ? null : event.id)
+                  if (teachingMode && !completedNodes.has(event.id)) {
+                    setCompletedNodes(prev => new Set([...prev, event.id]))
+                  }
+                }}
+              ></div>
+              
+              {/* 事件内容 */}
+              <div className="ml-8">
+                <div className={`bg-white border rounded-lg shadow-sm transition-all hover:shadow-md ${
+                  isSelected ? 'border-blue-300 shadow-lg' : 'border-gray-200'
+                }`}>
+                  {/* 基础信息 */}
+                  <div className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-semibold text-gray-800 flex items-center gap-2">
+                        {event.title}
+                        {teachingMode && event.isKeyLearningNode && (
+                          <Badge variant="secondary" className="text-xs bg-yellow-100 text-yellow-800">
+                            <Brain className="w-3 h-3 mr-1" />
+                            关键
+                          </Badge>
+                        )}
+                        {isCompleted && teachingMode && (
+                          <CheckCircle className="w-4 h-4 text-green-600" />
+                        )}
+                      </h4>
+                      <div className="flex items-center gap-2">
+                        <Badge 
+                          variant="outline" 
+                          className={event.importance === 'high' ? 'border-red-300 text-red-700' : 'border-gray-300'}
+                        >
+                          {event.importance === 'high' ? '关键' : event.importance === 'medium' ? '重要' : '一般'}
+                        </Badge>
+                        <span className="text-xs text-gray-500">{event.date}</span>
+                      </div>
+                    </div>
+                    
+                    {/* 描述 - 根据视角调整 */}
+                    <p className="text-gray-600 text-sm mb-3">
+                      {perspective !== 'neutral' && event.perspectives?.[perspective]?.description 
+                        ? event.perspectives[perspective].description 
+                        : event.description}
+                    </p>
+                    
+                    {event.actor && (
+                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                        <User className="w-3 h-3" />
+                        <span>{event.actor}</span>
+                      </div>
+                    )}
+                    
+                    {/* 点击展开提示 */}
+                    {!isSelected && (
+                      <div className="mt-2 text-xs text-blue-600 hover:text-blue-800 cursor-pointer">
+                        点击查看详细分析 →
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* 展开的详细内容 */}
+                  {isSelected && (
+                    <div className="border-t border-gray-100 p-4 space-y-4 bg-gray-50">
+                      {/* 视角特定内容 */}
+                      {perspective !== 'neutral' && event.perspectives?.[perspective] && (
+                        <div className="bg-white p-3 rounded border">
+                          <h5 className="font-medium text-sm mb-2 text-blue-900">
+                            {perspective === 'plaintiff' ? '原告视角' : 
+                             perspective === 'defendant' ? '被告视角' : '法官视角'}
+                          </h5>
+                          {event.perspectives[perspective].analysis && (
+                            <p className="text-sm text-gray-700 mb-2">
+                              <strong>分析：</strong>{event.perspectives[perspective].analysis}
+                            </p>
+                          )}
+                          {event.perspectives[perspective].strategy && (
+                            <p className="text-sm text-gray-700">
+                              <strong>策略：</strong>{event.perspectives[perspective].strategy}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* 法学思维要素 */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {event.legalRelationChange && (
+                          <div className="bg-blue-50 p-3 rounded">
+                            <h6 className="font-medium text-xs text-blue-900 mb-1 flex items-center gap-1">
+                              <Users className="w-3 h-3" />
+                              法律关系变化
+                            </h6>
+                            <p className="text-xs text-blue-800">
+                              {event.legalRelationChange.before} → {event.legalRelationChange.after}
+                            </p>
+                            <p className="text-xs text-blue-700 mt-1">
+                              {event.legalRelationChange.trigger}
+                            </p>
+                          </div>
+                        )}
+                        
+                        {event.burdenOfProof && event.burdenOfProof.length > 0 && (
+                          <div className="bg-purple-50 p-3 rounded">
+                            <h6 className="font-medium text-xs text-purple-900 mb-1 flex items-center gap-1">
+                              <Scale className="w-3 h-3" />
+                              举证责任
+                            </h6>
+                            {event.burdenOfProof.map((burden, idx) => (
+                              <p key={idx} className="text-xs text-purple-800">
+                                {burden.party}需证明：{burden.fact}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {event.limitationPeriod && (
+                          <div className="bg-orange-50 p-3 rounded">
+                            <h6 className="font-medium text-xs text-orange-900 mb-1 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              诉讼时效
+                            </h6>
+                            <p className="text-xs text-orange-800">
+                              {event.limitationPeriod.startDate} 起算
+                            </p>
+                            <p className="text-xs text-orange-700">
+                              期限：{event.limitationPeriod.period}，状态：{event.limitationPeriod.status}
+                            </p>
+                          </div>
+                        )}
+                        
+                        {event.rightsObligations && event.rightsObligations.length > 0 && (
+                          <div className="bg-green-50 p-3 rounded">
+                            <h6 className="font-medium text-xs text-green-900 mb-1 flex items-center gap-1">
+                              <Shield className="w-3 h-3" />
+                              权利义务
+                            </h6>
+                            {event.rightsObligations.map((ro, idx) => (
+                              <p key={idx} className="text-xs text-green-800">
+                                {ro.party}：{ro.type === 'right' ? '权利' : '义务'} - {ro.content}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* 教学要点 */}
+                      {teachingMode && event.teachingPoints && event.teachingPoints.length > 0 && (
+                        <div className="bg-yellow-50 p-3 rounded border border-yellow-200">
+                          <h6 className="font-medium text-sm text-yellow-900 mb-2 flex items-center gap-1">
+                            <Brain className="w-4 h-4" />
+                            教学要点
+                          </h6>
+                          <ul className="text-sm text-yellow-800 space-y-1">
+                            {event.teachingPoints.map((point, idx) => (
+                              <li key={idx} className="flex items-start gap-1">
+                                <span className="text-yellow-600">•</span>
+                                <span>{point}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      
+      {/* 时序分析总结 */}
+      <Card className="p-4 bg-gradient-to-r from-orange-50 to-blue-50">
+        <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+          <TrendingUp className="w-4 h-4 text-orange-600" />
+          时序分析要点
+          {perspective !== 'neutral' && (
+            <Badge variant="outline">
+              {perspective === 'plaintiff' ? '原告视角' : 
+               perspective === 'defendant' ? '被告视角' : '法官视角'}
+            </Badge>
+          )}
+        </h4>
+        <p className="text-sm text-gray-700">
+          {perspective === 'plaintiff' ? (
+            '从原告角度看，案件发展清晰体现了其合法权益受损的过程：合同签订→履行义务→对方违约→维权起诉，诉讼时效和举证责任分配有利。'
+          ) : perspective === 'defendant' ? (
+            '从被告角度看，需要重点关注合同履行的复杂性、不可抗力因素、以及可能的抗辩理由，在举证和时效方面面临一定挑战。'
+          ) : perspective === 'judge' ? (
+            '从审判角度看，案件争议焦点集中，证据链较为完整，需要重点审查合同效力、履行情况和违约责任的认定。'
+          ) : (
+            '案件从合同签订到纠纷解决历时约8个月，关键节点包括合同签订、首付支付、违约发生和起诉等，时间脉络清晰，体现了典型的合同纠纷发展规律。'
+          )}
+        </p>
+        
+        {teachingMode && (
+          <div className="mt-3 p-3 bg-white rounded border">
+            <h5 className="font-medium text-sm text-blue-900 mb-2">学习建议</h5>
+            <p className="text-sm text-blue-800">
+              建议重点关注时间节点的法律意义，理解不同视角下的争议焦点，
+              掌握诉讼时效、举证责任等程序法要点。
+            </p>
+          </div>
+        )}
+      </Card>
+    </div>
+  )
+}

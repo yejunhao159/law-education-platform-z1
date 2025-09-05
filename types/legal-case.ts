@@ -36,10 +36,98 @@ export const TimelineEventSchema = z.object({
   actors: z.array(z.string()).optional(),
   location: z.string().optional(),
   relatedEvidence: z.array(z.string()).optional(),
+  // AI分析相关字段
+  detail: z.string().optional(), // 事件详细描述
+  isKeyEvent: z.boolean().optional(), // 是否为关键事件
+  party: z.string().optional(), // 相关当事人
+})
+
+// ========== AI分析重要性评分 ==========
+export const ImportanceScoreSchema = z.object({
+  score: z.number().min(1).max(100), // 1-100分评分
+  level: z.enum(['critical', 'high', 'medium', 'low']), // 重要性等级
+  reasoning: z.string(), // AI分析重要性的理由
+  legalSignificance: z.array(z.string()), // 法律意义标签
+  impactFactors: z.object({
+    proceduralImpact: z.number().min(0).max(100), // 程序性影响
+    substantiveImpact: z.number().min(0).max(100), // 实体性影响
+    evidenceImpact: z.number().min(0).max(100), // 证据影响
+    strategicImpact: z.number().min(0).max(100), // 策略影响
+  }),
+})
+
+// ========== AI法学分析 ==========
+export const LegalAnalysisSchema = z.object({
+  factualAnalysis: z.string(), // 事实认定分析
+  legalPrinciples: z.array(z.string()), // 适用的法律原则
+  jurisprudence: z.string(), // 法理分析
+  evidenceRequirement: z.string(), // 举证要求
+  riskAssessment: z.string(), // 风险提示
+  strategicAdvice: z.string(), // 策略建议
+  applicableLaws: z.array(z.string()), // 适用法条
+  precedents: z.array(z.string()), // 相关判例
+  keyTerms: z.array(z.object({
+    term: z.string(), // 法律术语
+    definition: z.string(), // 术语定义
+  })),
+})
+
+// ========== 多视角分析 ==========
+export const PerspectiveAnalysisSchema = LegalAnalysisSchema.extend({
+  perspective: z.enum(['neutral', 'plaintiff', 'defendant', 'judge']),
+  viewpoint: z.string(), // 视角观点总结
+  favorablePoints: z.array(z.string()).optional(), // 有利要点(原告视角)
+  concerns: z.array(z.string()).optional(), // 关注风险(原告视角)
+  defensiveStrategy: z.array(z.string()).optional(), // 防御策略(被告视角)
+  counterArguments: z.array(z.string()).optional(), // 反驳论点(被告视角)
+  keyFocus: z.array(z.string()).optional(), // 关键焦点(法官视角)
+  teachingPoints: z.array(z.string()).optional(), // 教学要点(教学模式)
+})
+
+// ========== 时间轴智能分析结果 ==========
+export const TimelineAnalysisSchema = z.object({
+  eventId: z.string(), // 事件ID
+  perspective: z.enum(['neutral', 'plaintiff', 'defendant', 'judge']), // 分析视角
+  importance: ImportanceScoreSchema, // 重要性评分
+  legalAnalysis: LegalAnalysisSchema, // 法学分析
+  perspectiveAnalysis: PerspectiveAnalysisSchema.optional(), // 视角化分析
+  generatedAt: z.string(), // 生成时间
+  cacheExpiry: z.string(), // 缓存过期时间
+  apiVersion: z.string(), // API版本
+  confidence: z.number().min(0).max(100).optional(), // 分析可信度
+})
+
+// ========== 分析缓存统计 ==========
+export const CacheStatisticsSchema = z.object({
+  hitRate: z.number().min(0).max(100), // 缓存命中率
+  totalRequests: z.number().min(0), // 总请求数
+  cacheSize: z.number().min(0), // 缓存大小(字节)
+  lastCleanup: z.string(), // 最后清理时间
+  averageResponseTime: z.number().min(0).optional(), // 平均响应时间(毫秒)
+})
+
+// ========== 分析缓存配置 ==========
+export const AnalysisCacheConfigSchema = z.object({
+  maxAge: z.number().min(0).default(86400000), // 24小时(毫秒)
+  maxSize: z.number().min(0).default(1000), // 最大缓存条目数
+  compressionEnabled: z.boolean().default(true), // 是否启用压缩
+  autoCleanupEnabled: z.boolean().default(true), // 是否自动清理过期缓存
+})
+
+// ========== 分析缓存 ==========
+export const AnalysisCacheSchema = z.object({
+  analyses: z.record(z.string(), TimelineAnalysisSchema), // 分析结果Map
+  statistics: CacheStatisticsSchema, // 缓存统计
+  config: AnalysisCacheConfigSchema, // 缓存配置
+  lastUpdated: z.string(), // 最后更新时间
 })
 
 // ========== 事实认定 ==========
 export const FactsSchema = z.object({
+  // 为TimelineAIAnalysis添加的字段
+  main: z.string().optional(), // 主要事实描述文本
+  disputed: z.array(z.string()).optional(), // 争议焦点数组
+  // 原有字段
   summary: z.string().max(500, '摘要不超过500字'),
   timeline: z.array(TimelineEventSchema),
   keyFacts: z.array(z.string()),
@@ -135,6 +223,15 @@ export const LegalCaseSchema = z.object({
   id: z.string().optional(),
   basicInfo: BasicInfoSchema,
   threeElements: ThreeElementsSchema,
+  // 添加timeline字段用于TimelineAIAnalysis组件
+  timeline: z.array(z.object({
+    id: z.number().optional(),
+    date: z.string(),
+    title: z.string(),
+    description: z.string().optional(),
+    type: z.string().optional(),
+    importance: z.string().optional()
+  })).optional(),
   metadata: MetadataSchema,
   originalText: z.string().optional(),
   attachments: z.array(z.object({
@@ -158,6 +255,19 @@ export type Reasoning = z.infer<typeof ReasoningSchema>
 export type ThreeElements = z.infer<typeof ThreeElementsSchema>
 export type Metadata = z.infer<typeof MetadataSchema>
 export type LegalCase = z.infer<typeof LegalCaseSchema>
+
+// ========== AI分析相关类型导出 ==========
+export type ImportanceScore = z.infer<typeof ImportanceScoreSchema>
+export type LegalAnalysis = z.infer<typeof LegalAnalysisSchema>
+export type PerspectiveAnalysis = z.infer<typeof PerspectiveAnalysisSchema>
+export type TimelineAnalysis = z.infer<typeof TimelineAnalysisSchema>
+export type CacheStatistics = z.infer<typeof CacheStatisticsSchema>
+export type AnalysisCacheConfig = z.infer<typeof AnalysisCacheConfigSchema>
+export type AnalysisCache = z.infer<typeof AnalysisCacheSchema>
+
+// ========== 视角类型别名 ==========
+export type ViewPerspective = 'neutral' | 'plaintiff' | 'defendant' | 'judge'
+export type ImportanceLevel = 'critical' | 'high' | 'medium' | 'low'
 
 // ========== 验证函数 ==========
 export function validateLegalCase(data: unknown): LegalCase {

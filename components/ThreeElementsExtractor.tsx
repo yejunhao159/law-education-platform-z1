@@ -64,6 +64,16 @@ interface ExtractedElements {
 
 // 转换函数：将提取的数据转换为LegalCase格式
 function convertToLegalCase(extracted: ExtractedElements): LegalCase {
+  // 构建时间轴数据（从timeline或facts中提取）
+  const timeline = extracted.threeElements.facts.timeline?.map((item: any, index: number) => ({
+    id: index + 1,
+    date: item.date || new Date().toISOString().split('T')[0],
+    title: item.event || item.title || '事件',
+    description: item.description || item.event || '',
+    type: 'other' as const,
+    importance: 'reference' as const
+  })) || []
+
   return {
     basicInfo: {
       caseNumber: extracted.basicInfo?.caseNumber || '',
@@ -82,8 +92,15 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
             : []
       }
     },
+    // 添加timeline到根级别，供TimelineAIAnalysis使用
+    timeline,
     threeElements: {
       facts: {
+        // 添加main字段用于TimelineAIAnalysis组件
+        main: extracted.threeElements.facts.summary,
+        // 添加disputed字段
+        disputed: extracted.threeElements.facts.disputedFacts || [],
+        // 保留原有字段以保持兼容性
         summary: extracted.threeElements.facts.summary,
         timeline: extracted.threeElements.facts.timeline || [],
         keyFacts: extracted.threeElements.facts.keyFacts || [],
