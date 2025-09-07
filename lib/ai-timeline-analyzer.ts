@@ -85,6 +85,7 @@ class NetworkStatusDetector {
  * 时间轴智能分析服务
  */
 export class TimelineAnalyzer {
+  private static instance: TimelineAnalyzer;
   private apiKey: string;
   private apiUrl: string;
   private model: string;
@@ -123,6 +124,28 @@ export class TimelineAnalyzer {
     } else {
       console.log('✅ TimelineAnalyzer initialized with API key:', this.apiKey.substring(0, 10) + '...');
     }
+  }
+
+  /**
+   * 获取单例实例
+   */
+  static getInstance(apiKey?: string): TimelineAnalyzer {
+    if (!TimelineAnalyzer.instance) {
+      TimelineAnalyzer.instance = new TimelineAnalyzer(apiKey);
+    }
+    return TimelineAnalyzer.instance;
+  }
+
+  /**
+   * 获取配置信息（用于测试）
+   */
+  getConfig() {
+    return {
+      apiUrl: this.apiUrl,
+      model: this.model,
+      maxRetries: this.maxRetries,
+      timeout: this.timeout
+    };
   }
   
   /**
@@ -2539,6 +2562,53 @@ ${relatedEvidence.length > 0 ? relatedEvidence.join('\n') : '需要补充相关�
     return ['当事人利益平衡', '社会公共利益', '法律效果与社会效果统一'];
   }
   
+  /**
+   * 批量分析多个事件
+   */
+  async batchAnalyze(
+    events: TimelineEvent[],
+    caseContext: Partial<LegalCase>,
+    perspective: ViewPerspective = 'neutral'
+  ): Promise<TimelineAnalysis[]> {
+    const results: TimelineAnalysis[] = [];
+    
+    for (const event of events) {
+      try {
+        const analysis = await this.analyzeTimelineEvent(event, caseContext, { perspective });
+        results.push(analysis);
+      } catch (error) {
+        console.error(`Failed to analyze event ${event.id}:`, error);
+        // 继续处理其他事件
+      }
+    }
+    
+    return results;
+  }
+
+  /**
+   * 获取性能指标
+   */
+  getPerformanceMetrics() {
+    const totalRequests = Array.from(this.performanceMetrics.values())
+      .reduce((sum, times) => sum + times.length, 0);
+    
+    const allTimes = Array.from(this.performanceMetrics.values()).flat();
+    const averageResponseTime = allTimes.length > 0
+      ? allTimes.reduce((a, b) => a + b, 0) / allTimes.length
+      : 0;
+    
+    // 获取缓存统计
+    const cacheStats = cacheManager.getStats();
+    
+    return {
+      totalRequests,
+      averageResponseTime: Math.round(averageResponseTime),
+      lastResponseTime: allTimes[allTimes.length - 1] || 0,
+      cacheHitRate: cacheStats.hitRate || 0,
+      errorCount: this.errorLog.length
+    };
+  }
+
   /**
    * 获取错误日志报告
    */

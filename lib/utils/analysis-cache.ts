@@ -115,6 +115,7 @@ export class CacheKeyGenerator {
  * 智能缓存管理器
  */
 export class AnalysisCacheManager {
+  private static instance: AnalysisCacheManager
   private memoryCache: Map<string, CacheEntry<any>>
   private config: CacheConfig
   private statistics: CacheStatistics
@@ -180,6 +181,16 @@ export class AnalysisCacheManager {
     if (this.config.autoCleanupEnabled) {
       this.startAutoCleanup()
     }
+  }
+
+  /**
+   * 获取单例实例
+   */
+  static getInstance(config?: Partial<CacheConfig>): AnalysisCacheManager {
+    if (!AnalysisCacheManager.instance) {
+      AnalysisCacheManager.instance = new AnalysisCacheManager(config)
+    }
+    return AnalysisCacheManager.instance
   }
 
   /**
@@ -719,6 +730,19 @@ export class AnalysisCacheManager {
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     `.trim()
+  }
+
+  /**
+   * 获取统计信息
+   */
+  getStats() {
+    return {
+      hits: this.statistics.cacheHits,
+      misses: this.statistics.cacheMisses,
+      hitRate: this.statistics.hitRate,
+      size: this.memoryCache.size,
+      totalRequests: this.statistics.totalRequests
+    }
   }
 
   /**

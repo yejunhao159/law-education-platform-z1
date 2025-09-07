@@ -32,9 +32,10 @@ function generateRuleBasedAnalysis(event: any): LegalAnalysisResponse {
   const title = event.title?.toLowerCase() || ''
   
   // 智能提取摘要
-  const summary = event.title.length > 30 
-    ? event.title.substring(0, 27) + '...'
-    : event.title
+  const eventTitle = event?.title || '未知事件'
+  const summary = eventTitle.length > 30 
+    ? eventTitle.substring(0, 27) + '...'
+    : eventTitle
   
   // 根据关键词提取法学要点
   const legalPoints: string[] = []
@@ -97,10 +98,10 @@ export async function POST(req: NextRequest) {
 案件背景：${caseContext || '民事诉讼案件'}
 
 事件信息：
-- 日期：${event.date}
-- 事件：${event.title}
-- 详情：${event.description}
-- 当事方：${event.party || '未知'}
+- 日期：${event?.date || '未知日期'}
+- 事件：${event?.title || '未知事件'}
+- 详情：${event?.description || '无详细描述'}
+- 当事方：${event?.party || '未知'}
 
 请提供以下分析：
 

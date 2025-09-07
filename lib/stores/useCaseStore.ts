@@ -8,7 +8,12 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { persist } from 'zustand/middleware'
 import { enableMapSet } from 'immer'
-import type { LegalCase, TimelineEvent, EvidenceItem } from '@/types/legal-case'
+import type { LegalCase, TimelineEvent, EvidenceItem, TimelineAnalysis } from '@/types/legal-case'
+import type { 
+  ClaimAnalysisResult, 
+  TimelineEvent as EnhancedTimelineEvent,
+  TimelineViewMode 
+} from '@/types/timeline-claim-analysis'
 
 // 启用Immer的MapSet插件以支持Map和Set
 enableMapSet()
@@ -35,11 +40,20 @@ interface CaseStore {
   // ========== 时间轴分析状态（优化版）==========
   analysisComplete: boolean
   socraticLevel: 1 | 2 | 3
-  timelineAnalyses: Map<string, any> // 缓存的分析结果
+  timelineAnalyses: Map<string, TimelineAnalysis> // 缓存的分析结果
   selectedTimelineNode: string | null
   timelinePerspective: 'neutral' | 'plaintiff' | 'defendant' | 'judge'
   teachingModeEnabled: boolean
   completedLearningNodes: Set<string>
+  analysisResults: Map<string, TimelineAnalysis> // 新增：按事件ID存储的分析结果
+  analysisLoading: Map<string, boolean> // 新增：分析加载状态
+  
+  // ========== 请求权分析状态 ==========
+  claimAnalysis: ClaimAnalysisResult | null
+  timelineViewMode: TimelineViewMode
+  selectedClaim: string | null
+  isAnalyzingClaims: boolean
+  claimHighlights: Set<string>
   
   // ========== 事实认定状态（Issue #3）==========
   factDisputes: Map<string, DisputeLevel>
@@ -81,9 +95,23 @@ interface CaseStore {
   progressSocraticLevel: () => void
   setTimelinePerspective: (perspective: 'neutral' | 'plaintiff' | 'defendant' | 'judge') => void
   setSelectedTimelineNode: (nodeId: string | null) => void
-  cacheTimelineAnalysis: (key: string, analysis: any) => void
+  cacheTimelineAnalysis: (key: string, analysis: TimelineAnalysis) => void
   toggleTeachingMode: () => void
   markLearningNodeComplete: (nodeId: string) => void
+  setAnalysisResult: (eventId: string, analysis: TimelineAnalysis) => void
+  setAnalysisLoading: (eventId: string, loading: boolean) => void
+  getAnalysisResult: (eventId: string) => TimelineAnalysis | undefined
+  clearAnalysisCache: () => void
+  
+  // ========== Actions - 请求权分析 ==========
+  setClaimAnalysis: (analysis: ClaimAnalysisResult | null) => void
+  clearClaimAnalysis: () => void
+  setTimelineViewMode: (mode: TimelineViewMode) => void
+  toggleTimelineViewMode: () => void
+  setSelectedClaim: (claimId: string | null) => void
+  setIsAnalyzingClaims: (analyzing: boolean) => void
+  toggleClaimHighlight: (claimId: string) => void
+  clearClaimHighlights: () => void
   
   // ========== 计算属性 ==========
   getDisputedFacts: () => TimelineEvent[]
@@ -104,6 +132,13 @@ const initialState = {
   timelinePerspective: 'neutral' as const,
   teachingModeEnabled: false,
   completedLearningNodes: new Set<string>(),
+  analysisResults: new Map(),
+  analysisLoading: new Map(),
+  claimAnalysis: null,
+  timelineViewMode: 'simple' as TimelineViewMode,
+  selectedClaim: null,
+  isAnalyzingClaims: false,
+  claimHighlights: new Set<string>(),
   factDisputes: new Map(),
   evidenceLinks: new Map(),
   annotations: new Map(),
@@ -281,6 +316,73 @@ export const useCaseStore = create<CaseStore>()(
         state.completedLearningNodes.add(nodeId)
       }),
       
+      setAnalysisResult: (eventId, analysis) => set((state) => {
+        state.analysisResults.set(eventId, analysis)
+        // 同时更新缓存
+        const cacheKey = `${eventId}_${state.timelinePerspective}`
+        state.timelineAnalyses.set(cacheKey, analysis)
+      }),
+      
+      setAnalysisLoading: (eventId, loading) => set((state) => {
+        if (loading) {
+          state.analysisLoading.set(eventId, true)
+        } else {
+          state.analysisLoading.delete(eventId)
+        }
+      }),
+      
+      getAnalysisResult: (eventId) => {
+        return get().analysisResults.get(eventId)
+      },
+      
+      clearAnalysisCache: () => set((state) => {
+        state.analysisResults.clear()
+        state.timelineAnalyses.clear()
+        state.analysisLoading.clear()
+      }),
+      
+      // ========== Actions - 请求权分析 ==========
+      setClaimAnalysis: (analysis) => set((state) => {
+        state.claimAnalysis = analysis
+        state.isAnalyzingClaims = false
+      }),
+      
+      clearClaimAnalysis: () => set((state) => {
+        state.claimAnalysis = null
+        state.selectedClaim = null
+        state.claimHighlights.clear()
+      }),
+      
+      setTimelineViewMode: (mode) => set((state) => {
+        state.timelineViewMode = mode
+      }),
+      
+      toggleTimelineViewMode: () => set((state) => {
+        const modes: TimelineViewMode[] = ['simple', 'enhanced', 'analysis']
+        const currentIndex = modes.indexOf(state.timelineViewMode)
+        state.timelineViewMode = modes[(currentIndex + 1) % modes.length]
+      }),
+      
+      setSelectedClaim: (claimId) => set((state) => {
+        state.selectedClaim = claimId
+      }),
+      
+      setIsAnalyzingClaims: (analyzing) => set((state) => {
+        state.isAnalyzingClaims = analyzing
+      }),
+      
+      toggleClaimHighlight: (claimId) => set((state) => {
+        if (state.claimHighlights.has(claimId)) {
+          state.claimHighlights.delete(claimId)
+        } else {
+          state.claimHighlights.add(claimId)
+        }
+      }),
+      
+      clearClaimHighlights: () => set((state) => {
+        state.claimHighlights.clear()
+      }),
+      
       // ========== 计算属性 ==========
       getDisputedFacts: () => {
         const state = get()
@@ -340,6 +442,9 @@ export const useCaseStore = create<CaseStore>()(
         timelinePerspective: state.timelinePerspective,
         selectedTimelineNode: state.selectedTimelineNode,
         teachingModeEnabled: state.teachingModeEnabled,
+        claimAnalysis: state.claimAnalysis,
+        timelineViewMode: state.timelineViewMode,
+        selectedClaim: state.selectedClaim,
         storyMode: state.storyMode,
         storyChapters: state.storyChapters,
         autoTransition: state.autoTransition,
@@ -347,6 +452,7 @@ export const useCaseStore = create<CaseStore>()(
         // Map/Set转Array进行持久化
         timelineAnalyses: Array.from(state.timelineAnalyses.entries()),
         completedLearningNodes: Array.from(state.completedLearningNodes),
+        claimHighlights: Array.from(state.claimHighlights),
         factDisputes: Array.from(state.factDisputes.entries()),
         evidenceLinks: Array.from(state.evidenceLinks.entries()),
         annotations: Array.from(state.annotations.entries()),
@@ -356,10 +462,12 @@ export const useCaseStore = create<CaseStore>()(
         if (state) {
           state.timelineAnalyses = new Map(state.timelineAnalyses as any)
           state.completedLearningNodes = new Set(state.completedLearningNodes as any)
+          state.claimHighlights = new Set(state.claimHighlights as any)
           state.factDisputes = new Map(state.factDisputes as any)
           state.evidenceLinks = new Map(state.evidenceLinks as any)
           state.annotations = new Map(state.annotations as any)
           state.editingFields = new Set()
+          state.isAnalyzingClaims = false
         }
       }
     }
@@ -372,3 +480,6 @@ export const useCurrentAct = () => useCaseStore(state => state.currentAct)
 export const useStoryMode = () => useCaseStore(state => state.storyMode)
 export const useFactDisputes = () => useCaseStore(state => state.factDisputes)
 export const useEvidenceLinks = () => useCaseStore(state => state.evidenceLinks)
+export const useClaimAnalysis = () => useCaseStore(state => state.claimAnalysis)
+export const useTimelineViewMode = () => useCaseStore(state => state.timelineViewMode)
+export const useIsAnalyzingClaims = () => useCaseStore(state => state.isAnalyzingClaims)
