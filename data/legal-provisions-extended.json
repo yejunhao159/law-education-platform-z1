@@ -1,0 +1,574 @@
+{
+  "provisions": [
+    {
+      "code": "civil_code_claims",
+      "title": "中华人民共和国民法典 - 请求权基础",
+      "articles": [
+        {
+          "article": "第465条",
+          "content": "依法成立的合同，受法律保护。依法成立的合同，仅对当事人具有法律约束力，但是法律另有规定的除外。",
+          "tags": ["合同", "法律效力", "约束力"],
+          "applicability": ["合同纠纷", "合同效力"],
+          "relevance": 0.95,
+          "claimBasis": {
+            "type": "contractual",
+            "category": "合同请求权",
+            "elements": [
+              {
+                "name": "合同成立",
+                "description": "当事人意思表示一致，合同依法成立",
+                "required": true,
+                "evidenceTypes": ["合同书", "要约承诺", "履行行为"]
+              },
+              {
+                "name": "合同有效",
+                "description": "合同内容不违反法律法规强制性规定",
+                "required": true,
+                "evidenceTypes": ["合同条款", "法律审查"]
+              },
+              {
+                "name": "当事人适格",
+                "description": "合同当事人具有相应民事行为能力",
+                "required": true,
+                "evidenceTypes": ["身份证明", "营业执照", "授权委托书"]
+              }
+            ],
+            "typicalClaims": [
+              "履行合同义务",
+              "支付合同价款",
+              "交付合同标的物",
+              "承担违约责任"
+            ]
+          }
+        },
+        {
+          "article": "第577条",
+          "content": "当事人一方不履行合同义务或者履行合同义务不符合约定的，应当承担继续履行、采取补救措施或者赔偿损失等违约责任。",
+          "tags": ["违约", "违约责任", "赔偿"],
+          "applicability": ["违约纠纷", "损害赔偿"],
+          "relevance": 0.95,
+          "claimBasis": {
+            "type": "contractual",
+            "category": "违约责任请求权",
+            "elements": [
+              {
+                "name": "合同有效成立",
+                "description": "存在有效的合同关系",
+                "required": true,
+                "evidenceTypes": ["合同书", "履行凭证"]
+              },
+              {
+                "name": "违约行为",
+                "description": "一方不履行或不完全履行合同义务",
+                "required": true,
+                "evidenceTypes": ["履行通知", "违约事实", "催告函"]
+              },
+              {
+                "name": "因果关系",
+                "description": "违约行为与损失之间存在因果关系",
+                "required": true,
+                "evidenceTypes": ["损失证明", "专家意见"]
+              },
+              {
+                "name": "损失",
+                "description": "因违约行为造成的实际损失",
+                "required": false,
+                "evidenceTypes": ["财务报表", "发票", "评估报告"]
+              }
+            ],
+            "typicalClaims": [
+              "继续履行",
+              "采取补救措施", 
+              "赔偿损失",
+              "支付违约金"
+            ]
+          }
+        },
+        {
+          "article": "第667条",
+          "content": "借款合同是借款人向贷款人借款，到期返还借款并支付利息的合同。",
+          "tags": ["借款合同", "借贷", "利息"],
+          "applicability": ["民间借贷纠纷", "金融借款合同纠纷"],
+          "relevance": 0.95,
+          "claimBasis": {
+            "type": "contractual",
+            "category": "借款合同请求权",
+            "elements": [
+              {
+                "name": "借款合同成立",
+                "description": "借贷双方达成借款合意",
+                "required": true,
+                "evidenceTypes": ["借款合同", "借条", "欠条", "转账记录"]
+              },
+              {
+                "name": "借款交付",
+                "description": "贷款人实际向借款人交付借款",
+                "required": true,
+                "evidenceTypes": ["银行转账记录", "现金交付凭证", "收条"]
+              },
+              {
+                "name": "还款期限届满",
+                "description": "约定的还款期限已经到期",
+                "required": true,
+                "evidenceTypes": ["合同约定", "催收通知"]
+              }
+            ],
+            "typicalClaims": [
+              "返还借款本金",
+              "支付借款利息",
+              "支付逾期利息",
+              "承担违约责任"
+            ]
+          }
+        },
+        {
+          "article": "第1165条",
+          "content": "行为人因过错侵害他人民事权益造成损害的，应当承担侵权责任。依照法律规定推定行为人有过错，其不能证明自己没有过错的，应当承担侵权责任。",
+          "tags": ["侵权责任", "过错", "损害赔偿"],
+          "applicability": ["侵权责任纠纷", "人身损害", "财产损害"],
+          "relevance": 0.95,
+          "claimBasis": {
+            "type": "tort",
+            "category": "一般侵权责任请求权",
+            "elements": [
+              {
+                "name": "损害事实",
+                "description": "受害人的人身或财产遭受损害",
+                "required": true,
+                "evidenceTypes": ["医疗诊断", "财产损失证明", "鉴定报告"]
+              },
+              {
+                "name": "违法行为",
+                "description": "行为人实施了违法行为",
+                "required": true,
+                "evidenceTypes": ["现场证据", "证人证言", "监控录像"]
+              },
+              {
+                "name": "因果关系",
+                "description": "违法行为与损害结果之间存在因果关系",
+                "required": true,
+                "evidenceTypes": ["专家意见", "司法鉴定", "逻辑推理"]
+              },
+              {
+                "name": "过错",
+                "description": "行为人存在故意或过失",
+                "required": true,
+                "evidenceTypes": ["行为分析", "注意义务", "预见可能"]
+              }
+            ],
+            "typicalClaims": [
+              "停止侵害",
+              "排除妨碍",
+              "消除危险",
+              "赔偿损失",
+              "恢复原状",
+              "赔礼道歉"
+            ]
+          }
+        },
+        {
+          "article": "第1166条",
+          "content": "行为人造成他人民事权益损害，不论行为人有无过错，法律规定应当承担侵权责任的，依照其规定。",
+          "tags": ["无过错责任", "特殊侵权", "严格责任"],
+          "applicability": ["特殊侵权", "产品责任", "环境污染"],
+          "relevance": 0.9,
+          "claimBasis": {
+            "type": "tort",
+            "category": "无过错责任请求权",
+            "elements": [
+              {
+                "name": "损害事实",
+                "description": "受害人遭受人身或财产损害",
+                "required": true,
+                "evidenceTypes": ["损害证明", "鉴定报告"]
+              },
+              {
+                "name": "危险活动或特殊情形",
+                "description": "属于法律规定的无过错责任情形",
+                "required": true,
+                "evidenceTypes": ["活动性质证明", "法律条文"]
+              },
+              {
+                "name": "因果关系",
+                "description": "危险活动与损害结果之间存在因果关系",
+                "required": true,
+                "evidenceTypes": ["事实认定", "技术分析"]
+              }
+            ],
+            "typicalClaims": [
+              "赔偿损失",
+              "恢复原状",
+              "停止侵害"
+            ]
+          }
+        },
+        {
+          "article": "第985条",
+          "content": "得利人没有法律根据取得不当利益的，受损失的人可以请求得利人返还取得的利益，但是有下列情形之一的除外：（一）为履行道德义务进行的给付；（二）债务到期之前的清偿；（三）明知无给付义务而进行的债务清偿。",
+          "tags": ["不当得利", "返还义务", "法律根据"],
+          "applicability": ["不当得利纠纷", "返还请求"],
+          "relevance": 0.9,
+          "claimBasis": {
+            "type": "unjust-enrichment",
+            "category": "不当得利返还请求权",
+            "elements": [
+              {
+                "name": "他人获得利益",
+                "description": "得利人获得了财产利益",
+                "required": true,
+                "evidenceTypes": ["财产增加证明", "账户记录", "价值评估"]
+              },
+              {
+                "name": "本人受到损失",
+                "description": "受损人因此遭受财产损失",
+                "required": true,
+                "evidenceTypes": ["财产减少证明", "支出凭证"]
+              },
+              {
+                "name": "得利与损失之间有因果关系",
+                "description": "得利人的获益与受损人的损失存在直接关联",
+                "required": true,
+                "evidenceTypes": ["事实分析", "资金流向"]
+              },
+              {
+                "name": "没有法律根据",
+                "description": "得利人获得利益缺乏法律上的正当理由",
+                "required": true,
+                "evidenceTypes": ["合同审查", "法律分析"]
+              }
+            ],
+            "typicalClaims": [
+              "返还不当得利",
+              "支付利息",
+              "赔偿损失"
+            ]
+          }
+        },
+        {
+          "article": "第235条",
+          "content": "无权占有不动产或者动产的，权利人可以请求返还原物。",
+          "tags": ["物权请求权", "返还原物", "无权占有"],
+          "applicability": ["物权纠纷", "返还原物"],
+          "relevance": 0.85,
+          "claimBasis": {
+            "type": "property",
+            "category": "返还原物请求权",
+            "elements": [
+              {
+                "name": "享有物权",
+                "description": "请求权人对标的物享有所有权或其他物权",
+                "required": true,
+                "evidenceTypes": ["不动产权证", "购买合同", "继承证明"]
+              },
+              {
+                "name": "他人占有",
+                "description": "标的物被他人实际占有控制",
+                "required": true,
+                "evidenceTypes": ["占有事实", "现场证据"]
+              },
+              {
+                "name": "占有无权利基础",
+                "description": "占有人对标的物的占有缺乏法律根据",
+                "required": true,
+                "evidenceTypes": ["权利审查", "占有原因分析"]
+              }
+            ],
+            "typicalClaims": [
+              "返还原物",
+              "排除妨害",
+              "消除危险"
+            ]
+          }
+        },
+        {
+          "article": "第236条",
+          "content": "妨害物权或者可能妨害物权的，权利人可以请求排除妨害或者消除危险。",
+          "tags": ["排除妨害", "消除危险", "物权保护"],
+          "applicability": ["物权保护", "相邻关系纠纷"],
+          "relevance": 0.8,
+          "claimBasis": {
+            "type": "property",
+            "category": "排除妨害消除危险请求权",
+            "elements": [
+              {
+                "name": "享有物权",
+                "description": "请求权人对标的物享有物权",
+                "required": true,
+                "evidenceTypes": ["权属证明", "登记资料"]
+              },
+              {
+                "name": "存在妨害或危险",
+                "description": "他人行为妨害物权行使或可能造成妨害",
+                "required": true,
+                "evidenceTypes": ["现场查勘", "专业评估", "影响分析"]
+              },
+              {
+                "name": "妨害的违法性",
+                "description": "妨害行为违反法律规定或侵犯合法权益",
+                "required": true,
+                "evidenceTypes": ["法律分析", "权利界限"]
+              }
+            ],
+            "typicalClaims": [
+              "排除妨害",
+              "消除危险",
+              "停止侵害",
+              "恢复原状"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "code": "special_provisions",
+      "title": "特殊请求权规定",
+      "articles": [
+        {
+          "article": "买卖合同-第595条",
+          "content": "买卖合同是出卖人转移标的物的所有权于买受人，买受人支付价款的合同。",
+          "tags": ["买卖合同", "所有权转移", "价款支付"],
+          "applicability": ["买卖合同纠纷"],
+          "relevance": 0.95,
+          "claimBasis": {
+            "type": "contractual",
+            "category": "买卖合同请求权",
+            "elements": [
+              {
+                "name": "买卖合同成立有效",
+                "description": "双方就标的物和价款等主要条款达成合意",
+                "required": true,
+                "evidenceTypes": ["买卖合同", "订单", "发票"]
+              },
+              {
+                "name": "合同履行条件成就",
+                "description": "约定的履行条件已经满足",
+                "required": true,
+                "evidenceTypes": ["交付凭证", "验收单", "付款通知"]
+              }
+            ],
+            "typicalClaims": [
+              "交付标的物",
+              "支付价款",
+              "转移所有权",
+              "承担瑕疵担保责任"
+            ]
+          }
+        },
+        {
+          "article": "租赁合同-第703条", 
+          "content": "租赁合同是出租人将租赁物交付承租人使用、收益，承租人支付租金的合同。",
+          "tags": ["租赁合同", "使用收益", "租金"],
+          "applicability": ["房屋租赁纠纷", "设备租赁纠纷"],
+          "relevance": 0.9,
+          "claimBasis": {
+            "type": "contractual",
+            "category": "租赁合同请求权",
+            "elements": [
+              {
+                "name": "租赁合同有效",
+                "description": "租赁合同依法成立并生效",
+                "required": true,
+                "evidenceTypes": ["租赁合同", "租赁备案"]
+              },
+              {
+                "name": "租赁期限",
+                "description": "明确的租赁期间和租金标准",
+                "required": true,
+                "evidenceTypes": ["合同条款", "补充协议"]
+              }
+            ],
+            "typicalClaims": [
+              "支付租金",
+              "交付租赁物",
+              "返还租赁物",
+              "维修义务"
+            ]
+          }
+        },
+        {
+          "article": "劳动报酬-劳动法第50条",
+          "content": "工资应当以货币形式按月支付给劳动者本人。不得克扣或者无故拖欠劳动者的工资。",
+          "tags": ["劳动报酬", "工资支付", "拖欠"],
+          "applicability": ["劳动争议", "工资纠纷"],
+          "relevance": 0.95,
+          "claimBasis": {
+            "type": "contractual",
+            "category": "劳动报酬请求权",
+            "elements": [
+              {
+                "name": "劳动关系",
+                "description": "劳动者与用人单位存在劳动关系",
+                "required": true,
+                "evidenceTypes": ["劳动合同", "社保记录", "工作证明"]
+              },
+              {
+                "name": "提供劳动",
+                "description": "劳动者按约定提供了劳动",
+                "required": true,
+                "evidenceTypes": ["考勤记录", "工作成果", "证人证言"]
+              },
+              {
+                "name": "工资支付期届满",
+                "description": "约定的工资支付期限已到",
+                "required": true,
+                "evidenceTypes": ["合同约定", "规章制度"]
+              }
+            ],
+            "typicalClaims": [
+              "支付工资",
+              "支付加班费",
+              "支付经济补偿",
+              "支付赔偿金"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "claimTypeMapping": {
+    "合同请求权": {
+      "description": "基于合同关系产生的请求权",
+      "legalBasis": ["民法典合同编", "相关合同法律法规"],
+      "commonElements": ["合同成立", "合同有效", "履行条件", "违约行为"],
+      "limitationPeriod": 36,
+      "burdenOfProof": "谁主张谁举证",
+      "subcategories": [
+        {
+          "name": "履行请求权",
+          "description": "要求对方履行合同义务的请求权",
+          "examples": ["交付货物", "支付价款", "提供服务"]
+        },
+        {
+          "name": "违约责任请求权", 
+          "description": "基于违约行为产生的损害赔偿请求权",
+          "examples": ["赔偿损失", "支付违约金", "承担责任"]
+        }
+      ]
+    },
+    "侵权请求权": {
+      "description": "基于侵权行为产生的请求权",
+      "legalBasis": ["民法典侵权责任编"],
+      "commonElements": ["损害事实", "违法行为", "因果关系", "过错"],
+      "limitationPeriod": 36,
+      "burdenOfProof": "受害人举证证明",
+      "subcategories": [
+        {
+          "name": "一般侵权请求权",
+          "description": "基于过错侵权的损害赔偿请求权",
+          "examples": ["人身损害赔偿", "财产损害赔偿", "精神损害赔偿"]
+        },
+        {
+          "name": "特殊侵权请求权",
+          "description": "法律规定的无过错责任情形",
+          "examples": ["产品责任", "环境污染", "高度危险作业"]
+        }
+      ]
+    },
+    "不当得利请求权": {
+      "description": "基于无法律根据的利益获得而产生的返还请求权",
+      "legalBasis": ["民法典第985条等"],
+      "commonElements": ["他人得利", "本人受损", "无法律根据", "因果关系"],
+      "limitationPeriod": 36,
+      "burdenOfProof": "请求人举证证明",
+      "subcategories": [
+        {
+          "name": "给付不当得利",
+          "description": "基于给付行为产生的不当得利",
+          "examples": ["错误支付", "无效合同给付"]
+        },
+        {
+          "name": "非给付不当得利",
+          "description": "非基于给付行为的不当得利",
+          "examples": ["费用支出", "权利行使"]
+        }
+      ]
+    },
+    "物权请求权": {
+      "description": "基于物权受到侵害而产生的请求权",
+      "legalBasis": ["民法典物权编"],
+      "commonElements": ["享有物权", "权利受侵害", "侵害的违法性"],
+      "limitationPeriod": 36,
+      "burdenOfProof": "权利人举证证明权利",
+      "subcategories": [
+        {
+          "name": "返还原物请求权",
+          "description": "要求无权占有人返还原物的请求权",
+          "examples": ["房屋返还", "动产返还"]
+        },
+        {
+          "name": "排除妨害请求权",
+          "description": "要求停止妨害物权行为的请求权", 
+          "examples": ["停止噪音", "拆除违建", "停止占用"]
+        },
+        {
+          "name": "消除危险请求权",
+          "description": "要求消除对物权威胁的请求权",
+          "examples": ["修缮危房", "清除污染源"]
+        }
+      ]
+    }
+  },
+  "analysisFramework": {
+    "stepByStep": [
+      {
+        "step": 1,
+        "name": "确定请求权基础",
+        "description": "识别可能的请求权规范",
+        "methods": ["审查合同条款", "分析行为性质", "确定法律关系"]
+      },
+      {
+        "step": 2, 
+        "name": "检验构成要件",
+        "description": "逐一审查请求权成立的构成要件",
+        "methods": ["事实认定", "要件符合性", "证据充分性"]
+      },
+      {
+        "step": 3,
+        "name": "考虑障碍事由",
+        "description": "审查是否存在请求权行使的障碍",
+        "methods": ["时效抗辩", "抵销抗辩", "免责条款"]
+      },
+      {
+        "step": 4,
+        "name": "确定请求权内容",
+        "description": "明确请求权的具体内容和范围",
+        "methods": ["损失计算", "履行范围", "责任形式"]
+      }
+    ],
+    "commonObstacles": [
+      {
+        "name": "诉讼时效",
+        "description": "请求权因时效届满而不受保护",
+        "applicableToAll": true,
+        "legalBasis": "民法典第188条"
+      },
+      {
+        "name": "抵销",
+        "description": "对方享有反对债权可予抵销",
+        "applicableToAll": false,
+        "legalBasis": "民法典第568条"
+      },
+      {
+        "name": "免责条款",
+        "description": "合同约定的责任免除条款",
+        "applicableToAll": false,
+        "legalBasis": "民法典第506条"
+      }
+    ]
+  },
+  "metadata": {
+    "version": "2.0.0",
+    "lastUpdate": "2024-01-15",
+    "totalProvisions": 2,
+    "totalArticles": 11,
+    "claimTypes": 4,
+    "focus": "德国法请求权分析法（Anspruchsmethode）",
+    "sources": [
+      "中华人民共和国民法典",
+      "中华人民共和国劳动法",
+      "德国法学理论",
+      "司法实践"
+    ],
+    "usage": "支持AI请求权分析器进行系统化法律分析"
+  }
+}

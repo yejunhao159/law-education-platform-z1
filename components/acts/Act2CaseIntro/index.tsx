@@ -5,16 +5,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { StoryView } from './StoryView'
-import { CaseTimelineSimplified } from '../CaseTimelineSimplified'
-import { CaseTimelineEnhanced } from '../CaseTimelineEnhanced'
+import { UnifiedTimeline } from '@/components/timeline/UnifiedTimeline'
 import { useCaseStore, useStoryMode, useCaseData } from '@/lib/stores/useCaseStore'
-import { BookOpen, FileText, ToggleLeft, ToggleRight, Clock, Maximize2 } from 'lucide-react'
+import { BookOpen, FileText, ToggleLeft, ToggleRight, Clock } from 'lucide-react'
 
 export function Act2CaseIntro() {
   const { toggleStoryMode, setCurrentAct, generateStoryChapters } = useCaseStore()
   const storyMode = useStoryMode()
   const caseData = useCaseData()
-  const [useEnhancedTimeline, setUseEnhancedTimeline] = React.useState(false)
 
   // 如果有案件数据且开启故事模式，生成故事章节
   useEffect(() => {
@@ -97,37 +95,18 @@ export function Act2CaseIntro() {
             <div className="space-y-4">
               {/* 时间轴展示 - 法学思维驱动 */}
               <div className="border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-orange-600" />
-                    <h4 className="font-semibold">案件发展脉络</h4>
-                    <Badge variant="outline" className="text-xs">
-                      法学思维分析
-                    </Badge>
-                  </div>
-                  {/* 时间轴版本切换按钮 */}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setUseEnhancedTimeline(!useEnhancedTimeline)}
-                    className="flex items-center gap-1"
-                  >
-                    <Maximize2 className="w-3 h-3" />
-                    {useEnhancedTimeline ? '简化视图' : '增强视图'}
-                  </Button>
+                <div className="flex items-center gap-2 mb-4">
+                  <Clock className="w-5 h-5 text-orange-600" />
+                  <h4 className="font-semibold">案件发展脉络</h4>
+                  <Badge variant="outline" className="text-xs">
+                    请求权分析法
+                  </Badge>
                 </div>
-                {/* 根据切换显示不同版本的时间轴 */}
-                {useEnhancedTimeline ? (
-                  <div>
-                    {/* 增强版提示 */}
-                    <div className="mb-3 p-2 bg-blue-50 rounded-md text-xs text-blue-700">
-                      增强版支持：分组视图、事件筛选、分页显示、网格布局
-                    </div>
-                    <CaseTimelineEnhanced />
-                  </div>
-                ) : (
-                  <CaseTimelineSimplified />
-                )}
+                {/* 使用统一时间轴组件 */}
+                <UnifiedTimeline 
+                  events={caseData?.threeElements?.facts?.timeline}
+                  enableAI={true}
+                />
               </div>
             </div>
           )}

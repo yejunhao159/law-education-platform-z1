@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { LegalParser } from '@/lib/legal-parser';
 // 使用DeepSeek版本的AI Agent
-import { LegalAIAgent, DeepSeekLegalAgent, IntelligentMerger } from '@/lib/ai-legal-agent-deepseek';
+import { LegalAIAgent, DeepSeekLegalAgent, IntelligentMerger } from '@/lib/ai-legal-agent';
 
 export async function POST(request: NextRequest) {
   try {

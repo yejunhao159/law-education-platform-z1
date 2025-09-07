@@ -124,7 +124,7 @@ export const AnalysisCacheSchema = z.object({
 
 // ========== 事实认定 ==========
 export const FactsSchema = z.object({
-  // 为TimelineAIAnalysis添加的字段
+  // 为时间轴AI分析添加的字段
   main: z.string().optional(), // 主要事实描述文本
   disputed: z.array(z.string()).optional(), // 争议焦点数组
   // 原有字段
@@ -223,7 +223,7 @@ export const LegalCaseSchema = z.object({
   id: z.string().optional(),
   basicInfo: BasicInfoSchema,
   threeElements: ThreeElementsSchema,
-  // 添加timeline字段用于TimelineAIAnalysis组件
+  // 添加timeline字段用于时间轴AI分析组件
   timeline: z.array(z.object({
     id: z.number().optional(),
     date: z.string(),

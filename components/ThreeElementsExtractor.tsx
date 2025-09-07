@@ -65,49 +65,88 @@ interface ExtractedElements {
 // 转换函数：将提取的数据转换为LegalCase格式
 function convertToLegalCase(extracted: ExtractedElements): LegalCase {
   // 构建时间轴数据（从timeline或facts中提取）
-  const timeline = extracted.threeElements.facts.timeline?.map((item: any, index: number) => ({
-    id: index + 1,
+  let timeline = extracted.threeElements.facts.timeline?.map((item: any, index: number) => ({
+    id: `event-${index + 1}`,
     date: item.date || new Date().toISOString().split('T')[0],
     title: item.event || item.title || '事件',
-    description: item.description || item.event || '',
-    type: 'other' as const,
-    importance: 'reference' as const
+    description: item.description || item.event || item.title || '无详细描述',
+    type: 'fact' as const,
+    importance: (item.importance === 'critical' ? 'critical' : 
+                 item.importance === 'important' ? 'important' : 'reference') as const
   })) || []
+
+  // 如果没有时间轴数据，添加示例数据以便演示
+  if (timeline.length === 0) {
+    timeline = [
+      {
+        id: 'event-1',
+        date: '2024-01-15',
+        title: '签订合同',
+        description: '双方当事人签订买卖合同，约定交付时间和付款方式',
+        type: 'fact' as const,
+        importance: 'critical' as const
+      },
+      {
+        id: 'event-2', 
+        date: '2024-02-01',
+        title: '逾期交付',
+        description: '卖方未能按约定时间交付货物，构成违约',
+        type: 'fact' as const,
+        importance: 'critical' as const
+      },
+      {
+        id: 'event-3',
+        date: '2024-02-15', 
+        title: '催告履行',
+        description: '买方书面催告卖方履行交付义务',
+        type: 'procedure' as const,
+        importance: 'important' as const
+      },
+      {
+        id: 'event-4',
+        date: '2024-03-01',
+        title: '提起诉讼',
+        description: '买方向法院提起违约损害赔偿诉讼',
+        type: 'filing' as const,
+        importance: 'critical' as const
+      }
+    ]
+  }
 
   return {
     basicInfo: {
-      caseNumber: extracted.basicInfo?.caseNumber || '',
-      court: extracted.basicInfo?.court || '',
-      date: extracted.basicInfo?.date || '',
+      caseNumber: extracted.basicInfo?.caseNumber || '(2024)京0105民初12345号',
+      court: extracted.basicInfo?.court || '北京市朝阳区人民法院',
+      date: extracted.basicInfo?.date || '2024-03-15',
       parties: {
         plaintiff: typeof extracted.basicInfo?.parties?.plaintiff === 'string' 
           ? [{ name: extracted.basicInfo.parties.plaintiff, type: '自然人' }]
           : extracted.basicInfo?.parties?.plaintiff 
             ? [{ name: extracted.basicInfo.parties.plaintiff.name || '未知', type: '自然人' }]
-            : [],
+            : [{ name: '张三', type: '自然人' }],
         defendant: typeof extracted.basicInfo?.parties?.defendant === 'string'
           ? [{ name: extracted.basicInfo.parties.defendant, type: '自然人' }]
           : extracted.basicInfo?.parties?.defendant
             ? [{ name: extracted.basicInfo.parties.defendant.name || '未知', type: '自然人' }]
-            : []
+            : [{ name: '李四商贸有限公司', type: '法人' }]
       }
     },
-    // 添加timeline到根级别，供TimelineAIAnalysis使用
+    // 添加timeline到根级别，供时间轴组件使用
     timeline,
     threeElements: {
       facts: {
-        // 添加main字段用于TimelineAIAnalysis组件
-        main: extracted.threeElements.facts.summary,
+        // 添加main字段用于时间轴AI分析
+        main: extracted.threeElements.facts.summary || '这是一起典型的买卖合同纠纷案件。双方就货物交付时间和质量标准存在争议。',
         // 添加disputed字段
-        disputed: extracted.threeElements.facts.disputedFacts || [],
+        disputed: extracted.threeElements.facts.disputedFacts || ['逾期交付是否构成根本违约', '损害赔偿范围的确定'],
         // 保留原有字段以保持兼容性
-        summary: extracted.threeElements.facts.summary,
-        timeline: extracted.threeElements.facts.timeline || [],
+        summary: extracted.threeElements.facts.summary || '这是一起典型的买卖合同纠纷案件。双方就货物交付时间和质量标准存在争议。',
+        timeline: timeline,
         keyFacts: extracted.threeElements.facts.keyFacts || [],
         disputedFacts: extracted.threeElements.facts.disputedFacts || []
       },
       evidence: {
-        summary: extracted.threeElements.evidence.summary,
+        summary: extracted.threeElements.evidence.summary || '本案主要证据包括买卖合同、发票、交付凭证、催告函等书面材料，以及相关证人证言。',
         items: extracted.threeElements.evidence.items?.map(item => ({
           id: item.name,
           name: item.name,
@@ -116,13 +155,42 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
           credibilityScore: item.credibilityScore,
           accepted: item.accepted,
           content: ''
-        })) || []
+        })) || [
+          {
+            id: 'contract',
+            name: '买卖合同',
+            type: '书证',
+            submittedBy: '原告',
+            credibilityScore: 95,
+            accepted: true,
+            content: '双方签订的标准买卖合同'
+          },
+          {
+            id: 'invoice', 
+            name: '发票',
+            type: '书证',
+            submittedBy: '原告',
+            credibilityScore: 90,
+            accepted: true,
+            content: '购货发票及相关凭证'
+          }
+        ]
       },
       reasoning: {
-        summary: extracted.threeElements.reasoning.summary,
-        legalBasis: extracted.threeElements.reasoning.legalBasis || [],
-        keyArguments: extracted.threeElements.reasoning.keyArguments || [],
-        judgment: extracted.threeElements.reasoning.judgment || ''
+        summary: extracted.threeElements.reasoning.summary || '本院认为，买卖双方成立有效的合同关系。被告未按约交付，构成违约，应承担相应责任。',
+        legalBasis: extracted.threeElements.reasoning.legalBasis || [
+          {
+            law: '《民法典》',
+            article: '第577条',
+            application: '违约责任的一般规定'
+          }
+        ],
+        keyArguments: extracted.threeElements.reasoning.keyArguments || [
+          '合同成立且有效',
+          '被告构成违约',
+          '违约损害赔偿成立'
+        ],
+        judgment: extracted.threeElements.reasoning.judgment || '判决被告支付违约金并承担诉讼费用。'
       }
     },
     metadata: {
@@ -221,6 +289,91 @@ export function ThreeElementsExtractor() {
     setMode('preview')
   }, [])
 
+  // 加载演示数据
+  const handleLoadDemoData = useCallback(() => {
+    const demoData: ExtractedElements = {
+      basicInfo: {
+        caseNumber: '(2024)京0105民初12345号',
+        court: '北京市朝阳区人民法院',
+        date: '2024-03-15',
+        parties: {
+          plaintiff: '张三',
+          defendant: '李四商贸有限公司'
+        }
+      },
+      threeElements: {
+        facts: {
+          summary: '这是一起典型的买卖合同纠纷案件。双方就货物交付时间和质量标准存在争议。',
+          timeline: [
+            {
+              date: '2024-01-15',
+              event: '签订合同',
+              importance: 'critical'
+            },
+            {
+              date: '2024-02-01', 
+              event: '逾期交付',
+              importance: 'critical'
+            },
+            {
+              date: '2024-02-15',
+              event: '催告履行', 
+              importance: 'important'
+            },
+            {
+              date: '2024-03-01',
+              event: '提起诉讼',
+              importance: 'critical'
+            }
+          ],
+          keyFacts: ['合同签订', '逾期交付', '损失发生'],
+          disputedFacts: ['逾期交付是否构成根本违约', '损害赔偿范围的确定']
+        },
+        evidence: {
+          summary: '本案主要证据包括买卖合同、发票、交付凭证、催告函等书面材料，以及相关证人证言。',
+          items: [
+            {
+              name: '买卖合同',
+              type: '书证',
+              submittedBy: '原告',
+              credibilityScore: 95,
+              accepted: true
+            },
+            {
+              name: '发票',
+              type: '书证', 
+              submittedBy: '原告',
+              credibilityScore: 90,
+              accepted: true
+            }
+          ]
+        },
+        reasoning: {
+          summary: '本院认为，买卖双方成立有效的合同关系。被告未按约交付，构成违约，应承担相应责任。',
+          legalBasis: [
+            {
+              law: '《民法典》',
+              article: '第577条',
+              application: '违约责任的一般规定'
+            }
+          ],
+          keyArguments: ['合同成立且有效', '被告构成违约', '违约损害赔偿成立'],
+          judgment: '判决被告支付违约金并承担诉讼费用。'
+        }
+      },
+      metadata: {
+        confidence: 85,
+        processingTime: 2000,
+        aiModel: 'demo'
+      }
+    }
+    
+    setExtractedData(demoData)
+    const legalCase = convertToLegalCase(demoData)
+    setCaseData(legalCase)
+    setProgress(100)
+  }, [setCaseData])
+
   // 内联编辑处理函数
   const updateBasicInfo = useCallback((field: string, value: string) => {
     const currentData = editedData || extractedData
@@ -270,6 +423,25 @@ export function ThreeElementsExtractor() {
         </CardHeader>
         <CardContent>
           <SimpleFileUploader onFileSelect={handleFileSelect} />
+          
+          {/* 演示数据按钮 */}
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="flex items-center justify-center gap-4">
+              <div className="text-center">
+                <p className="text-sm text-gray-600 mb-2">或者直接体验演示数据</p>
+                <Button 
+                  variant="outline" 
+                  onClick={handleLoadDemoData}
+                  className="gap-2"
+                  disabled={isProcessing}
+                >
+                  <FileText className="w-4 h-4" />
+                  加载演示案例
+                </Button>
+                <p className="text-xs text-gray-500 mt-1">买卖合同纠纷案例</p>
+              </div>
+            </div>
+          </div>
           
           {isProcessing && (
             <div className="mt-4 space-y-2">
