@@ -1,0 +1,119 @@
+{
+  "facts": [
+    {
+      "id": "F1",
+      "content": "2023年6月15日，原告张某与被告李某签订《房屋买卖合同》，约定房屋总价300万元",
+      "category": "key",
+      "relatedParties": ["张某", "李某"]
+    },
+    {
+      "id": "F2",
+      "content": "合同约定被告应于2023年7月15日前支付首付款90万元",
+      "category": "key",
+      "relatedParties": ["李某"]
+    },
+    {
+      "id": "F3",
+      "content": "被告李某直至2023年8月30日仍未支付任何款项",
+      "category": "disputed",
+      "relatedParties": ["李某"]
+    },
+    {
+      "id": "F4",
+      "content": "原告多次催告无果，于2023年9月1日向被告发出解除合同通知",
+      "category": "evidence",
+      "relatedParties": ["张某", "李某"]
+    }
+  ],
+  "laws": [
+    {
+      "id": "L1",
+      "title": "民法典第563条",
+      "content": "有下列情形之一的，当事人可以解除合同：（一）因不可抗力致使不能实现合同目的；（二）在履行期限届满前，当事人一方明确表示或者以自己的行为表明不履行主要债务...",
+      "type": "statute",
+      "elements": ["履行期限届满", "不履行主要债务", "催告", "合理期限"]
+    },
+    {
+      "id": "L2",
+      "title": "民法典第577条",
+      "content": "当事人一方不履行合同义务或者履行合同义务不符合约定的，应当承担继续履行、采取补救措施或者赔偿损失等违约责任。",
+      "type": "statute",
+      "elements": ["不履行义务", "违约责任", "赔偿损失"]
+    },
+    {
+      "id": "L3",
+      "title": "最高法买卖合同司法解释第24条",
+      "content": "买卖合同对付款期限作出的变更，不影响当事人关于逾期付款违约金的约定...",
+      "type": "regulation",
+      "elements": ["付款期限", "违约金"]
+    }
+  ],
+  "elements": [
+    "合同成立生效",
+    "付款义务",
+    "履行期限届满",
+    "违约行为",
+    "催告程序",
+    "合理期限",
+    "解除权行使",
+    "损害赔偿"
+  ],
+  "issues": [
+    {
+      "id": "issue1",
+      "title": "被告未按期支付购房款是否构成根本违约",
+      "description": "被告李某未按合同约定支付首付款，是否构成根本违约，原告是否有权解除合同",
+      "elements": ["付款义务", "履行期限届满", "违约行为", "解除权行使"],
+      "relatedLaws": ["L1", "L2"],
+      "difficulty": "medium"
+    }
+  ],
+  "sampleTurns": [
+    {
+      "issueId": "issue1",
+      "stance": "pro",
+      "issue": "被告未按期支付首付款是否构成根本违约",
+      "rule": "根据民法典第563条，在履行期限届满前，当事人一方明确表示或者以自己的行为表明不履行主要债务的，另一方可以解除合同",
+      "application": "本案中，被告应于7月15日支付首付款90万元，这是合同的主要债务。被告直至8月30日仍未支付，已经超过履行期限45天，其行为表明不履行主要债务。原告经多次催告无果，有权解除合同。",
+      "conclusion": "因此，被告的行为构成根本违约，原告有权解除合同",
+      "citedFacts": ["F2", "F3", "F4"],
+      "citedLaws": ["L1"],
+      "timestamp": "2024-01-09T10:00:00Z",
+      "duration": 85
+    }
+  ],
+  "sampleScores": [
+    {
+      "total": 78,
+      "dims": {
+        "relevance": { "score": 90, "weight": 0.2, "feedback": "论述紧扣争议焦点" },
+        "rule": { "score": 85, "weight": 0.2, "feedback": "法条引用准确" },
+        "application": { "score": 70, "weight": 0.3, "feedback": "要件分析较为完整，但'合理期限'未充分论证" },
+        "citation": { "score": 80, "weight": 0.2, "feedback": "事实引用充分" },
+        "conclusion": { "score": 75, "weight": 0.1, "feedback": "结论明确" }
+      },
+      "gaps": ["合理期限的认定"],
+      "actionable": [
+        "补充论证催告后的合理期限问题",
+        "明确指出90万首付款占总价款的比例(30%)以说明其重要性",
+        "可以引用相关判例加强论证"
+      ],
+      "mustFix": null,
+      "overallLevel": "good"
+    }
+  ],
+  "sampleChallenges": [
+    {
+      "kind": "counter",
+      "prompt": "你提到被告逾期45天构成根本违约，但是否考虑过被告可能存在的抗辩理由？比如不可抗力或者原告自身是否完全履行了合同义务？",
+      "targetElement": "违约行为",
+      "suggestedResponse": "考虑可能的抗辩事由并逐一排除"
+    },
+    {
+      "kind": "hypothetical",
+      "prompt": "假设被告在8月1日支付了30万元部分款项，这是否会影响你对根本违约的判断？",
+      "targetElement": "付款义务",
+      "suggestedResponse": "分析部分履行对合同解除权的影响"
+    }
+  ]
+}

@@ -28,8 +28,8 @@ const ThreeElementsExtractor = lazy(() =>
 const DeepAnalysis = lazy(() => 
   import("@/components/acts/DeepAnalysis").then(mod => ({ default: mod.default }))
 )
-const Act5SocraticDiscussion = lazy(() => 
-  import("@/components/acts/Act5SocraticDiscussion").then(mod => ({ default: mod.default }))
+const Act5TeacherMode = lazy(() => 
+  import("@/components/acts/Act5TeacherMode").then(mod => ({ default: mod.default }))
 )
 const Act6JudgmentSummary = lazy(() => 
   import("@/components/acts/Act6JudgmentSummary").then(mod => ({ default: mod.default }))
@@ -156,7 +156,7 @@ export default function FourActsLawTeachingSystem() {
               case "socratic":
                 return (
                   <div className="space-y-6">
-                    <Act5SocraticDiscussion />
+                    <Act5TeacherMode />
                     <div className="text-center">
                       <Button size="lg" onClick={handleActComplete}>
                         进入总结阶段

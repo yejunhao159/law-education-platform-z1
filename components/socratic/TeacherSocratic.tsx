@@ -1,0 +1,495 @@
+'use client';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import ArgumentTree, { ArgumentNode } from './ArgumentTree';
+import { 
+  Send, 
+  Bot, 
+  User, 
+  Sparkles,
+  Play,
+  Pause,
+  RotateCcw,
+  Download,
+  Settings
+} from 'lucide-react';
+
+/**
+ * 教师专用苏格拉底教学界面
+ * 简化设计，专注于教师引导学生思考的核心功能
+ */
+
+interface TeacherSocraticProps {
+  caseData: {
+    title: string;
+    facts: string[];
+    laws: string[];
+    dispute: string;
+  };
+}
+
+export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
+  // 对话历史
+  const [messages, setMessages] = useState<Array<{
+    id: string;
+    role: 'teacher' | 'ai' | 'student-simulation';
+    content: string;
+    timestamp: string;
+    suggestions?: string[];
+  }>>([]);
+
+  // 论证树节点
+  const [argumentNodes, setArgumentNodes] = useState<ArgumentNode[]>([]);
+  
+  // 当前输入
+  const [currentInput, setCurrentInput] = useState('');
+  
+  // 教学模式
+  const [teachingMode, setTeachingMode] = useState<'guided' | 'free' | 'evaluation'>('guided');
+  
+  // 会话状态
+  const [isActive, setIsActive] = useState(false);
+  const [currentLevel, setCurrentLevel] = useState<'basic' | 'intermediate' | 'advanced'>('basic');
+  
+  // AI建议的问题
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([
+    "本案的核心争议点是什么？",
+    "原告的请求权基础是什么？",
+    "被告可能提出哪些抗辩？",
+    "关键证据的证明力如何？",
+    "如果改变某个事实，结论会改变吗？"
+  ]);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // 自动滚动到底部
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  // 发送消息（使用真实API）
+  const sendMessage = async (content: string, isAISuggestion: boolean = false) => {
+    if (!content.trim()) return;
+
+    const newMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'teacher' as const,
+      content,
+      timestamp: new Date().toLocaleTimeString()
+    };
+
+    setMessages(prev => [...prev, newMessage]);
+    setCurrentInput('');
+
+    // 添加到论证树
+    const newNode: ArgumentNode = {
+      id: `node-${Date.now()}`,
+      type: 'question',
+      content,
+      speaker: 'teacher',
+      parentId: argumentNodes.length > 0 ? argumentNodes[argumentNodes.length - 1].id : undefined
+    };
+    setArgumentNodes(prev => [...prev, newNode]);
+
+    // 调用真实的DeepSeek API
+    try {
+      const response = await fetch('/api/socratic/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: content,
+          level: currentLevel,
+          context: {
+            caseTitle: caseData.title,
+            facts: caseData.facts,
+            laws: caseData.laws,
+            dispute: caseData.dispute,
+            previousMessages: messages.slice(-5).map(m => ({
+              role: m.role,
+              content: m.content
+            }))
+          },
+          mode: 'response'
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        const aiMessage = {
+          id: `msg-${Date.now() + 1}`,
+          role: 'ai' as const,
+          content: result.data.answer,
+          timestamp: new Date().toLocaleTimeString(),
+          suggestions: result.data.followUpQuestions || []
+        };
+        setMessages(prev => [...prev, aiMessage]);
+        setSuggestedQuestions(result.data.followUpQuestions || suggestedQuestions);
+
+        // 添加AI回答到论证树
+        const aiNode: ArgumentNode = {
+          id: `node-${Date.now() + 1}`,
+          type: 'reason',
+          content: result.data.answer,
+          speaker: 'ai',
+          parentId: newNode.id,
+          evaluation: {
+            strength: 'medium',
+            issues: result.data.analysis?.weaknesses || []
+          }
+        };
+        setArgumentNodes(prev => [...prev, aiNode]);
+      } else {
+        // 如果API调用失败，使用备用响应
+        console.error('API调用失败:', result.error);
+        const fallbackResponse = generateAIResponse(content, currentLevel);
+        const aiMessage = {
+          id: `msg-${Date.now() + 1}`,
+          role: 'ai' as const,
+          content: fallbackResponse.answer,
+          timestamp: new Date().toLocaleTimeString(),
+          suggestions: fallbackResponse.followUpQuestions
+        };
+        setMessages(prev => [...prev, aiMessage]);
+        setSuggestedQuestions(fallbackResponse.followUpQuestions);
+      }
+    } catch (error) {
+      console.error('调用API时出错:', error);
+      // 使用备用响应
+      const fallbackResponse = generateAIResponse(content, currentLevel);
+      const aiMessage = {
+        id: `msg-${Date.now() + 1}`,
+        role: 'ai' as const,
+        content: fallbackResponse.answer,
+        timestamp: new Date().toLocaleTimeString(),
+        suggestions: fallbackResponse.followUpQuestions
+      };
+      setMessages(prev => [...prev, aiMessage]);
+      setSuggestedQuestions(fallbackResponse.followUpQuestions);
+    }
+  };
+
+  // 生成AI响应（简化版）
+  const generateAIResponse = (question: string, level: string) => {
+    const responses = {
+      basic: {
+        answer: "根据案件事实，这里需要考虑合同法的相关规定。建议引导学生关注合同的成立要件和违约责任。",
+        followUpQuestions: [
+          "合同的成立需要哪些要件？",
+          "本案中这些要件是否都满足？",
+          "违约责任如何认定？"
+        ]
+      },
+      intermediate: {
+        answer: "这个问题涉及到要件分析。建议让学生逐一对照法条要件，分析每个要件在本案中的体现。",
+        followUpQuestions: [
+          "每个法条要件如何对应案件事实？",
+          "是否存在要件缺失的情况？",
+          "对方可能如何反驳？"
+        ]
+      },
+      advanced: {
+        answer: "这需要进行深层次的法律推理。可以引导学生考虑不同的解释方法和价值判断。",
+        followUpQuestions: [
+          "不同的解释方法会得出什么结论？",
+          "如何平衡各方利益？",
+          "判决的社会效果如何？"
+        ]
+      }
+    };
+
+    return responses[level as keyof typeof responses] || responses.basic;
+  };
+
+  // 使用建议问题
+  const useSuggestedQuestion = (question: string) => {
+    sendMessage(question, true);
+  };
+
+  // 开始/暂停会话
+  const toggleSession = async () => {
+    setIsActive(!isActive);
+    if (!isActive) {
+      // 开始会话时添加初始消息
+      const welcomeMessage = {
+        id: `msg-${Date.now()}`,
+        role: 'ai' as const,
+        content: `开始苏格拉底式教学。案件：${caseData.title}。正在为您生成引导问题...`,
+        timestamp: new Date().toLocaleTimeString(),
+        suggestions: []
+      };
+      setMessages([welcomeMessage]);
+
+      // 获取AI建议的初始问题
+      try {
+        const response = await fetch('/api/socratic/generate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            question: '请为这个案件生成初始的引导性问题',
+            level: currentLevel,
+            context: {
+              caseTitle: caseData.title,
+              facts: caseData.facts,
+              laws: caseData.laws,
+              dispute: caseData.dispute,
+              previousMessages: []
+            },
+            mode: 'suggestions'
+          })
+        });
+
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+          // 更新欢迎消息
+          setMessages([{
+            ...welcomeMessage,
+            content: `开始苏格拉底式教学。案件：${caseData.title}。请选择一个问题开始引导。`,
+            suggestions: result.data.followUpQuestions || suggestedQuestions
+          }]);
+          setSuggestedQuestions(result.data.followUpQuestions || suggestedQuestions);
+        } else {
+          // 使用默认问题
+          setMessages([{
+            ...welcomeMessage,
+            content: `开始苏格拉底式教学。案件：${caseData.title}。请选择一个问题开始引导。`,
+            suggestions: suggestedQuestions
+          }]);
+        }
+      } catch (error) {
+        console.error('获取初始问题失败:', error);
+        // 使用默认问题
+        setMessages([{
+          ...welcomeMessage,
+          content: `开始苏格拉底式教学。案件：${caseData.title}。请选择一个问题开始引导。`,
+          suggestions: suggestedQuestions
+        }]);
+      }
+    }
+  };
+
+  // 重置会话
+  const resetSession = () => {
+    setMessages([]);
+    setArgumentNodes([]);
+    setIsActive(false);
+    setCurrentLevel('basic');
+  };
+
+  // 导出对话记录
+  const exportSession = () => {
+    const data = {
+      case: caseData,
+      messages,
+      argumentTree: argumentNodes,
+      timestamp: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `socratic-session-${Date.now()}.json`;
+    a.click();
+  };
+
+  return (
+    <div className="max-w-7xl mx-auto p-6">
+      {/* 头部控制栏 */}
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">苏格拉底教学法 - 教师控制台</h2>
+          <p className="text-gray-600 mt-1">案件: {caseData.title}</p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          {/* 难度选择 */}
+          <select
+            value={currentLevel}
+            onChange={(e) => setCurrentLevel(e.target.value as any)}
+            className="px-3 py-2 border rounded-lg"
+          >
+            <option value="basic">基础</option>
+            <option value="intermediate">进阶</option>
+            <option value="advanced">高级</option>
+          </select>
+
+          {/* 控制按钮 */}
+          <Button
+            onClick={toggleSession}
+            variant={isActive ? "destructive" : "default"}
+          >
+            {isActive ? <Pause className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
+            {isActive ? '暂停' : '开始'}
+          </Button>
+          
+          <Button onClick={resetSession} variant="outline">
+            <RotateCcw className="w-4 h-4 mr-2" />
+            重置
+          </Button>
+          
+          <Button onClick={exportSession} variant="outline">
+            <Download className="w-4 h-4 mr-2" />
+            导出
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 左侧：对话区域 */}
+        <Card className="p-4">
+          <Tabs value={teachingMode} onValueChange={(v) => setTeachingMode(v as any)}>
+            <TabsList className="mb-4">
+              <TabsTrigger value="guided">引导模式</TabsTrigger>
+              <TabsTrigger value="free">自由模式</TabsTrigger>
+              <TabsTrigger value="evaluation">评估模式</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value={teachingMode} className="space-y-4">
+              {/* 消息列表 */}
+              <div className="h-[400px] overflow-y-auto border rounded-lg p-4 space-y-3">
+                {messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${msg.role === 'teacher' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div className={`
+                      max-w-[80%] p-3 rounded-lg
+                      ${msg.role === 'teacher' ? 'bg-blue-100' : 
+                        msg.role === 'ai' ? 'bg-purple-100' : 'bg-green-100'}
+                    `}>
+                      <div className="flex items-center mb-1">
+                        {msg.role === 'teacher' ? <User className="w-4 h-4 mr-1" /> :
+                         msg.role === 'ai' ? <Bot className="w-4 h-4 mr-1" /> :
+                         <User className="w-4 h-4 mr-1" />}
+                        <span className="text-xs font-medium">
+                          {msg.role === 'teacher' ? '教师' :
+                           msg.role === 'ai' ? 'AI助手' : '学生模拟'}
+                        </span>
+                        <span className="text-xs text-gray-500 ml-2">{msg.timestamp}</span>
+                      </div>
+                      <div className="text-sm">{msg.content}</div>
+                      
+                      {/* AI建议 */}
+                      {msg.suggestions && msg.suggestions.length > 0 && (
+                        <div className="mt-2 pt-2 border-t">
+                          <div className="text-xs text-gray-600 mb-1">建议追问：</div>
+                          <div className="space-y-1">
+                            {msg.suggestions.map((q, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => useSuggestedQuestion(q)}
+                                className="block w-full text-left text-xs p-1 rounded hover:bg-white/50 transition-colors"
+                              >
+                                • {q}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* 建议问题 */}
+              {suggestedQuestions.length > 0 && (
+                <div className="border rounded-lg p-3 bg-yellow-50">
+                  <div className="flex items-center mb-2">
+                    <Sparkles className="w-4 h-4 text-yellow-600 mr-2" />
+                    <span className="text-sm font-medium">AI建议的引导问题</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestedQuestions.map((q, idx) => (
+                      <Button
+                        key={idx}
+                        size="sm"
+                        variant="outline"
+                        onClick={() => useSuggestedQuestion(q)}
+                        className="text-xs"
+                      >
+                        {q}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 输入区域 */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={currentInput}
+                  onChange={(e) => setCurrentInput(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      sendMessage(currentInput);
+                    }
+                  }}
+                  placeholder="输入引导性问题..."
+                  className="flex-1 px-3 py-2 border rounded-lg"
+                  disabled={!isActive}
+                />
+                <Button 
+                  onClick={() => sendMessage(currentInput)}
+                  disabled={!isActive || !currentInput.trim()}
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </Card>
+
+        {/* 右侧：论证树 */}
+        <ArgumentTree
+          nodes={argumentNodes}
+          onNodeClick={(node) => console.log('点击节点:', node)}
+          onAddQuestion={(parentId, question) => {
+            sendMessage(question);
+          }}
+          showEvaluation={true}
+        />
+      </div>
+
+      {/* 底部：案件信息 */}
+      <Card className="mt-6 p-4">
+        <h3 className="font-semibold mb-3">案件要点</h3>
+        <div className="grid grid-cols-3 gap-4 text-sm">
+          <div>
+            <h4 className="font-medium text-gray-600 mb-1">核心事实</h4>
+            <ul className="space-y-1">
+              {caseData.facts.slice(0, 3).map((fact, idx) => (
+                <li key={idx} className="text-gray-700">• {fact}</li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-medium text-gray-600 mb-1">相关法条</h4>
+            <ul className="space-y-1">
+              {caseData.laws.slice(0, 3).map((law, idx) => (
+                <li key={idx} className="text-gray-700">• {law}</li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-medium text-gray-600 mb-1">争议焦点</h4>
+            <p className="text-gray-700">{caseData.dispute}</p>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}

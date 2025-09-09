@@ -1,0 +1,13 @@
+{
+  "config": {
+    "roundDuration": 90,
+    "minFactCitations": 1,
+    "minLawCitations": 1,
+    "enableTimer": true,
+    "templates": [
+      "就【争点】而言，依据【法条】，因【关键事实】，故【结论】。",
+      "根据【法条】的规定，【要件1】和【要件2】均已满足，因此【结论】。",
+      "虽然【反方观点】，但是【关键事实】表明【我方观点】更为合理。"
+    ]
+  }
+}

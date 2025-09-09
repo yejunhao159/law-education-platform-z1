@@ -25,3 +25,24 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# testing
+/coverage
+/test-results
+/.nyc_output
+
+# cache
+/.swc
+/.cache
+/.turbo
+
+# misc
+.DS_Store
+*.pem
+Thumbs.db
+
+# editor
+.vscode/
+.idea/
+*.swp
+*.swo

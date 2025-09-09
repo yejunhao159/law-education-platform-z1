@@ -1,0 +1,9 @@
+{
+  "coverage": [
+    {"elementId": "合同成立生效", "covered": true, "coveredBy": ["turn1"]},
+    {"elementId": "付款义务", "covered": true, "coveredBy": ["turn1", "turn2"]},
+    {"elementId": "履行期限届满", "covered": true, "coveredBy": ["turn1"]},
+    {"elementId": "违约行为", "covered": false, "guidingQuestion": "被告的行为如何构成违约？"},
+    {"elementId": "催告程序", "covered": false, "guidingQuestion": "原告是否履行了必要的催告程序？"}
+  ]
+}
