@@ -123,7 +123,7 @@ interface CaseStore {
 // 初始状态
 const initialState = {
   caseData: null,
-  currentAct: 'prologue',
+  currentAct: 'upload',  // 修改为第一幕：案例导入
   actProgress: {},
   analysisComplete: false,
   socraticLevel: 1 as const,

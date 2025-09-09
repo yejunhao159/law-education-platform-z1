@@ -84,7 +84,8 @@ export default function FourActsLawTeachingSystem() {
     'upload': 0,
     'analysis': 1,
     'socratic': 2,
-    'summary': 3
+    'summary': 3,
+    'prologue': 0  // 处理旧的prologue状态，映射到第一幕
   }
   const currentAct = actIdToIndex[currentActId] || 0
   

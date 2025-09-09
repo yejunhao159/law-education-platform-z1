@@ -285,7 +285,12 @@ ${text.substring(0, 2000)}`;
       
       console.log('📡 调用DeepSeek API...');
       
-      const response = await fetch(`${this.apiUrl}/chat/completions`, {
+      // 如果apiUrl已经包含完整路径，直接使用；否则添加/chat/completions
+      const apiEndpoint = this.apiUrl.includes('/chat/completions') 
+        ? this.apiUrl 
+        : `${this.apiUrl}/chat/completions`;
+      
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

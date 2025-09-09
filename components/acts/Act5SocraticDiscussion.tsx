@@ -1,382 +1,655 @@
-"use client"
+/**
+ * Act5 苏格拉底式对话主组件
+ * @description 集成所有子组件，实现完整的苏格拉底式问答系统
+ * @author DeepSeek - 2025
+ */
 
-import { useState, useRef } from 'react'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+'use client'
+
+import React, { useState, useCallback, useEffect, useMemo } from 'react'
+import { cn } from '@/lib/utils'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { useCaseStore } from '@/lib/stores/useCaseStore'
-import { Brain, MessageCircle, Users, Send, Hand, ThumbsUp, ThumbsDown, QrCode, ArrowRight, Loader2, Sparkles, AlertCircle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { 
+  MessageSquare,
+  Users,
+  Brain,
+  BookOpen,
+  ChartBar,
+  Settings,
+  Play,
+  Pause,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle2,
+  Loader2
+} from 'lucide-react'
 
-interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
+// 导入子组件
+import { DialogueContainer } from '../socratic/DialogueContainer'
+import { DialoguePanel } from '../socratic/DialoguePanel'
+import { MessageInput } from '../socratic/MessageInput'
+import { LevelProgress } from '../socratic/LevelProgress'
+import { TeacherPanel } from '../socratic/TeacherPanel'
+import { VotingPanel } from '../socratic/VotingPanel'
+import { ClassroomCode } from '../socratic/ClassroomCode'
+import { ExampleSelector } from '../socratic/ExampleSelector'
+import { LevelSelector } from '../socratic/LevelSelector'
+
+// 导入类型和常量
+import {
+  DialogueLevel,
+  ControlMode,
+  SessionMode,
+  LEVEL_CONFIG,
+  DIALOGUE_EXAMPLES,
+  type ClassroomSession,
+  type DialogueMetrics,
+  type StudentInfo,
+  type VoteData,
+  type Message,
+  type DialogueSession,
+  type AgentResponse
+} from '@/lib/types/socratic'
+
+// 导入状态管理
+import { useSocraticStore } from '@/lib/stores/useSocraticStore'
+import { useEvidenceInteractionStore } from '@/lib/stores/useEvidenceInteractionStore'
+import { useCaseStore } from '@/lib/stores/useCaseStore'
+
+// 导入WebSocket钩子
+import { useWebSocket } from '@/lib/hooks/useWebSocket'
+
+// 视图模式
+export type ViewMode = 'student' | 'teacher' | 'demo'
+
+// 组件属性
+export interface Act5SocraticDiscussionProps {
+  /** 初始视图模式 */
+  initialMode?: ViewMode
+  /** 初始会话模式 */
+  sessionMode?: SessionMode
+  /** 是否自动开始 */
+  autoStart?: boolean
+  /** 自定义样式 */
+  className?: string
 }
 
-export default function Act5SocraticDiscussion() {
-  const [currentLevel, setCurrentLevel] = useState(1)
-  const [votingActive, setVotingActive] = useState(false)
-  const [votes, setVotes] = useState({ agree: 0, disagree: 0 })
-  const [mode, setMode] = useState<'auto' | 'manual'>('auto')
-  const [questionCount, setQuestionCount] = useState(0)
-  const [messages, setMessages] = useState<Message[]>([
+/**
+ * Act5 苏格拉底式对话主组件
+ */
+export const Act5SocraticDiscussion: React.FC<Act5SocraticDiscussionProps> = ({
+  initialMode = 'demo',
+  sessionMode = SessionMode.DEMO,
+  autoStart = false,
+  className
+}) => {
+  // 状态管理
+  const {
+    currentSession: session,
+    messages,
+    currentLevel,
+    isLoading,
+    errorMessage: error,
+    createSession,
+    sendMessage,
+    setCurrentLevel: updateLevel,
+    resetStore: resetSession,
+    endSession,
+    setCase,
+    currentCase
+  } = useSocraticStore()
+
+  // 获取上传的案例数据
+  const { caseData } = useCaseStore()
+
+  const {
+    addFeedback,
+    addPoints
+  } = useEvidenceInteractionStore()
+
+  // 本地状态
+  const [viewMode, setViewMode] = useState<ViewMode>(initialMode)
+  const [classroomSession, setClassroomSession] = useState<ClassroomSession | null>(null)
+  const [currentVote, setCurrentVote] = useState<VoteData | null>(null)
+  const [metrics, setMetrics] = useState<DialogueMetrics | null>(null)
+  const [isConnected, setIsConnected] = useState(false)
+  const [connectionError, setConnectionError] = useState<string | null>(null)
+
+  // WebSocket连接（仅在课堂模式下使用）
+  const {
+    isConnected: wsConnected,
+    error: wsError,
+    sendMessage: wsSendMessage,
+    subscribe,
+    unsubscribe
+  } = useWebSocket(
+    sessionMode === SessionMode.CLASSROOM ? 'wss://api.example.com/socratic' : null,
     {
-      id: 'system',
-      role: 'assistant',
-      content: '欢迎来到苏格拉底式讨论！让我们一起深入探讨这个案例。首先，你认为这个案件的核心争议是什么？'
+      reconnect: true,
+      maxRetries: 5
     }
-  ])
-  const [input, setInput] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const caseData = useCaseStore(state => state.caseData)
+  )
 
-  const levels = [
-    { 
-      level: "观察层", 
-      description: "你看到了什么？",
-      completed: currentLevel > 1,
-      current: currentLevel === 1 
-    },
-    { 
-      level: "事实层", 
-      description: "发生了什么？",
-      completed: currentLevel > 2,
-      current: currentLevel === 2 
-    },
-    { 
-      level: "分析层", 
-      description: "为什么会这样？",
-      completed: currentLevel > 3,
-      current: currentLevel === 3 
-    },
-    { 
-      level: "应用层", 
-      description: "法律如何适用？",
-      completed: currentLevel > 4,
-      current: currentLevel === 4 
-    },
-    { 
-      level: "价值层", 
-      description: "这样公平吗？",
-      completed: currentLevel > 5,
-      current: currentLevel === 5 
-    },
-  ]
-  
-  // 苏格拉底式提问策略
-  const socraticPrompts = {
-    1: '基于表面观察提问，引导学生描述所见',
-    2: '深入事实细节，让学生梳理时间线',
-    3: '分析因果关系，探讨法律要件',
-    4: '应用法律条文，检验理解深度',
-    5: '价值判断讨论，反思公平正义'
-  }
+  // 初始化会话处理函数
+  const initSession = useCallback(async (options: any) => {
+    const result = await createSession({
+      sessionMode: sessionMode
+    })
+    if (result.success) {
+      updateLevel(DialogueLevel.OBSERVATION)
+    } else {
+      setConnectionError(result.error || '创建会话失败')
+    }
+  }, [sessionMode, createSession, updateLevel])
 
-  // 处理用户输入提交
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!input.trim() || isLoading) return
+  // 初始化会话
+  useEffect(() => {
+    if (autoStart && !session) {
+      initSession({
+        mode: sessionMode,
+        controlMode: ControlMode.AUTO,
+        level: DialogueLevel.OBSERVATION
+      })
+    }
+  }, [autoStart, session, sessionMode])
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: input.trim()
+  // 设置案例数据
+  useEffect(() => {
+    if (caseData && !currentCase) {
+      setCase({
+        id: caseData.id || 'case-' + Date.now(),
+        title: caseData.title,
+        description: caseData.summary || caseData.facts?.join('\n') || '',
+        facts: caseData.facts || [],
+        evidence: caseData.evidence || [],
+        legalIssues: caseData.disputes || [],
+        difficulty: 'medium',
+        category: '民事案件',
+        sourceText: caseData.fullText || ''
+      })
+    }
+  }, [caseData, currentCase, setCase])
+
+  // WebSocket事件处理
+  useEffect(() => {
+    if (sessionMode !== SessionMode.CLASSROOM) return
+
+    const handlers = {
+      'student:joined': (data: any) => {
+        console.log('学生加入:', data)
+        // 更新学生列表
+      },
+      'vote:created': (data: VoteData) => {
+        setCurrentVote(data)
+      },
+      'vote:updated': (data: VoteData) => {
+        setCurrentVote(data)
+      },
+      'message:received': (data: Message) => {
+        // 处理接收到的消息
+      }
     }
 
-    setMessages(prev => [...prev, userMessage])
-    setInput('')
-    setIsLoading(true)
+    // 订阅事件
+    Object.entries(handlers).forEach(([event, handler]) => {
+      subscribe(event, handler)
+    })
 
-    // 模拟苏格拉底式追问
-    setTimeout(() => {
-      const socraticQuestions = [
-        "这很有意思！但是你能告诉我为什么你会这样认为吗？",
-        "如果情况相反会怎样？你的观点还会成立吗？",
-        "这个判断的依据是什么？能举个具体例子吗？",
-        "假设你是对方当事人，你会如何反驳这个观点？",
-        "这样的结论对社会会产生什么影响？"
-      ]
+    // 清理
+    return () => {
+      Object.entries(handlers).forEach(([event, handler]) => {
+        unsubscribe(event, handler)
+      })
+    }
+  }, [sessionMode, subscribe, unsubscribe])
 
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: socraticQuestions[Math.floor(Math.random() * socraticQuestions.length)]
+  // 更新连接状态
+  useEffect(() => {
+    if (sessionMode === SessionMode.CLASSROOM) {
+      setIsConnected(wsConnected)
+      setConnectionError(wsError)
+    } else {
+      setIsConnected(true)
+      setConnectionError(null)
+    }
+  }, [sessionMode, wsConnected, wsError])
+
+  // 计算当前进度
+  const progress = useMemo(() => {
+    if (!session) return 0
+    const levels = Object.values(DialogueLevel).filter(v => typeof v === 'number')
+    const currentIndex = levels.indexOf(currentLevel)
+    return ((currentIndex + 1) / levels.length) * 100
+  }, [session, currentLevel])
+
+  // 处理消息发送
+  const handleSendMessage = useCallback(async (content: string, attachments?: File[]) => {
+    if (!session) return
+
+    try {
+      // 发送消息到store
+      await sendMessage(content, attachments)
+
+      // 如果是课堂模式，通过WebSocket广播
+      if (sessionMode === SessionMode.CLASSROOM && wsSendMessage) {
+        wsSendMessage({
+          type: 'message:send',
+          data: { content, attachments }
+        })
       }
 
-      setMessages(prev => [...prev, aiResponse])
-      setQuestionCount(prev => prev + 1)
-      setIsLoading(false)
+      // 添加反馈
+      addFeedback({
+        type: 'success',
+        message: '消息已发送',
+        score: 5
+      })
+    } catch (error) {
+      console.error('发送消息失败:', error)
+      addFeedback({
+        type: 'error',
+        message: '发送失败，请重试'
+      })
+    }
+  }, [session, sendMessage, sessionMode, wsSendMessage, addFeedback])
 
-      // 每3个问题自动进入下一层级
-      if (questionCount > 0 && questionCount % 3 === 0 && currentLevel < 5) {
-        setCurrentLevel(prev => prev + 1)
+  // 处理层级切换
+  const handleLevelChange = useCallback((level: DialogueLevel) => {
+    updateLevel(level)
+    addFeedback({
+      type: 'info',
+      message: `切换到${LEVEL_CONFIG[level].name}层级`
+    })
+  }, [updateLevel, addFeedback])
+
+  // 处理投票创建
+  const handleCreateVote = useCallback((question: string, choices: string[]) => {
+    const voteData: VoteData = {
+      id: `vote-${Date.now()}`,
+      question,
+      choices: choices.map((text, index) => ({
+        id: `choice-${index}`,
+        text,
+        count: 0
+      })),
+      votedStudents: new Set(),
+      createdAt: Date.now(),
+      endsAt: Date.now() + 300000, // 5分钟
+      isEnded: false
+    }
+
+    setCurrentVote(voteData)
+
+    // 广播投票
+    if (sessionMode === SessionMode.CLASSROOM && wsSendMessage) {
+      wsSendMessage({
+        type: 'vote:create',
+        data: voteData
+      })
+    }
+  }, [sessionMode, wsSendMessage])
+
+  // 处理投票
+  const handleVote = useCallback((voteId: string, choiceIds: string[]) => {
+    if (!currentVote || currentVote.id !== voteId) return
+
+    // 更新投票数据
+    const updatedVote = { ...currentVote }
+    choiceIds.forEach(choiceId => {
+      const choice = updatedVote.choices.find(c => c.id === choiceId)
+      if (choice) {
+        choice.count++
       }
-    }, 1000)
-  }
+    })
+    updatedVote.votedStudents.add('current-user') // 实际应使用真实用户ID
 
-  // 输入变化处理
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInput(e.target.value)
-  }
+    setCurrentVote(updatedVote)
 
-  // 添加教师介入功能
-  const handleTeacherIntervene = () => {
-    const teacherPrompt = `老师提醒：让我们回到${levels[currentLevel - 1].description}这个核心问题上。`
-    const teacherMessage: Message = {
-      id: Date.now().toString(),
-      role: 'assistant',
-      content: teacherPrompt
+    // 广播投票更新
+    if (sessionMode === SessionMode.CLASSROOM && wsSendMessage) {
+      wsSendMessage({
+        type: 'vote:submit',
+        data: { voteId, choiceIds }
+      })
     }
-    setMessages(prev => [...prev, teacherMessage])
-  }
-  
-  // 智能提示系统
-  const getHint = () => {
-    const hints = {
-      1: ['仔细阅读判决书开头', '找出原被告双方', '注意案件类型'],
-      2: ['按时间顺序梳理', '找关键转折点', '注意因果关系'],
-      3: ['思考法律要件', '对比类似案例', '分析构成要素'],
-      4: ['查找相关法条', '理解法律精神', '考虑例外情况'],
-      5: ['换位思考', '考虑社会影响', '平衡各方利益']
+
+    addPoints(10)
+    addFeedback({
+      type: 'success',
+      message: '投票成功！+10分'
+    })
+  }, [currentVote, sessionMode, wsSendMessage, addPoints, addFeedback])
+
+  // 生成课堂码
+  const handleGenerateCode = useCallback(() => {
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase()
+    const newSession: ClassroomSession = {
+      code,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 21600000, // 6小时
+      status: 'waiting',
+      students: new Map(),
+      teacherId: 'current-teacher'
     }
-    return hints[currentLevel] || []
+    setClassroomSession(newSession)
+
+    // 通知服务器创建课堂
+    if (wsSendMessage) {
+      wsSendMessage({
+        type: 'classroom:create',
+        data: newSession
+      })
+    }
+  }, [wsSendMessage])
+
+  // 加入课堂
+  const handleJoinClassroom = useCallback(async (code: string) => {
+    // 验证并加入课堂
+    if (wsSendMessage) {
+      wsSendMessage({
+        type: 'classroom:join',
+        data: { code }
+      })
+    }
+
+    addFeedback({
+      type: 'success',
+      message: '成功加入课堂！'
+    })
+  }, [wsSendMessage, addFeedback])
+
+  // 渲染连接状态
+  const renderConnectionStatus = () => {
+    if (sessionMode !== SessionMode.CLASSROOM) return null
+
+    return (
+      <div className="flex items-center gap-2 text-sm">
+        {isConnected ? (
+          <>
+            <CheckCircle2 className="h-4 w-4 text-green-500" />
+            <span className="text-green-600">已连接</span>
+          </>
+        ) : connectionError ? (
+          <>
+            <AlertCircle className="h-4 w-4 text-red-500" />
+            <span className="text-red-600">连接失败</span>
+          </>
+        ) : (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin text-yellow-500" />
+            <span className="text-yellow-600">连接中...</span>
+          </>
+        )}
+      </div>
+    )
   }
 
-  const handleVote = (type: 'agree' | 'disagree') => {
-    setVotes(prev => ({
-      ...prev,
-      [type]: prev[type] + 1
-    }))
-  }
+  // 渲染主界面
+  const renderMainInterface = () => (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* 左侧：对话区域 */}
+      <div className="lg:col-span-2 space-y-4">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                苏格拉底式对话
+              </CardTitle>
+              {renderConnectionStatus()}
+            </div>
+            <CardDescription>
+              通过层层递进的问答，深入理解法律概念
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* 层级进度 */}
+            <LevelProgress
+              currentLevel={currentLevel}
+              completedLevels={session?.completedLevels || []}
+              onLevelClick={handleLevelChange}
+              className="mb-4"
+            />
 
-  return (
-    <div className="space-y-8">
-      <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold text-gray-800 mb-2">苏格拉底式深度讨论</h2>
-        <p className="text-gray-600">五层递进式提问，启发学生深度思考</p>
+            {/* 对话面板 */}
+            <DialoguePanel
+              participantCount={session?.participants?.length || 0}
+              messageCount={messages.length}
+              status={session ? 'active' : 'ended'}
+              className="mb-4"
+            />
+
+            {/* 消息输入 */}
+            <MessageInput
+              onSend={handleSendMessage}
+              disabled={!session || isLoading}
+              placeholder="输入你的回答或问题..."
+              showVoiceInput={false}
+              showAttachment={true}
+            />
+          </CardContent>
+        </Card>
+
+        {/* 投票面板 */}
+        {(viewMode === 'teacher' || currentVote) && (
+          <VotingPanel
+            currentVote={currentVote}
+            students={classroomSession?.students}
+            isTeacher={viewMode === 'teacher'}
+            onCreateVote={handleCreateVote}
+            onVote={handleVote}
+            onCloseVote={(id) => setCurrentVote(null)}
+          />
+        )}
       </div>
 
-      <div className="max-w-5xl mx-auto">
-        <div className="grid grid-cols-3 gap-6">
-          {/* 当前问题展示 */}
-          <Card className="p-6">
-            <h3 className="font-bold text-gray-800 mb-4 flex items-center">
-              <Brain className="w-4 h-4 mr-2" />
-              当前讨论层级
-            </h3>
-
-            <div className="space-y-4">
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <Badge variant="outline" className="text-xs">
-                    第{currentLevel}层 - {levels[currentLevel - 1]?.level}
-                  </Badge>
-                  <Badge className="text-xs bg-blue-600">
-                    <Sparkles className="w-3 h-3 mr-1" />
-                    AI引导中
-                  </Badge>
-                </div>
-                <p className="font-medium text-gray-800 mb-2">
-                  {levels[currentLevel - 1]?.description}
-                </p>
-                <p className="text-sm text-gray-600">
-                  已追问 {questionCount} 次 | 预计还需 {Math.max(0, 3 - (questionCount % 3))} 次进入下一层
-                </p>
-              </div>
-              
-              {/* 教学控制面板 */}
-              <div className="p-3 bg-gray-50 rounded-lg space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">教学模式</span>
-                  <div className="flex gap-1">
-                    <Button 
-                      size="sm" 
-                      variant={mode === 'auto' ? 'default' : 'outline'}
-                      onClick={() => setMode('auto')}
-                      className="text-xs h-7"
-                    >
-                      自动
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant={mode === 'manual' ? 'default' : 'outline'}
-                      onClick={() => setMode('manual')}
-                      className="text-xs h-7"
-                    >
-                      手动
-                    </Button>
-                  </div>
-                </div>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  className="w-full"
-                  onClick={handleTeacherIntervene}
-                >
-                  <AlertCircle className="w-3 h-3 mr-1" />
-                  教师介入引导
-                </Button>
-              </div>
-
-              <div className="space-y-2">
-                <h4 className="font-semibold text-gray-800 text-sm">层级进度</h4>
-                <div className="space-y-1">
-                  {levels.map((item, index) => (
-                    <div
-                      key={index}
-                      className={`flex items-center gap-2 text-xs p-2 rounded ${
-                        item.current ? "bg-blue-100" : item.completed ? "bg-green-100" : "bg-gray-50"
-                      }`}
-                    >
-                      <div
-                        className={`w-2 h-2 rounded-full ${
-                          item.current ? "bg-blue-600" : item.completed ? "bg-green-600" : "bg-gray-300"
-                        }`}
-                      />
-                      <span>{item.level}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+      {/* 右侧：控制面板 */}
+      <div className="space-y-4">
+        {/* 视图切换 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">视图模式</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-2">
+              <Button
+                variant={viewMode === 'student' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('student')}
+              >
+                学生
+              </Button>
+              <Button
+                variant={viewMode === 'teacher' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('teacher')}
+              >
+                教师
+              </Button>
+              <Button
+                variant={viewMode === 'demo' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('demo')}
+              >
+                演示
+              </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* 课堂码 */}
+        {sessionMode === SessionMode.CLASSROOM && (
+          <ClassroomCode
+            session={classroomSession}
+            isTeacher={viewMode === 'teacher'}
+            onGenerateCode={handleGenerateCode}
+            onJoinClassroom={handleJoinClassroom}
+          />
+        )}
+
+        {/* 教师控制面板 */}
+        {viewMode === 'teacher' && (
+          <TeacherPanel
+            data-testid="teacher-panel"
+            session={classroomSession}
+            metrics={metrics}
+            isTeacher={true}
+            onModeChange={(mode) => console.log('Mode changed:', mode)}
+            onLevelChange={handleLevelChange}
+            onStartSession={() => initSession({
+              mode: sessionMode,
+              controlMode: ControlMode.AUTO,
+              level: DialogueLevel.OBSERVATION
+            })}
+            onEndSession={endSession}
+            onResetSession={resetSession}
+            onStartVote={handleCreateVote}
+            config={{
+              allowModeSwitch: true,
+              allowLevelSwitch: true,
+              showStatistics: true,
+              showVoting: true
+            }}
+          />
+        )}
+
+        {/* 示例选择器 */}
+        {viewMode === 'demo' && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">示例场景</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ExampleSelector
+                examples={Object.entries(DIALOGUE_EXAMPLES).map(([id, data]) => ({
+                  id,
+                  title: data.title,
+                  description: data.description,
+                  difficulty: data.difficulty,
+                  category: '法学案例',
+                  estimatedTime: data.estimatedTime
+                }))}
+                onExampleSelect={(example) => {
+                  // 加载示例
+                  console.log('Selected example:', example)
+                }}
+              />
+            </CardContent>
           </Card>
+        )}
 
-          {/* 核心讨论区 */}
-          <Card className="col-span-2 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-800 flex items-center">
-                <MessageCircle className="w-5 h-5 mr-2 text-blue-600" />
-                实时讨论区
-              </h3>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline">24人在线</Badge>
-                <Button size="sm" variant="outline">
-                  <QrCode className="w-4 h-4 mr-2" />
-                  显示二维码
-                </Button>
-              </div>
+        {/* 统计信息 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <ChartBar className="h-4 w-4" />
+              对话统计
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">消息数</span>
+              <span className="font-medium">{messages.length}</span>
             </div>
-
-            <div className="h-80 overflow-y-auto border border-gray-200 rounded-lg p-4 mb-4 bg-gray-50">
-              <div className="space-y-3">
-                {messages.map((msg, index) => (
-                  <div
-                    key={msg.id || index}
-                    className={`flex gap-3 ${
-                      msg.role === 'assistant' 
-                        ? "bg-green-50 p-3 rounded-lg" 
-                        : "bg-white p-3 rounded-lg border"
-                    }`}
-                  >
-                    <div className="flex-shrink-0">
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
-                          msg.role === 'assistant'
-                            ? "bg-green-600 text-white"
-                            : "bg-blue-600 text-white"
-                        }`}
-                      >
-                        {msg.role === 'assistant' ? 'AI' : '学'}
-                      </div>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-sm text-gray-800">
-                          {msg.role === 'assistant' ? '苏格拉底AI' : '学生'}
-                        </span>
-                        {msg.role === 'assistant' && (
-                          <Badge variant="outline" className="text-xs">
-                            第{Math.min(5, Math.floor(index / 2) + 1)}层追问
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{msg.content}</p>
-                    </div>
-                  </div>
-                ))}
-                {isLoading && (
-                  <div className="flex gap-3 bg-green-50 p-3 rounded-lg">
-                    <div className="w-8 h-8 rounded-full bg-green-600 text-white flex items-center justify-center">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-gray-600">苏格拉底正在思考追问...</p>
-                    </div>
-                  </div>
-                )}
-              </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">当前层级</span>
+              <Badge variant="outline">
+                {LEVEL_CONFIG[currentLevel].name}
+              </Badge>
             </div>
-
-            <div className="space-y-4">
-              <form onSubmit={handleSubmit} className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="输入您的思考和回答..."
-                  className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm"
-                  value={input}
-                  onChange={handleInputChange}
-                  disabled={isLoading}
-                />
-                <Button type="submit" size="sm" disabled={isLoading || !input.trim()}>
-                  {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                </Button>
-              </form>
-              
-              {/* 智能提示 */}
-              {input.length === 0 && getHint().length > 0 && (
-                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-xs font-medium text-gray-700 mb-2">💡 思考提示：</p>
-                  <ul className="space-y-1">
-                    {getHint().map((hint, i) => (
-                      <li key={i} className="text-xs text-gray-600">• {hint}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <div className="grid grid-cols-4 gap-2">
-                <Button size="sm" variant="outline">
-                  <Users className="w-3 h-3 mr-1" />
-                  随机选人
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setVotingActive(true)}>
-                  <ThumbsUp className="w-3 h-3 mr-1" />
-                  发起投票
-                </Button>
-                <Button size="sm" variant="outline">
-                  <Hand className="w-3 h-3 mr-1" />
-                  举手发言
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={() => setCurrentLevel(prev => Math.min(5, prev + 1))}
-                  disabled={currentLevel >= 5}
-                >
-                  <ArrowRight className="w-3 h-3 mr-1" />
-                  {currentLevel >= 5 ? '已完成' : '下一层级'}
-                </Button>
-              </div>
-
-              {votingActive && (
-                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <h4 className="font-semibold text-gray-800 mb-2">
-                    实时投票：房价上涨是否构成情势变更？
-                  </h4>
-                  <div className="flex gap-4">
-                    <Button size="sm" onClick={() => handleVote("agree")} className="flex-1">
-                      <ThumbsUp className="w-3 h-3 mr-1" />是 ({votes.agree})
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => handleVote("disagree")} className="flex-1">
-                      <ThumbsDown className="w-3 h-3 mr-1" />否 ({votes.disagree})
-                    </Button>
-                  </div>
-                </div>
-              )}
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">完成度</span>
+              <span className="font-medium">{progress.toFixed(0)}%</span>
             </div>
-          </Card>
-        </div>
+            {classroomSession && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">在线学生</span>
+                <span className="font-medium">{classroomSession.students.size}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
+
+  // 渲染错误提示
+  if (error) {
+    return (
+      <Alert variant="destructive" className="max-w-2xl mx-auto">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          {error}
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-4"
+            onClick={resetSession}
+          >
+            重试
+          </Button>
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
+  return (
+    <div className={cn("w-full space-y-6", className)}>
+      {/* 标题栏 */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <Brain className="h-6 w-6" />
+            Act 5: 苏格拉底式法律对话
+          </h2>
+          <p className="text-muted-foreground mt-1">
+            通过引导式问答深入理解法律原理
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {session ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={resetSession}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                重置
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={endSession}
+              >
+                <Pause className="h-4 w-4 mr-2" />
+                结束
+              </Button>
+            </>
+          ) : (
+            <Button
+              onClick={() => initSession({
+                mode: sessionMode,
+                controlMode: ControlMode.AUTO,
+                level: DialogueLevel.OBSERVATION
+              })}
+            >
+              <Play className="h-4 w-4 mr-2" />
+              开始对话
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* 主界面 */}
+      {renderMainInterface()}
+    </div>
+  )
 }
+
+export default Act5SocraticDiscussion
