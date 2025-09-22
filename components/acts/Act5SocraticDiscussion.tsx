@@ -61,6 +61,9 @@ import { useSocraticStore } from '@/lib/stores/useSocraticStore'
 import { useEvidenceInteractionStore } from '@/lib/stores/useEvidenceInteractionStore'
 import { useCaseStore } from '@/lib/stores/useCaseStore'
 
+// 导入数据转换工具
+import { convertLegalCaseToCaseInfo, debugCaseConversion } from '@/lib/utils/case-data-converter'
+
 // 导入WebSocket钩子
 import { useWebSocket } from '@/lib/hooks/useWebSocket'
 
@@ -158,20 +161,33 @@ export const Act5SocraticDiscussion: React.FC<Act5SocraticDiscussionProps> = ({
     }
   }, [autoStart, session, sessionMode])
 
-  // 设置案例数据
+  // 设置案例数据 - 使用统一转换工具
   useEffect(() => {
     if (caseData && !currentCase) {
-      setCase({
-        id: caseData.id || 'case-' + Date.now(),
-        title: caseData.title,
-        description: caseData.summary || caseData.facts?.join('\n') || '',
-        facts: caseData.facts || [],
-        evidence: caseData.evidence || [],
-        legalIssues: caseData.disputes || [],
-        difficulty: 'medium',
-        category: '民事案件',
-        sourceText: caseData.fullText || ''
-      })
+      console.log('🔄 开始转换案例数据到苏格拉底模块...')
+
+      try {
+        // 使用统一转换工具
+        const convertedCase = convertLegalCaseToCaseInfo(caseData)
+
+        // 调试转换过程
+        debugCaseConversion(caseData, convertedCase)
+
+        // 设置转换后的案例数据
+        setCase(convertedCase)
+
+        console.log('✅ 案例数据转换并设置完成')
+      } catch (error) {
+        console.error('❌ 案例数据转换失败:', error)
+        // 设置备用数据
+        setCase({
+          id: 'fallback-' + Date.now(),
+          title: '数据转换失败',
+          description: '无法正确转换案例数据，请检查数据格式',
+          facts: ['数据转换失败'],
+          disputes: []
+        })
+      }
     }
   }, [caseData, currentCase, setCase])
 

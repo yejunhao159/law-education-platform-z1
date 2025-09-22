@@ -138,21 +138,51 @@ export interface DialogueState {
 // ============== Agent相关接口 ==============
 
 /**
- * 案例信息接口（用于Agent上下文）
+ * 案例信息接口（用于Agent上下文）- 扩展版本以匹配LegalCase
  */
 export interface CaseInfo {
   /** 案例ID */
   id: string;
+  /** 案例标题 */
+  title?: string;
+  /** 案例描述/摘要 */
+  description?: string;
   /** 案例类型 */
-  type: '民事' | '刑事' | '行政';
+  type?: '民事' | '刑事' | '行政' | '执行';
+  /** 案号 */
+  caseNumber?: string;
+  /** 法院 */
+  court?: string;
+  /** 判决日期 */
+  judgeDate?: string;
   /** 案件事实列表 */
   facts: string[];
   /** 争议焦点列表 */
   disputes: string[];
+  /** 证据列表 */
+  evidence?: any[];
   /** 涉及法条 */
   laws?: string[];
   /** 判决结果 */
   judgment?: string;
+  /** 难度级别 */
+  difficulty?: 'easy' | 'medium' | 'hard';
+  /** 案例分类 */
+  category?: string;
+  /** 原始文本 */
+  sourceText?: string;
+  /** 时间线事件 */
+  timeline?: Array<{
+    date: string;
+    event: string;
+    importance?: 'critical' | 'important' | 'normal';
+  }>;
+  /** 当事人信息 */
+  parties?: {
+    plaintiff?: string[];
+    defendant?: string[];
+    thirdParty?: string[];
+  };
 }
 
 /**
