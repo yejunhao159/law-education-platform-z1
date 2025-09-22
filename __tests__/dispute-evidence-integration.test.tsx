@@ -9,8 +9,8 @@ import '@testing-library/jest-dom';
 import { DisputeEvidenceAnalysis } from '@/components/dispute/DisputeEvidenceAnalysis';
 import { DisputeAnalyzer } from '@/lib/ai-dispute-analyzer';
 import { EvidenceMappingService } from '@/lib/evidence-mapping-service';
-import { useDisputeStore } from '@/lib/stores/useDisputeStore';
-import { useEvidenceInteractionStore } from '@/lib/stores/useEvidenceInteractionStore';
+import { useDisputeStore } from '@/src/domains/stores';
+import { useEvidenceInteractionStore } from '@/src/domains/stores';
 
 // Mock fetch
 global.fetch = jest.fn();

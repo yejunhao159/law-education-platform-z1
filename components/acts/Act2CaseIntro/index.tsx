@@ -6,13 +6,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { StoryView } from './StoryView'
 import { UnifiedTimeline } from '@/components/timeline/UnifiedTimeline'
-import { useCaseStore, useStoryMode, useCaseData } from '@/lib/stores/useCaseStore'
+import { useCaseStore, useStoryMode, useCurrentCase } from '@/src/domains/stores'
 import { BookOpen, FileText, ToggleLeft, ToggleRight, Clock } from 'lucide-react'
 
 export function Act2CaseIntro() {
   const { toggleStoryMode, setCurrentAct, generateStoryChapters } = useCaseStore()
   const storyMode = useStoryMode()
-  const caseData = useCaseData()
+  const caseData = useCurrentCase()
 
   // 如果有案件数据且开启故事模式，生成故事章节
   useEffect(() => {

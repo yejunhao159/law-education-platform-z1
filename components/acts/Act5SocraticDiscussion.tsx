@@ -57,9 +57,7 @@ import {
 } from '@/lib/types/socratic'
 
 // 导入状态管理
-import { useSocraticStore } from '@/lib/stores/useSocraticStore'
-import { useEvidenceInteractionStore } from '@/lib/stores/useEvidenceInteractionStore'
-import { useCaseStore } from '@/lib/stores/useCaseStore'
+import { useCurrentCase, useSocraticStore, useAnalysisStore } from '@/src/domains/stores'
 
 // 导入数据转换工具
 import { convertLegalCaseToCaseInfo, debugCaseConversion } from '@/lib/utils/case-data-converter'
@@ -108,7 +106,7 @@ export const Act5SocraticDiscussion: React.FC<Act5SocraticDiscussionProps> = ({
   } = useSocraticStore()
 
   // 获取上传的案例数据
-  const { caseData } = useCaseStore()
+  const caseData = useCurrentCase()
 
   const {
     addFeedback,

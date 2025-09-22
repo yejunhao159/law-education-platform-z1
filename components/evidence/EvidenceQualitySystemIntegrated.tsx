@@ -24,7 +24,7 @@ import {
   TrendingUp
 } from 'lucide-react';
 
-import { useCaseStore } from '@/lib/stores/useCaseStore';
+import { useCurrentCase } from '@/src/domains/stores';
 
 // 中国证据法的三性评估标准
 interface EvidenceQualityDimensions {
@@ -45,7 +45,7 @@ interface EvidenceAssessment {
 }
 
 export function EvidenceQualitySystemIntegrated() {
-  const { caseData } = useCaseStore();
+  const caseData = useCurrentCase();
   const [assessments, setAssessments] = useState<EvidenceAssessment[]>([]);
   const [selectedEvidence, setSelectedEvidence] = useState<string | null>(null);
   const [isAssessing, setIsAssessing] = useState(false);

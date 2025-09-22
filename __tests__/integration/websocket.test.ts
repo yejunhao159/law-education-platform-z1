@@ -40,7 +40,7 @@ const mockSetConnectionStatus = jest.fn()
 const mockUpdatePerformance = jest.fn()
 const mockSetCurrentLevel = jest.fn()
 
-jest.mock('@/lib/stores/socraticStore', () => ({
+jest.mock('@/src/domains/stores/socraticStore', () => ({
   useSocraticStore: () => ({
     receiveMessage: mockReceiveMessage,
     addStudent: mockAddStudent,

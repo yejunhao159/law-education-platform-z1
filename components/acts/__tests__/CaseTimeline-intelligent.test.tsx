@@ -2,13 +2,13 @@ import React from 'react'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import { CaseTimeline } from '../CaseTimeline'
-import { useCaseStore } from '@/lib/stores/useCaseStore'
+import { useCaseStore } from '@/src/domains/stores/useCaseStore'
 import { TimelineAnalyzer } from '@/lib/ai-timeline-analyzer'
 import type { TimelineEvent, TimelineAnalysis } from '@/types/timeline-claim-analysis'
 import type { LegalCase } from '@/types/legal-case'
 
 // Mock the store
-jest.mock('@/lib/stores/useCaseStore')
+jest.mock('@/src/domains/stores/useCaseStore')
 
 // Mock the analyzer
 jest.mock('@/lib/ai-timeline-analyzer')

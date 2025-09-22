@@ -6,7 +6,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { EvidenceQualitySystem } from '@/components/evidence/EvidenceQualitySystem';
-import { useEvidenceInteractionStore } from '@/lib/stores/useEvidenceInteractionStore';
+import { useEvidenceInteractionStore } from '@/src/domains/stores';
 
 // Mock framer-motion
 jest.mock('framer-motion', () => ({

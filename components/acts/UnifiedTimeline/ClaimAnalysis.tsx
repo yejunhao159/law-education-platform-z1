@@ -9,7 +9,7 @@ import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-import { useCaseStore } from '@/lib/stores/useCaseStore'
+import { useCurrentCase, useCaseStore } from '@/src/domains/stores'
 import type { 
   TimelineEvent, 
   ClaimAnalysisResult, 

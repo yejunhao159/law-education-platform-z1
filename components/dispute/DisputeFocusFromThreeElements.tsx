@@ -30,7 +30,7 @@ import {
   Info
 } from 'lucide-react';
 
-import { useCaseStore } from '@/lib/stores/useCaseStore';
+import { useCurrentCase } from '@/src/domains/stores';
 import { logger } from '@/lib/utils/logger';
 import legalProvisions from '@/data/legal-provisions.json';
 
@@ -55,7 +55,7 @@ interface DisputeFocus {
 }
 
 export function DisputeFocusFromThreeElements() {
-  const { caseData } = useCaseStore();
+  const caseData = useCurrentCase();
   const [disputes, setDisputes] = useState<DisputeFocus[]>([]);
   const [selectedDispute, setSelectedDispute] = useState<string | null>(null);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());

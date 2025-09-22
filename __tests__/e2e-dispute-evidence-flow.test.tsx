@@ -6,9 +6,9 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import DeepAnalysis from '@/components/acts/DeepAnalysis';
-import { useCaseStore } from '@/lib/stores/useCaseStore';
-import { useDisputeStore } from '@/lib/stores/useDisputeStore';
-import { useEvidenceInteractionStore } from '@/lib/stores/useEvidenceInteractionStore';
+import { useCaseStore } from '@/src/domains/stores';
+import { useDisputeStore } from '@/src/domains/stores';
+import { useEvidenceInteractionStore } from '@/src/domains/stores';
 
 // Mock all required modules
 jest.mock('framer-motion', () => ({

@@ -2,11 +2,11 @@ import React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import { UnifiedTimeline } from '../UnifiedTimeline'
-import { useCaseStore } from '@/lib/stores/useCaseStore'
+import { useCaseStore } from '@/src/domains/stores/useCaseStore'
 import type { TimelineEvent, ClaimAnalysisResult } from '@/types/timeline-claim-analysis'
 
 // Mock the store
-jest.mock('@/lib/stores/useCaseStore')
+jest.mock('@/src/domains/stores/useCaseStore')
 
 // Mock fetch API
 global.fetch = jest.fn()

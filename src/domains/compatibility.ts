@@ -1,0 +1,105 @@
+/**
+ * 旧Store兼容性层
+ * DeepPractice Standards Compliant
+ */
+
+import { useCaseManagementStore } from './case-management/stores/useCaseStore';
+import { useTeachingStore } from './teaching-acts/stores/useTeachingStore';
+import { useSocraticStore } from './socratic-dialogue/stores/useSocraticStore';
+import { useAnalysisStore } from './legal-analysis/stores/useAnalysisStore';
+
+// ========== 旧Store兼容性Hook ==========
+// 提供旧useCaseStore功能的兼容性实现
+export const useCaseStore = () => {
+  // 直接从原始Store获取数据，避免循环依赖
+  const currentCase = useCaseManagementStore((state) => state.currentCase);
+  const caseActions = useCaseManagementStore((state) => ({
+    setCurrentCase: state.setCurrentCase,
+  }));
+  const teachingState = useTeachingStore((state) => ({
+    storyChapters: state.storyChapters,
+    setCurrentAct: state.setCurrentAct,
+    toggleStoryMode: state.toggleStoryMode,
+    generateStoryChapters: state.generateStoryChapters,
+    updateStoryChapter: state.updateStoryChapter,
+  }));
+
+  return {
+    // 案例数据
+    caseData: currentCase,
+    setCaseData: caseActions.setCurrentCase,
+
+    // 教学流程控制
+    setCurrentAct: teachingState.setCurrentAct,
+    toggleStoryMode: teachingState.toggleStoryMode,
+    generateStoryChapters: teachingState.generateStoryChapters,
+
+    // 故事章节
+    storyChapters: teachingState.storyChapters,
+    updateStoryChapter: teachingState.updateStoryChapter,
+  };
+};
+
+// 从分析域导出，兼容原有的分析相关功能
+export const useFactDisputes = () => useAnalysisStore((state) => state.factDisputes);
+export const useEvidenceLinks = () => useAnalysisStore((state) => state.evidenceLinks);
+export const useClaimAnalysis = () => useAnalysisStore((state) => state.claimAnalysis);
+export const useTimelineViewMode = () => useAnalysisStore((state) => state.timelineViewMode);
+export const useIsAnalyzingClaims = () => useAnalysisStore((state) => state.isAnalyzingClaims);
+
+// ========== 组合Store Hook ==========
+// 提供一个组合多个域状态的Hook，用于需要跨域数据的组件
+export const useAppState = () => {
+  const currentCase = useCaseManagementStore((state) => state.currentCase);
+  const currentSession = useTeachingStore((state) => state.currentSession);
+  const currentDialogue = useSocraticStore((state) => state.currentDialogueSession);
+  const analysisComplete = useAnalysisStore((state) => state.analysisComplete);
+  const currentAct = useTeachingStore((state) => state.currentAct);
+
+  return {
+    case: currentCase,
+    session: currentSession,
+    dialogue: currentDialogue,
+    analysisComplete,
+    currentAct,
+  };
+};
+
+// ========== 全局操作Hook ==========
+// 提供全局重置操作
+export const useGlobalActions = () => {
+  const caseActions = useCaseManagementStore((state) => ({
+    reset: state.reset,
+    setCurrentCase: state.setCurrentCase,
+    addCase: state.addCase,
+    deleteCase: state.deleteCase,
+  }));
+  const teachingActions = useTeachingStore((state) => ({
+    reset: state.reset,
+    setCurrentAct: state.setCurrentAct,
+    toggleStoryMode: state.toggleStoryMode,
+  }));
+  const socraticActions = useSocraticStore((state) => ({
+    reset: state.reset,
+    startNewDialogue: state.startNewDialogue,
+    sendMessage: state.sendMessage,
+  }));
+  const analysisActions = useAnalysisStore((state) => ({
+    reset: state.reset,
+    setThreeElements: state.setThreeElements,
+    selectTimelineNode: state.selectTimelineNode,
+  }));
+
+  return {
+    resetAll: () => {
+      caseActions.reset();
+      teachingActions.reset();
+      socraticActions.reset();
+      analysisActions.reset();
+    },
+    caseActions,
+    teachingActions,
+    socraticActions,
+    analysisActions,
+  };
+};

@@ -6,8 +6,8 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { DisputeFocusAnalyzer } from '@/components/dispute/DisputeFocusAnalyzer';
-import { useDisputeStore } from '@/lib/stores/useDisputeStore';
-import { useEvidenceInteractionStore } from '@/lib/stores/useEvidenceInteractionStore';
+import { useDisputeStore } from '@/src/domains/stores';
+import { useEvidenceInteractionStore } from '@/src/domains/stores';
 
 // Mock modules
 jest.mock('@/lib/ai-dispute-analyzer');

@@ -10,10 +10,11 @@ import { Card } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Info } from 'lucide-react'
 import TeacherSocratic from '@/components/socratic/TeacherSocratic'
-import { useCaseStore } from '@/lib/stores/useCaseStore'
+import { useCurrentCase, useTeachingStore } from '@/src/domains/stores'
 
 export default function Act5TeacherMode() {
-  const { caseData, extractedElements } = useCaseStore()
+  const caseData = useCurrentCase()
+  const { socraticData } = useTeachingStore()
   const [caseInfo, setCaseInfo] = useState<{
     title: string;
     facts: string[];
@@ -23,21 +24,18 @@ export default function Act5TeacherMode() {
 
   useEffect(() => {
     // 准备案例数据
-    if (caseData || extractedElements) {
-      const facts = extractedElements?.facts?.keyFacts || 
-                    caseData?.facts || 
+    if (caseData) {
+      const facts = caseData.timeline?.map(event => event.event).filter(Boolean) ||
                     ['暂无事实数据'];
-      
-      const laws = extractedElements?.reasoning?.legalBasis?.map(lb => 
-        `${lb.law} ${lb.article}`
-      ) || ['民法典相关条款'];
-      
-      const dispute = extractedElements?.facts?.summary || 
-                      caseData?.dispute || 
+
+      const laws = caseData.verdict?.liability?.map(l => l.legalBasis).filter(Boolean) ||
+                   ['民法典相关条款'];
+
+      const dispute = caseData.basicInfo?.caseNature ||
                       '案件争议焦点';
-      
-      const title = caseData?.title || 
-                    extractedElements?.basicInfo?.caseNumber || 
+
+      const title = caseData.title ||
+                    caseData.basicInfo?.caseNumber ||
                     '法律案例分析';
 
       setCaseInfo({

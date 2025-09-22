@@ -144,7 +144,7 @@ export default function LegalEducationPage() {
 
 ```tsx
 // 在您的应用中配置状态管理
-import { useSocraticStore } from '@/lib/stores/socraticStore';
+import { useSocraticStore } from '@/src/domains/stores/socraticStore';
 
 function MyApp({ Component, pageProps }) {
   // Store会自动初始化

@@ -6,7 +6,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import DeepAnalysis from '@/components/acts/DeepAnalysis';
-import { useCaseStore } from '@/lib/stores/useCaseStore';
+import { useCaseStore } from '@/src/domains/stores';
 
 // Mock modules
 jest.mock('@/lib/ai-dispute-analyzer');

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { useCaseStore } from '@/lib/stores/useCaseStore'
+import { useCurrentCase } from '@/src/domains/stores'
 import { 
   Target, 
   CheckCircle,
@@ -25,7 +25,7 @@ interface DeepAnalysisProps {
 }
 
 export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
-  const caseData = useCaseStore(state => state.caseData)
+  const caseData = useCurrentCase()
   const [analysisComplete, setAnalysisComplete] = useState(false)
   const [activeView, setActiveView] = useState<'classic' | 'intelligent'>('classic')
 

@@ -6,7 +6,7 @@
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { io, Socket } from 'socket.io-client'
 import { useWebSocket, WebSocketEvent } from '../../lib/hooks/useWebSocket'
-import { useSocraticStore } from '../../lib/stores/socraticStore'
+import { useSocraticStore } from '@/src/domains/stores'
 import type { Message, StudentInfo, VoteData } from '../../lib/types/socratic'
 import { MessageRole, DialogueLevel } from '../../lib/types/socratic'
 

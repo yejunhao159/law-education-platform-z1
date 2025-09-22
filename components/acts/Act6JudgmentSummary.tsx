@@ -3,15 +3,15 @@
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Trophy } from 'lucide-react'
-import { useCaseData } from '@/lib/stores/useCaseStore'
+import { useCurrentCase } from '@/src/domains/stores'
 
 export default function Act6JudgmentSummary() {
-  const caseData = useCaseData()
+  const caseData = useCurrentCase()
 
   const mockCase = {
-    title: caseData?.metadata?.title || "张某诉李某房屋买卖合同纠纷案",
-    caseNumber: caseData?.metadata?.caseNumber || "（2023）京0108民初12345号",
-    court: caseData?.metadata?.court || "北京市海淀区人民法院",
+    title: caseData?.title || "张某诉李某房屋买卖合同纠纷案",
+    caseNumber: caseData?.basicInfo?.caseNumber || "（2023）京0108民初12345号",
+    court: caseData?.basicInfo?.court || "北京市海淀区人民法院",
   }
 
   return (

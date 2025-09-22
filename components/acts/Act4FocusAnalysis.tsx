@@ -6,11 +6,11 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Target, Brain, FileText, Sparkles, QrCode, Filter } from 'lucide-react'
-import { useCaseData } from '@/lib/stores/useCaseStore'
+import { useCurrentCase } from '@/src/domains/stores'
 
 export default function Act4FocusAnalysis() {
   const [activeTab, setActiveTab] = useState('analysis')
-  const caseData = useCaseData()
+  const caseData = useCurrentCase()
   
   return (
     <div className="space-y-8">

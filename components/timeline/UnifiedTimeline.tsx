@@ -6,12 +6,12 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { 
+import {
   useCaseStore,
   useClaimAnalysis,
   useTimelineViewMode,
   useIsAnalyzingClaims
-} from '@/lib/stores/useCaseStore'
+} from '@/src/domains/stores'
 import type { UnifiedTimelineProps, TimelineEvent, ClaimAnalysisResult } from '@/types/timeline-claim-analysis'
 import { TimelineErrorBoundary } from './TimelineErrorBoundary'
 import { useClaimAnalysisCache } from '@/lib/cache/claim-analysis-cache'

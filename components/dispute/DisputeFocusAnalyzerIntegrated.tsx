@@ -24,7 +24,7 @@ import {
   BookOpen
 } from 'lucide-react';
 
-import { useCaseStore } from '@/lib/stores/useCaseStore';
+import { useCurrentCase } from '@/src/domains/stores';
 import legalProvisions from '@/data/legal-provisions.json';
 
 interface DisputeFocusIntegrated {
@@ -44,7 +44,7 @@ interface DisputeFocusIntegrated {
 }
 
 export function DisputeFocusAnalyzerIntegrated() {
-  const { caseData } = useCaseStore();
+  const caseData = useCurrentCase();
   const [disputes, setDisputes] = useState<DisputeFocusIntegrated[]>([]);
   const [selectedDispute, setSelectedDispute] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);

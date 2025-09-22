@@ -37,7 +37,7 @@ import {
 } from 'lucide-react';
 
 import { EvidenceCard } from '@/components/evidence/EvidenceCard';
-import { useEvidenceInteractionStore } from '@/lib/stores/useEvidenceInteractionStore';
+import { useEvidenceInteractionStore } from '@/src/domains/stores';
 import type { Evidence, EvidenceQuality } from '@/types/dispute-evidence';
 import { cn } from '@/lib/utils';
 

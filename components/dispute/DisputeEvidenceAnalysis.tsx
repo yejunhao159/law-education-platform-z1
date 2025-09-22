@@ -7,8 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useDisputeStore } from '@/lib/stores/useDisputeStore';
-import { useEvidenceInteractionStore } from '@/lib/stores/useEvidenceInteractionStore';
+import { useDisputeStore, useEvidenceInteractionStore } from '@/src/domains/stores';
 import { DisputeList } from './DisputeList';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';

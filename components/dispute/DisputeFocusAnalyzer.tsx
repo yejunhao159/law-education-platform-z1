@@ -32,8 +32,8 @@ import {
 import { DisputeCard } from '@/components/dispute/DisputeCard';
 import { EvidenceCard } from '@/components/evidence/EvidenceCard';
 import { ClaimElementDropZone } from '@/components/evidence/ClaimElementDropZone';
-import { useDisputeStore } from '@/lib/stores/useDisputeStore';
-import { useEvidenceInteractionStore } from '@/lib/stores/useEvidenceInteractionStore';
+import { useDisputeStore } from '@/src/domains/stores';
+import { useEvidenceInteractionStore } from '@/src/domains/stores';
 import { DisputeAnalyzer } from '@/lib/ai-dispute-analyzer';
 import { EvidenceMappingService } from '@/lib/evidence-mapping-service';
 import type { DisputeFocus, Evidence, ClaimElement } from '@/types/dispute-evidence';

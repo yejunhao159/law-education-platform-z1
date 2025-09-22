@@ -30,7 +30,7 @@ import {
   ChevronUp
 } from 'lucide-react';
 
-import { useCaseStore } from '@/lib/stores/useCaseStore';
+import { useCurrentCase } from '@/src/domains/stores';
 import { logger } from '@/lib/utils/logger';
 
 // 证据质量评估接口
@@ -75,7 +75,7 @@ interface EvidenceQualityAssessment {
 }
 
 export function EvidenceQualityFromThreeElements() {
-  const { caseData } = useCaseStore();
+  const caseData = useCurrentCase();
   const [assessments, setAssessments] = useState<EvidenceQualityAssessment[]>([]);
   const [selectedEvidence, setSelectedEvidence] = useState<string | null>(null);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());

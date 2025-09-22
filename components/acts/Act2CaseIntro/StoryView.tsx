@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { useCaseStore } from '@/lib/stores/useCaseStore'
+import { useCaseStore, useCurrentCase } from '@/src/domains/stores'
 import { 
   BookOpen, 
   Users, 
@@ -24,7 +24,8 @@ const iconMap = {
 }
 
 export function StoryView() {
-  const { storyChapters, updateStoryChapter, caseData } = useCaseStore()
+  const { storyChapters, updateStoryChapter } = useCaseStore()
+  const caseData = useCurrentCase()
   const [currentChapter, setCurrentChapter] = useState(0)
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState('')

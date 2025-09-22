@@ -29,7 +29,7 @@ const mockEndSession = jest.fn()
 const mockAddFeedback = jest.fn()
 const mockAddPoints = jest.fn()
 
-jest.mock('@/lib/stores/useSocraticStore', () => ({
+jest.mock('@/src/domains/stores', () => ({
   useSocraticStore: () => ({
     session: null,
     messages: [],
@@ -44,7 +44,7 @@ jest.mock('@/lib/stores/useSocraticStore', () => ({
   })
 }))
 
-jest.mock('@/lib/stores/useEvidenceInteractionStore', () => ({
+jest.mock('@/src/domains/stores', () => ({
   useEvidenceInteractionStore: () => ({
     addFeedback: mockAddFeedback,
     addPoints: mockAddPoints
@@ -380,7 +380,7 @@ describe('Act5SocraticDiscussion 集成测试', () => {
 
   describe('错误处理', () => {
     it('应该显示错误信息', () => {
-      jest.mocked(require('@/lib/stores/useSocraticStore').useSocraticStore).mockReturnValue({
+      jest.mocked(require('@/src/domains/stores').useSocraticStore).mockReturnValue({
         session: null,
         messages: [],
         currentLevel: DialogueLevel.OBSERVATION,
@@ -428,7 +428,7 @@ describe('Act5SocraticDiscussion 集成测试', () => {
 
   describe('统计信息', () => {
     it('应该显示对话统计', () => {
-      jest.mocked(require('@/lib/stores/useSocraticStore').useSocraticStore).mockReturnValue({
+      jest.mocked(require('@/src/domains/stores').useSocraticStore).mockReturnValue({
         session: { id: 'test', completedLevels: [] },
         messages: [
           { id: '1', content: '消息1', role: 'user' },
@@ -459,7 +459,7 @@ describe('Act5SocraticDiscussion 集成测试', () => {
         role: i % 2 === 0 ? 'user' : 'assistant'
       }))
       
-      jest.mocked(require('@/lib/stores/useSocraticStore').useSocraticStore).mockReturnValue({
+      jest.mocked(require('@/src/domains/stores').useSocraticStore).mockReturnValue({
         session: { id: 'test', completedLevels: [] },
         messages,
         currentLevel: DialogueLevel.OBSERVATION,

@@ -1,9 +1,9 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { CaseTimeline } from '../CaseTimeline'
-import { useCaseStore } from '@/lib/stores/useCaseStore'
+import { useCaseStore } from '@/src/domains/stores/useCaseStore'
 
 // Mock the store
-jest.mock('@/lib/stores/useCaseStore')
+jest.mock('@/src/domains/stores/useCaseStore')
 const mockUseCaseStore = useCaseStore as jest.MockedFunction<typeof useCaseStore>
 
 describe('CaseTimeline', () => {

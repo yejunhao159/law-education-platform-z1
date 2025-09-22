@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useCaseStore } from '@/lib/stores/useCaseStore'
+import { useCurrentCase } from '@/src/domains/stores'
 import { 
   Scale, 
   FileText, 
@@ -48,7 +48,7 @@ interface EnhancedEvidence {
 }
 
 export function EvidenceReview() {
-  const caseData = useCaseStore(state => state.caseData)
+  const caseData = useCurrentCase()
   const [selectedEvidence, setSelectedEvidence] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'list' | 'chain' | 'claim'>('list')
   

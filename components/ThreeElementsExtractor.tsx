@@ -10,7 +10,7 @@ import { FileParser, type ParseProgress } from '@/lib/file-parser'
 import { ElementEditor } from '@/components/ElementEditor'
 import { InlineEditor } from '@/components/InlineEditor'
 import { Loader2, FileText, CheckCircle, AlertCircle, Edit, Eye, ArrowRight } from 'lucide-react'
-import { useCaseStore } from '@/lib/stores/useCaseStore'
+import { useCurrentCase, useCaseStore } from '@/src/domains/stores'
 import type { LegalCase } from '@/types/legal-case'
 
 interface ExtractedElements {
