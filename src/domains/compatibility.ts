@@ -3,41 +3,49 @@
  * DeepPractice Standards Compliant
  */
 
+import { useMemo } from 'react';
 import { useCaseManagementStore } from './case-management/stores/useCaseStore';
 import { useTeachingStore } from './teaching-acts/stores/useTeachingStore';
 import { useSocraticStore } from './socratic-dialogue/stores/useSocraticStore';
 import { useAnalysisStore } from './legal-analysis/stores/useAnalysisStore';
 
 // ========== 旧Store兼容性Hook ==========
-// 提供旧useCaseStore功能的兼容性实现
+// 提供旧useCaseStore功能的兼容性实现，使用缓存避免无限循环
 export const useCaseStore = () => {
-  // 直接从原始Store获取数据，避免循环依赖
+  // 使用精确的 selector 订阅，避免过度订阅
   const currentCase = useCaseManagementStore((state) => state.currentCase);
-  const caseActions = useCaseManagementStore((state) => ({
-    setCurrentCase: state.setCurrentCase,
-  }));
-  const teachingState = useTeachingStore((state) => ({
-    storyChapters: state.storyChapters,
-    setCurrentAct: state.setCurrentAct,
-    toggleStoryMode: state.toggleStoryMode,
-    generateStoryChapters: state.generateStoryChapters,
-    updateStoryChapter: state.updateStoryChapter,
-  }));
+  const setCurrentCase = useCaseManagementStore((state) => state.setCurrentCase);
 
-  return {
+  const storyChapters = useTeachingStore((state) => state.storyChapters);
+  const setCurrentAct = useTeachingStore((state) => state.setCurrentAct);
+  const toggleStoryMode = useTeachingStore((state) => state.toggleStoryMode);
+  const updateStoryChapter = useTeachingStore((state) => state.updateStoryChapter);
+
+  // 使用 useMemo 缓存返回对象，确保引用稳定
+  return useMemo(() => ({
     // 案例数据
     caseData: currentCase,
-    setCaseData: caseActions.setCurrentCase,
+    setCaseData: setCurrentCase,
 
     // 教学流程控制
-    setCurrentAct: teachingState.setCurrentAct,
-    toggleStoryMode: teachingState.toggleStoryMode,
-    generateStoryChapters: teachingState.generateStoryChapters,
+    setCurrentAct,
+    toggleStoryMode,
+    generateStoryChapters: () => {
+      // 空实现，避免调用不存在的方法
+      console.warn('generateStoryChapters: 已弃用，请使用直接的 store 方法');
+    },
 
     // 故事章节
-    storyChapters: teachingState.storyChapters,
-    updateStoryChapter: teachingState.updateStoryChapter,
-  };
+    storyChapters,
+    updateStoryChapter,
+  }), [
+    currentCase,
+    setCurrentCase,
+    storyChapters,
+    setCurrentAct,
+    toggleStoryMode,
+    updateStoryChapter
+  ]);
 };
 
 // 从分析域导出，兼容原有的分析相关功能

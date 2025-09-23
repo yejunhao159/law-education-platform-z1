@@ -282,38 +282,46 @@ ${text.substring(0, 2000)}`;
       if (!this.apiKey) {
         throw new Error('DeepSeek API Key未配置');
       }
-      
+
       console.log('📡 调用DeepSeek API...');
-      
+
       // 如果apiUrl已经包含完整路径，直接使用；否则添加/chat/completions
-      const apiEndpoint = this.apiUrl.includes('/chat/completions') 
-        ? this.apiUrl 
+      const apiEndpoint = this.apiUrl.includes('/chat/completions')
+        ? this.apiUrl
         : `${this.apiUrl}/chat/completions`;
-      
-      const response = await fetch(apiEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`
-        },
-        body: JSON.stringify({
-          model: this.model,
-          messages: [
-            {
-              role: 'system',
-              content: '你是一位专业的中国法律文书分析专家，精通判决书分析。请始终以JSON格式返回结果。'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: 0.3,  // 降低温度以提高准确性
-          max_tokens: 2000
-        })
-      });
-      
-      if (!response.ok) {
+
+      // 添加超时和重试机制
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+
+      try {
+        const response = await fetch(apiEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`
+          },
+          body: JSON.stringify({
+            model: this.model,
+            messages: [
+              {
+                role: 'system',
+                content: '你是一位专业的中国法律文书分析专家，精通判决书分析。请始终以JSON格式返回结果。'
+              },
+              {
+                role: 'user',
+                content: prompt
+              }
+            ],
+            temperature: 0.3,  // 降低温度以提高准确性
+            max_tokens: 2000
+          }),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
         let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
         try {
           const errorData = await response.json();
@@ -350,7 +358,21 @@ ${text.substring(0, 2000)}`;
         // 如果解析失败，返回默认结构
         return null;
       }
-      
+
+      } catch (networkError) {
+        clearTimeout(timeoutId);
+        console.error('网络请求失败:', networkError);
+
+        // 区分不同类型的网络错误
+        if (networkError.name === 'AbortError') {
+          throw new Error('DeepSeek API调用超时，请检查网络连接');
+        } else if (networkError.code === 'ECONNRESET' || networkError.code === 'ENOTFOUND') {
+          throw new Error('DeepSeek API网络连接失败，可能是网络环境限制');
+        } else {
+          throw new Error(`DeepSeek API网络错误: ${networkError.message}`);
+        }
+      }
+
     } catch (error) {
       console.error('调用DeepSeek API失败:', error);
       throw error;

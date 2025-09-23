@@ -1,8 +1,8 @@
 import React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
-import { TimelineAnalyzer } from '@/lib/ai-timeline-analyzer'
-import { AnalysisCacheManager } from '@/lib/utils/analysis-cache'
+import { TimelineAnalyzer } from '@/src/domains/legal-analysis/services/TimelineAnalyzer'
+import { AnalysisCacheManager } from '@/src/domains/shared/infrastructure/cache/AnalysisCacheManager'
 import type { TimelineEvent, TimelineAnalysis, ImportanceScore } from '@/types/timeline-claim-analysis'
 import type { LegalCase } from '@/types/legal-case'
 

@@ -10,7 +10,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { LegalParser } from '../lib/legal-parser';
+import { LegalParser } from '../src/domains/document-processing';
 import { LegalAIAgent } from '../lib/ai-legal-agent';
 
 // 配置

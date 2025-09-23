@@ -34,7 +34,7 @@ import { EvidenceCard } from '@/components/evidence/EvidenceCard';
 import { ClaimElementDropZone } from '@/components/evidence/ClaimElementDropZone';
 import { useDisputeStore } from '@/src/domains/stores';
 import { useEvidenceInteractionStore } from '@/src/domains/stores';
-import { DisputeAnalyzer } from '@/lib/ai-dispute-analyzer';
+import { analyzeDisputesWithAI } from '@/src/domains/legal-analysis/services/DisputeAnalysisService';
 import { EvidenceMappingService } from '@/lib/evidence-mapping-service';
 import type { DisputeFocus, Evidence, ClaimElement } from '@/types/dispute-evidence';
 
@@ -59,7 +59,7 @@ export function DisputeFocusAnalyzer({
   
   const disputeStore = useDisputeStore();
   const interactionStore = useEvidenceInteractionStore();
-  const analyzer = new DisputeAnalyzer();
+  // No need for analyzer instance, using direct function call
   const mappingService = new EvidenceMappingService();
 
   // Mock evidence data if not provided
@@ -115,12 +115,13 @@ export function DisputeFocusAnalyzer({
     interactionStore.resetInteraction();
 
     try {
-      const result = await analyzer.analyze({
+      const result = await analyzeDisputesWithAI({
         documentText: documentText || '',
+        caseType: 'civil', // Default to civil case
         caseId: caseId || `case-${Date.now()}`,
         options: {
-          includeClaimBasis: true,
-          includeTeachingNotes: true,
+          extractClaimBasis: true,
+          generateTeachingNotes: true,
           analyzeDifficulty: true
         }
       });

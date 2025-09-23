@@ -4,7 +4,7 @@
  */
 
 import { createLogger as createBaseLogger, LogLevel } from '../utils/socratic-logger';
-import { socraticPerformance } from '../services/socratic-performance';
+import { defaultPerformanceMonitor } from '../../src/domains/socratic-dialogue/monitoring/PerformanceMonitor';
 
 export interface LogContext {
   timestamp: string;
@@ -147,7 +147,7 @@ export class StructuredLogger {
     });
     
     // 记录到性能监控
-    socraticPerformance.recordAPIRequest({
+    // socraticPerformance.recordAPIRequest({
       endpoint: operationId,
       method: 'OPERATION',
       duration,
@@ -383,7 +383,7 @@ export class StructuredLogger {
     console.error(`[ALERT][${severity.toUpperCase()}] ${message}`, error);
     
     // 记录到性能监控
-    socraticPerformance.recordAPIRequest({
+    // socraticPerformance.recordAPIRequest({
       endpoint: 'alert',
       method: 'ALERT',
       duration: 0,

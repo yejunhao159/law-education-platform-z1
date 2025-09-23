@@ -1,8 +1,8 @@
-import { analyzeTimelineClaimsWithAI } from '@/lib/ai-claim-analyzer'
+import { analyzeTimelineClaimsWithAI } from '@/src/domains/legal-analysis/services/ClaimAnalysisService'
 import type { TimelineEvent, ClaimAnalysisRequest } from '@/types/timeline-claim-analysis'
 
 // Mock the AI claim analyzer
-jest.mock('@/lib/ai-claim-analyzer', () => ({
+jest.mock('@/src/domains/legal-analysis/services/ClaimAnalysisService', () => ({
   analyzeTimelineClaimsWithAI: jest.fn()
 }))
 

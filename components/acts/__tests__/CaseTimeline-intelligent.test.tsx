@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import { CaseTimeline } from '../CaseTimeline'
 import { useCaseStore } from '@/src/domains/stores/useCaseStore'
-import { TimelineAnalyzer } from '@/lib/ai-timeline-analyzer'
+import { TimelineAnalyzer } from '@/src/domains/legal-analysis/services/TimelineAnalyzer'
 import type { TimelineEvent, TimelineAnalysis } from '@/types/timeline-claim-analysis'
 import type { LegalCase } from '@/types/legal-case'
 
@@ -11,7 +11,7 @@ import type { LegalCase } from '@/types/legal-case'
 jest.mock('@/src/domains/stores/useCaseStore')
 
 // Mock the analyzer
-jest.mock('@/lib/ai-timeline-analyzer')
+jest.mock('@/src/domains/legal-analysis/services/TimelineAnalyzer')
 
 // Mock fetch API
 global.fetch = jest.fn()

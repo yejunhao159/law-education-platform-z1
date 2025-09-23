@@ -62,7 +62,7 @@ export default function Act5TeacherMode() {
         dispute: '被告未按期支付货款是否构成根本违约，原告是否有权解除合同'
       });
     }
-  }, [caseData, extractedElements])
+  }, [caseData])
 
   if (!caseInfo) {
     return (

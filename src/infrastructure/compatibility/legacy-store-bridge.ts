@@ -107,7 +107,8 @@ export interface LegacyStoreActions {
 }
 
 // ========== 兼容性Store实现 ==========
-export const useCaseStore = (): LegacyStoreState & LegacyStoreActions => {
+// 注意：这个实现已被 /src/domains/compatibility.ts 替代，避免重复定义
+export const useCaseStoreLegacy = (): LegacyStoreState & LegacyStoreActions => {
   // 获取各个领域Store的状态和方法
   const caseStore = useCaseManagementStore();
   const teachingStore = useTeachingStore();

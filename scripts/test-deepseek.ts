@@ -4,7 +4,7 @@
  */
 
 import { DeepSeekLegalAgent } from '../lib/ai-legal-agent-deepseek';
-import { LegalParser } from '../lib/legal-parser';
+import { LegalParser } from "@/src/domains/document-processing";
 import * as dotenv from 'dotenv';
 
 // 加载环境变量

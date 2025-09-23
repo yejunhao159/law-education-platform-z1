@@ -4,19 +4,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { DisputeAnalyzer } from '@/lib/ai-dispute-analyzer';
-import type { DisputeAnalysisRequest } from '@/lib/ai-dispute-analyzer';
+import { analyzeDisputesWithAI, DisputeAnalysisService } from '@/src/domains/legal-analysis/services/DisputeAnalysisService';
+import type { DisputeAnalysisRequest } from '@/src/domains/legal-analysis/services/DisputeAnalysisService';
 
-const analyzer = new DisputeAnalyzer({
-  enabled: true,
-  ttl: 3600,
-  maxSize: 50
-});
+// Create a shared service instance for statistics
+const disputeService = new DisputeAnalysisService();
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    
+
     // Validate request
     if (!body.documentText || !body.caseType) {
       return NextResponse.json(
@@ -41,8 +38,8 @@ export async function POST(request: NextRequest) {
       sessionId: body.sessionId
     };
 
-    // Perform analysis
-    const response = await analyzer.analyze(analysisRequest);
+    // Perform analysis using new service
+    const response = await analyzeDisputesWithAI(analysisRequest);
 
     // Return response
     return NextResponse.json(response);
@@ -70,9 +67,9 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // Get statistics
-    const stats = analyzer.getStatistics();
-    
+    // Get statistics from service
+    const stats = disputeService.getStatistics();
+
     return NextResponse.json({
       success: true,
       statistics: stats
@@ -80,7 +77,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     return NextResponse.json(
-      { 
+      {
         success: false,
         error: error.message || 'Internal server error'
       },

@@ -1,539 +1,339 @@
 /**
- * 课堂管理API路由
- * @description 处理课堂创建、加入、管理等功能的API端点
+ * 课堂管理API - 重构版
+ * @description 基于DDD架构的课堂管理HTTP接口，专注于请求/响应处理
+ * @author DeepPractice Legal Intelligence System
+ * @version 2.0.0
+ *
+ * 架构特点：
+ * - 职责单一：仅处理HTTP请求/响应层面逻辑
+ * - 业务分离：核心业务逻辑移至ClassroomApplicationService
+ * - 错误标准化：统一的错误码和状态码映射
+ * - 类型安全：完整的TypeScript类型支持
+ *
+ * 支持的操作：
+ * - CREATE: 创建课堂（教师）
+ * - JOIN: 加入课堂（学生）
+ * - START_SESSION: 开始会话（教师）
+ * - END_SESSION: 结束会话（教师）
+ * - GET_STATUS: 获取状态（通用）
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { v4 as uuidv4 } from 'uuid'
+import { NextRequest, NextResponse } from 'next/server';
+import { ClassroomApplicationService } from '../../../src/domains/teaching-acts/services/ClassroomApplicationService';
+import { ClassroomAction, ClassroomErrorCode } from '../../../src/domains/teaching-acts/services/types/ClassroomTypes';
 
-// ============== 类型定义 ==============
-
-interface ClassroomInfo {
-  id: string
-  name: string
-  description?: string
-  teacherId: string
-  teacherName: string
-  createdAt: number
-  status: 'active' | 'inactive' | 'archived'
-  maxStudents: number
-  currentStudents: number
-  sessionMode: 'classroom' | 'demo'
-  settings: {
-    allowAnonymous: boolean
-    requireApproval: boolean
-    autoStartSessions: boolean
-  }
-}
-
-interface StudentInfo {
-  id: string
-  name: string
-  joinedAt: number
-  status: 'active' | 'inactive'
-  sessionId?: string
-}
-
-interface ClassroomSession {
-  id: string
-  classroomId: string
-  name: string
-  description?: string
-  status: 'preparing' | 'active' | 'paused' | 'completed'
-  startedAt?: number
-  endedAt?: number
-  participants: StudentInfo[]
-  caseId?: string
-  settings: {
-    difficulty: 'easy' | 'normal' | 'hard'
-    mode: 'auto' | 'semi' | 'manual'
-    maxDuration: number
-  }
-}
-
-// ============== 数据存储（临时内存存储） ==============
-// 注意：实际应用中应使用数据库
-
-const classrooms = new Map<string, ClassroomInfo>()
-const classroomSessions = new Map<string, ClassroomSession>()
-const studentSessions = new Map<string, string>() // studentId -> sessionId
-const inviteCodes = new Map<string, string>() // inviteCode -> classroomId
-
-// 测试重置函数（仅用于测试）
-export function resetClassroomData() {
-  classrooms.clear()
-  classroomSessions.clear()
-  studentSessions.clear()
-  inviteCodes.clear()
-}
-
-// ============== 辅助函数 ==============
+// 创建Application Service实例（单例模式）
+const classroomService = new ClassroomApplicationService();
 
 /**
- * 生成课堂邀请码
- */
-function generateInviteCode(): string {
-  return Math.random().toString(36).substring(2, 8).toUpperCase()
-}
-
-/**
- * 验证教师权限
- */
-function verifyTeacherAccess(classroomId: string, teacherId: string): boolean {
-  const classroom = classrooms.get(classroomId)
-  return classroom?.teacherId === teacherId
-}
-
-/**
- * 验证学生是否可以加入课堂
- */
-function canJoinClassroom(classroom: ClassroomInfo): boolean {
-  return classroom.status === 'active' && 
-         classroom.currentStudents < classroom.maxStudents
-}
-
-// ============== API 处理函数 ==============
-
-/**
- * POST /api/classroom - 创建或加入课堂
+ * POST /api/classroom - 课堂操作处理器
+ * @description 统一的课堂操作入口，通过action字段区分具体操作
+ * @param req - Next.js请求对象
+ * @returns 标准化的课堂操作响应
+ *
+ * 请求体格式：
+ * {
+ *   "action": "create" | "join" | "start-session" | "end-session" | "get-status",
+ *   ...其他操作特定参数
+ * }
+ *
+ * 响应格式：
+ * {
+ *   "success": boolean,
+ *   "data"?: object,    // 成功时的数据
+ *   "error"?: {         // 失败时的错误信息
+ *     "message": string,
+ *     "code": string
+ *   }
+ * }
  */
 export async function POST(req: NextRequest) {
   try {
-    const { action, ...data } = await req.json()
+    // Step 1: 解析和验证请求数据
+    const requestData = await parseRequest(req);
 
-    switch (action) {
-      case 'create':
-        return await handleCreateClassroom(data)
-      
-      case 'join':
-        return await handleJoinClassroom(data)
-      
-      case 'start-session':
-        return await handleStartSession(data)
-      
-      case 'end-session':
-        return await handleEndSession(data)
-      
-      case 'get-status':
-        return await handleGetStatus(data)
-      
-      default:
-        return NextResponse.json({
-          success: false,
-          error: {
-            message: '不支持的操作类型',
-            code: 'INVALID_ACTION'
-          }
-        }, { status: 400 })
-    }
+    // Step 2: 委托给Application Service执行业务逻辑
+    const result = await executeAction(requestData);
+
+    // Step 3: 根据业务结果返回适当的HTTP响应
+    const responseData = result.success ? result : result;
+    const statusCode = result.success ? 200 : getErrorStatusCode(result.error?.code);
+
+    const response = NextResponse.json(responseData, { status: statusCode });
+
+    // Step 4: 添加安全的CORS头
+    addCORSHeaders(response, req);
+
+    return response;
 
   } catch (error) {
-    console.error('Classroom API Error:', error)
-    
-    return NextResponse.json({
-      success: false,
-      error: {
-        message: '服务器内部错误',
-        code: 'INTERNAL_ERROR'
-      }
-    }, { status: 500 })
+    // Step 5: 统一异常处理和错误日志记录
+    console.error('❌ Classroom API错误:', error);
+    const errorResponse = handleError(error);
+    addCORSHeaders(errorResponse, req);
+    return errorResponse;
   }
 }
 
 /**
- * GET /api/classroom - 获取课堂列表或详情
+ * GET /api/classroom - 获取课堂信息处理器
+ * @description 根据查询参数获取课堂列表或特定课堂详情
+ * @param req - Next.js请求对象
+ * @returns 课堂信息响应
+ *
+ * 支持的查询参数组合：
+ * 1. ?action=list&teacherId={id} - 获取教师的课堂列表
+ * 2. ?id={classroomId} - 获取特定课堂的详细信息
+ *
+ * 响应数据结构：
+ * - 课堂列表：{ classrooms: ClassroomInfo[], total: number }
+ * - 课堂详情：{ classroom: ClassroomInfo, currentSession: ClassroomSession | null }
  */
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url)
-    const classroomId = searchParams.get('id')
-    const teacherId = searchParams.get('teacherId')
-    const action = searchParams.get('action')
+    // Step 1: 解析URL查询参数
+    const { searchParams } = new URL(req.url);
+    const classroomId = searchParams.get('id');
+    const teacherId = searchParams.get('teacherId');
+    const action = searchParams.get('action');
 
+    let result;
+
+    // Step 2: 根据参数组合确定查询类型并调用相应的业务方法
     if (action === 'list' && teacherId) {
-      // 获取教师的课堂列表
-      const teacherClassrooms = Array.from(classrooms.values())
-        .filter(classroom => classroom.teacherId === teacherId)
-        .sort((a, b) => b.createdAt - a.createdAt)
-
-      return NextResponse.json({
-        success: true,
-        data: {
-          classrooms: teacherClassrooms,
-          total: teacherClassrooms.length
+      // 场景1: 获取教师的所有课堂列表
+      result = await classroomService.getClassroomList({ teacherId });
+    } else if (classroomId) {
+      // 场景2: 获取特定课堂的详细信息
+      result = await classroomService.getClassroomDetail({ classroomId });
+    } else {
+      // 场景3: 参数不匹配，返回参数错误
+      const errorResponse = NextResponse.json({
+        success: false,
+        error: {
+          message: '缺少必要参数',
+          code: ClassroomErrorCode.MISSING_PARAMETERS
         }
-      })
+      }, { status: 400 });
+
+      addCORSHeaders(errorResponse, req);
+      return errorResponse;
     }
 
-    if (classroomId) {
-      // 获取特定课堂详情
-      const classroom = classrooms.get(classroomId)
-      
-      if (!classroom) {
-        return NextResponse.json({
-          success: false,
-          error: {
-            message: '课堂不存在',
-            code: 'CLASSROOM_NOT_FOUND'
-          }
-        }, { status: 404 })
-      }
+    // Step 3: 根据业务执行结果返回适当的HTTP响应
+    const responseData = result.success ? result : result;
+    const statusCode = result.success ? 200 : getErrorStatusCode(result.error?.code);
 
-      // 获取当前会话信息
-      const currentSession = Array.from(classroomSessions.values())
-        .find(session => session.classroomId === classroomId && 
-                        session.status === 'active')
+    const response = NextResponse.json(responseData, { status: statusCode });
+    addCORSHeaders(response, req);
 
-      return NextResponse.json({
-        success: true,
-        data: {
-          classroom,
-          currentSession: currentSession || null
-        }
-      })
-    }
-
-    return NextResponse.json({
-      success: false,
-      error: {
-        message: '缺少必要参数',
-        code: 'MISSING_PARAMETERS'
-      }
-    }, { status: 400 })
+    return response;
 
   } catch (error) {
-    console.error('Classroom GET Error:', error)
-    
-    return NextResponse.json({
-      success: false,
-      error: {
-        message: '服务器内部错误',
-        code: 'INTERNAL_ERROR'
-      }
-    }, { status: 500 })
+    // Step 4: 异常处理和错误日志记录
+    console.error('❌ Classroom GET错误:', error);
+    const errorResponse = handleError(error);
+    addCORSHeaders(errorResponse, req);
+    return errorResponse;
   }
 }
 
-// ============== 具体处理函数 ==============
-
 /**
- * 处理创建课堂请求
+ * OPTIONS - CORS预检请求处理器
+ * @description 处理浏览器的CORS预检请求，支持跨域API调用
+ * @returns 带有CORS头的空响应
+ *
+ * 安全配置说明：
+ * - Origin: 环境区分配置（开发环境允许localhost，生产环境限制域名）
+ * - Methods: 支持常用HTTP方法
+ * - Headers: 允许Content-Type和Authorization头
+ * - Max-Age: 预检结果缓存24小时
+ * - Credentials: 支持凭证传递
  */
-async function handleCreateClassroom(data: any) {
-  const {
-    name,
-    description = '',
-    teacherId,
-    teacherName,
-    maxStudents = 30,
-    sessionMode = 'classroom',
-    settings = {
-      allowAnonymous: true,
-      requireApproval: false,
-      autoStartSessions: false
-    }
-  } = data
+export async function OPTIONS(req: NextRequest) {
+  // 获取请求的Origin
+  const origin = req.headers.get('origin');
 
-  // 验证必要字段
-  if (!name || !name.trim() || !teacherId || !teacherName) {
-    return NextResponse.json({
-      success: false,
-      error: {
-        message: '缺少必要字段：name, teacherId, teacherName',
-        code: 'MISSING_REQUIRED_FIELDS'
-      }
-    }, { status: 400 })
-  }
+  // 安全的CORS配置：根据环境设置允许的域名
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',')
+    : process.env.NODE_ENV === 'development'
+      ? ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000']
+      : ['https://your-production-domain.com']; // 生产环境请替换为实际域名
 
-  // 创建课堂
-  const classroomId = uuidv4()
-  const inviteCode = generateInviteCode()
-  
-  const classroom: ClassroomInfo = {
-    id: classroomId,
-    name: name.trim(),
-    description: description.trim(),
-    teacherId,
-    teacherName,
-    createdAt: Date.now(),
-    status: 'active',
-    maxStudents: Math.max(1, Math.min(100, maxStudents)),
-    currentStudents: 0,
-    sessionMode,
-    settings: {
-      allowAnonymous: settings.allowAnonymous !== false,
-      requireApproval: settings.requireApproval === true,
-      autoStartSessions: settings.autoStartSessions === true
-    }
-  }
+  // 检查Origin是否在允许列表中
+  const isAllowedOrigin = origin && allowedOrigins.includes(origin);
 
-  classrooms.set(classroomId, classroom)
-  inviteCodes.set(inviteCode, classroomId)
-
-  return NextResponse.json({
-    success: true,
-    data: {
-      classroom,
-      inviteCode,
-      joinUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/classroom/join?code=${inviteCode}`
-    }
-  })
-}
-
-/**
- * 处理加入课堂请求
- */
-async function handleJoinClassroom(data: any) {
-  const {
-    classroomId,
-    inviteCode,
-    studentId,
-    studentName
-  } = data
-
-  // 验证必要字段
-  if ((!classroomId && !inviteCode) || !studentId || !studentName) {
-    return NextResponse.json({
-      success: false,
-      error: {
-        message: '缺少必要字段',
-        code: 'MISSING_REQUIRED_FIELDS'
-      }
-    }, { status: 400 })
-  }
-
-  // 查找课堂
-  let classroom: ClassroomInfo | undefined
-
-  if (classroomId) {
-    classroom = classrooms.get(classroomId)
-  } else if (inviteCode) {
-    // 根据邀请码查找课堂
-    const foundClassroomId = inviteCodes.get(inviteCode)
-    if (foundClassroomId) {
-      classroom = classrooms.get(foundClassroomId)
-    }
-  }
-
-  if (!classroom) {
-    return NextResponse.json({
-      success: false,
-      error: {
-        message: '课堂不存在或已关闭',
-        code: 'CLASSROOM_NOT_FOUND'
-      }
-    }, { status: 404 })
-  }
-
-  // 检查是否可以加入
-  if (!canJoinClassroom(classroom)) {
-    return NextResponse.json({
-      success: false,
-      error: {
-        message: '课堂已满或不可用',
-        code: 'CLASSROOM_UNAVAILABLE'
-      }
-    }, { status: 403 })
-  }
-
-  // 创建学生信息
-  const student: StudentInfo = {
-    id: studentId,
-    name: studentName.trim(),
-    joinedAt: Date.now(),
-    status: 'active'
-  }
-
-  // 更新课堂学生数量
-  classroom.currentStudents += 1
-  classrooms.set(classroom.id, classroom)
-
-  return NextResponse.json({
-    success: true,
-    data: {
-      classroom,
-      student,
-      message: `成功加入课堂：${classroom.name}`
-    }
-  })
-}
-
-/**
- * 处理开始会话请求
- */
-async function handleStartSession(data: any) {
-  const {
-    classroomId,
-    teacherId,
-    sessionName,
-    sessionDescription = '',
-    caseId,
-    settings = {
-      difficulty: 'normal',
-      mode: 'auto',
-      maxDuration: 3600000 // 1小时
-    }
-  } = data
-
-  // 验证教师权限
-  if (!verifyTeacherAccess(classroomId, teacherId)) {
-    return NextResponse.json({
-      success: false,
-      error: {
-        message: '无权限操作此课堂',
-        code: 'UNAUTHORIZED'
-      }
-    }, { status: 403 })
-  }
-
-  const classroom = classrooms.get(classroomId)!
-
-  // 检查是否有活跃会话
-  const existingSession = Array.from(classroomSessions.values())
-    .find(session => session.classroomId === classroomId && 
-                    session.status === 'active')
-
-  if (existingSession) {
-    return NextResponse.json({
-      success: false,
-      error: {
-        message: '课堂已有活跃会话',
-        code: 'SESSION_ALREADY_ACTIVE'
-      }
-    }, { status: 409 })
-  }
-
-  // 创建新会话
-  const sessionId = uuidv4()
-  const session: ClassroomSession = {
-    id: sessionId,
-    classroomId,
-    name: sessionName || `${classroom.name} - ${new Date().toLocaleString()}`,
-    description: sessionDescription,
-    status: 'active',
-    startedAt: Date.now(),
-    participants: [],
-    caseId,
-    settings: {
-      difficulty: settings.difficulty || 'normal',
-      mode: settings.mode || 'auto',
-      maxDuration: Math.max(300000, Math.min(7200000, settings.maxDuration || 3600000))
-    }
-  }
-
-  classroomSessions.set(sessionId, session)
-
-  return NextResponse.json({
-    success: true,
-    data: {
-      session,
-      message: '会话已开始'
-    }
-  })
-}
-
-/**
- * 处理结束会话请求
- */
-async function handleEndSession(data: any) {
-  const { sessionId, classroomId, teacherId } = data
-
-  // 验证教师权限
-  if (!verifyTeacherAccess(classroomId, teacherId)) {
-    return NextResponse.json({
-      success: false,
-      error: {
-        message: '无权限操作此课堂',
-        code: 'UNAUTHORIZED'
-      }
-    }, { status: 403 })
-  }
-
-  const session = classroomSessions.get(sessionId)
-
-  if (!session) {
-    return NextResponse.json({
-      success: false,
-      error: {
-        message: '会话不存在',
-        code: 'SESSION_NOT_FOUND'
-      }
-    }, { status: 404 })
-  }
-
-  // 结束会话
-  session.status = 'completed'
-  session.endedAt = Date.now()
-  classroomSessions.set(sessionId, session)
-
-  // 清理学生会话映射
-  session.participants.forEach(participant => {
-    studentSessions.delete(participant.id)
-  })
-
-  return NextResponse.json({
-    success: true,
-    data: {
-      session,
-      message: '会话已结束'
-    }
-  })
-}
-
-/**
- * 处理获取状态请求
- */
-async function handleGetStatus(data: any) {
-  const { classroomId, studentId } = data
-
-  const classroom = classrooms.get(classroomId)
-  
-  if (!classroom) {
-    return NextResponse.json({
-      success: false,
-      error: {
-        message: '课堂不存在',
-        code: 'CLASSROOM_NOT_FOUND'
-      }
-    }, { status: 404 })
-  }
-
-  // 获取当前活跃会话
-  const activeSession = Array.from(classroomSessions.values())
-    .find(session => session.classroomId === classroomId && 
-                    session.status === 'active')
-
-  // 获取学生会话信息
-  let studentSession = null
-  if (studentId) {
-    const sessionId = studentSessions.get(studentId)
-    if (sessionId) {
-      studentSession = classroomSessions.get(sessionId)
-    }
-  }
-
-  return NextResponse.json({
-    success: true,
-    data: {
-      classroom,
-      activeSession: activeSession || null,
-      studentSession: studentSession || null,
-      timestamp: Date.now()
-    }
-  })
-}
-
-/**
- * OPTIONS - 支持CORS预检请求
- */
-export async function OPTIONS() {
   return new Response(null, {
     status: 200,
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      // 只有在允许列表中的Origin才会被设置
+      'Access-Control-Allow-Origin': isAllowedOrigin ? origin : 'null',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Max-Age': '86400'
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+      'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Max-Age': '86400',
+      'Vary': 'Origin' // 确保不同Origin的响应被正确缓存
     }
-  })
+  });
+}
+
+// ========== 私有辅助方法 ==========
+
+/**
+ * 添加安全的CORS头
+ * @description 为响应添加基于白名单的CORS头，确保跨域访问安全
+ * @param response - Next.js响应对象
+ * @param request - Next.js请求对象
+ *
+ * 安全策略：
+ * - 检查请求Origin是否在允许列表中
+ * - 开发环境允许localhost访问
+ * - 生产环境仅允许配置的域名
+ * - 支持凭证传递和预检缓存
+ */
+function addCORSHeaders(response: NextResponse, request: NextRequest): void {
+  const origin = request.headers.get('origin');
+
+  // 获取允许的域名列表
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',')
+    : process.env.NODE_ENV === 'development'
+      ? ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000']
+      : ['https://your-production-domain.com']; // 生产环境请替换为实际域名
+
+  // 检查Origin是否在允许列表中
+  const isAllowedOrigin = origin && allowedOrigins.includes(origin);
+
+  if (isAllowedOrigin) {
+    response.headers.set('Access-Control-Allow-Origin', origin);
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
+  }
+
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  response.headers.set('Vary', 'Origin');
+}
+
+/**
+ * 解析POST请求数据
+ * @description 解析并验证JSON请求体，确保包含必需的action字段
+ * @param req - Next.js请求对象
+ * @returns 解析后的请求数据
+ * @throws 当JSON格式错误或缺少action字段时抛出异常
+ *
+ * 验证规则：
+ * - 请求体必须是有效的JSON格式
+ * - 必须包含action字段（操作类型标识）
+ */
+async function parseRequest(req: NextRequest) {
+  try {
+    const body = await req.json();
+
+    if (!body.action) {
+      throw new Error('缺少操作类型');
+    }
+
+    return body;
+  } catch (error) {
+    throw new Error('请求数据格式错误');
+  }
+}
+
+/**
+ * 路由分发器：根据action执行对应的业务操作
+ * @description 将HTTP请求路由到相应的Application Service方法
+ * @param requestData - 包含action和其他参数的请求数据
+ * @returns 业务操作的执行结果
+ *
+ * 支持的操作映射：
+ * - CREATE → createClassroom: 创建新课堂
+ * - JOIN → joinClassroom: 学生加入课堂
+ * - START_SESSION → startSession: 开始教学会话
+ * - END_SESSION → endSession: 结束教学会话
+ * - GET_STATUS → getStatus: 获取课堂状态
+ */
+async function executeAction(requestData: any) {
+  const { action, ...data } = requestData;
+
+  switch (action) {
+    case ClassroomAction.CREATE:
+      return await classroomService.createClassroom(data);
+
+    case ClassroomAction.JOIN:
+      return await classroomService.joinClassroom(data);
+
+    case ClassroomAction.START_SESSION:
+      return await classroomService.startSession(data);
+
+    case ClassroomAction.END_SESSION:
+      return await classroomService.endSession(data);
+
+    case ClassroomAction.GET_STATUS:
+      return await classroomService.getStatus(data);
+
+    default:
+      return {
+        success: false,
+        error: {
+          message: '不支持的操作类型',
+          code: ClassroomErrorCode.INVALID_ACTION
+        }
+      };
+  }
+}
+
+/**
+ * 错误码到HTTP状态码映射器
+ * @description 将业务层错误码转换为标准HTTP状态码
+ * @param errorCode - 业务层定义的错误码
+ * @returns 对应的HTTP状态码
+ *
+ * 映射规则：
+ * - 400 Bad Request: 参数错误、输入验证失败
+ * - 403 Forbidden: 权限不足
+ * - 404 Not Found: 资源不存在
+ * - 409 Conflict: 资源冲突（如重复创建）
+ * - 500 Internal Server Error: 未分类错误
+ */
+function getErrorStatusCode(errorCode?: string): number {
+  switch (errorCode) {
+    case ClassroomErrorCode.MISSING_PARAMETERS:
+    case ClassroomErrorCode.MISSING_REQUIRED_FIELDS:
+    case ClassroomErrorCode.INVALID_ACTION:
+      return 400;
+    case ClassroomErrorCode.UNAUTHORIZED:
+      return 403;
+    case ClassroomErrorCode.CLASSROOM_NOT_FOUND:
+    case ClassroomErrorCode.SESSION_NOT_FOUND:
+      return 404;
+    case ClassroomErrorCode.SESSION_ALREADY_ACTIVE:
+    case ClassroomErrorCode.CLASSROOM_UNAVAILABLE:
+      return 409;
+    default:
+      return 500;
+  }
+}
+
+/**
+ * 统一异常处理器
+ * @description 处理未捕获的异常，返回标准化的错误响应
+ * @param error - 捕获的异常对象
+ * @returns 标准化的错误响应
+ *
+ * 安全考虑：
+ * - 不向客户端暴露具体的异常信息
+ * - 返回通用的服务器错误信息
+ * - 实际错误信息仅记录在服务器日志中
+ */
+function handleError(error: unknown): NextResponse {
+  const message = error instanceof Error ? error.message : '未知错误';
+
+  return NextResponse.json({
+    success: false,
+    error: {
+      message: '服务器内部错误',
+      code: ClassroomErrorCode.INTERNAL_ERROR
+    }
+  }, { status: 500 });
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -27,7 +27,7 @@ import {
   Zap
 } from 'lucide-react'
 
-function UnifiedTimelineInner({ 
+function UnifiedTimelineInner({
   events: propEvents,
   analysis: propAnalysis,
   mode: propMode,
@@ -36,104 +36,117 @@ function UnifiedTimelineInner({
   onAnalysisComplete,
   className = ''
 }: UnifiedTimelineProps) {
-  const store = useCaseStore()
-  const caseData = store.caseData
+  // 使用精确的 selector，只订阅必要的数据
+  const caseTimeline = useCaseStore((state) => state.caseData?.threeElements?.facts?.timeline)
+  const caseType = useCaseStore((state) => state.caseData?.basicInfo?.caseType)
   const storeAnalysis = useClaimAnalysis()
   const storeMode = useTimelineViewMode()
   const isAnalyzing = useIsAnalyzingClaims()
-  
+
+  // 从 store 获取方法，但使用 useCallback 稳定化引用
+  const setClaimAnalysis = useCaseStore((state) => state.setClaimAnalysis)
+  const setIsAnalyzingClaims = useCaseStore((state) => state.setIsAnalyzingClaims)
+  const setTimelineViewMode = useCaseStore((state) => state.setTimelineViewMode)
+
   // 优先使用传入的props，否则使用store数据
-  const events = propEvents || caseData?.threeElements?.facts?.timeline || []
+  const events = propEvents || caseTimeline || []
   const analysis = propAnalysis || storeAnalysis
   const mode = propMode || storeMode
-  
+
+  // 使用 useMemo 缓存稳定的数据引用，避免不必要的重新渲染
+  const stableEvents = useMemo(() => events, [JSON.stringify(events)])
+  const stableAnalysis = useMemo(() => analysis, [JSON.stringify(analysis)])
+  const stableMode = useMemo(() => mode, [mode])
+
   const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null)
   const [viewFilter, setViewFilter] = useState<'all' | 'critical' | 'claims'>('all')
   
-  // 根据模式切换视图
-  const renderContent = () => {
-    switch (mode) {
+  // 使用 useCallback 优化事件处理函数
+  const handleNodeClick = useCallback((event: TimelineEvent) => {
+    setSelectedEvent(event)
+    onNodeClick?.(event)
+  }, [onNodeClick])
+
+  // 过滤事件 - 使用稳定的数据引用
+  const filteredEvents = useMemo(() => {
+    return stableEvents.filter(event => {
+      if (viewFilter === 'all') return true
+      if (viewFilter === 'critical') return event.importance === 'critical'
+      if (viewFilter === 'claims') return event.claims && event.claims.elements.length > 0
+      return true
+    })
+  }, [stableEvents, viewFilter])
+
+  // 根据模式切换视图 - 使用稳定的引用
+  const renderContent = useCallback(() => {
+    switch (stableMode) {
       case 'simple':
         return <SimpleTimelineView events={filteredEvents} onNodeClick={handleNodeClick} />
       case 'enhanced':
         return <EnhancedTimelineView events={filteredEvents} onNodeClick={handleNodeClick} />
       case 'analysis':
-        // In analysis mode, always show AnalysisTimelineView with tabs if analysis exists
-        // This ensures the tabs are visible for testing and user interaction
-        return <AnalysisTimelineView events={filteredEvents} analysis={analysis} onNodeClick={handleNodeClick} />
+        return <AnalysisTimelineView events={filteredEvents} analysis={stableAnalysis} onNodeClick={handleNodeClick} />
       default:
         return <SimpleTimelineView events={filteredEvents} onNodeClick={handleNodeClick} />
     }
-  }
-  
-  // 过滤事件
-  const filteredEvents = events.filter(event => {
-    if (viewFilter === 'all') return true
-    if (viewFilter === 'critical') return event.importance === 'critical'
-    if (viewFilter === 'claims') return event.claims && event.claims.elements.length > 0
-    return true
-  })
-  
-  // 处理节点点击
-  const handleNodeClick = (event: TimelineEvent) => {
-    setSelectedEvent(event)
-    onNodeClick?.(event)
-  }
+  }, [stableMode, filteredEvents, stableAnalysis, handleNodeClick])
   
   // AI分析按钮
   const cache = useClaimAnalysisCache()
   const [isUsingCache, setIsUsingCache] = useState(false)
-  
-  const handleAIAnalysis = async () => {
-    if (!enableAI || !events.length) return
-    
+
+  // 使用 useCallback 优化 AI 分析函数，移除对 store 对象的直接依赖
+  const handleAIAnalysis = useCallback(async () => {
+    if (!enableAI || !stableEvents.length) return
+
     // 先检查缓存
-    const cachedResult = cache.get(events, caseData?.basicInfo?.caseType)
+    const cachedResult = cache.get(stableEvents, caseType)
     if (cachedResult) {
       setIsUsingCache(true)
-      store.setClaimAnalysis(cachedResult)
+      setClaimAnalysis(cachedResult)
       onAnalysisComplete?.(cachedResult)
       setTimeout(() => setIsUsingCache(false), 2000)
       return
     }
-    
-    store.setIsAnalyzingClaims(true)
-    
+
+    setIsAnalyzingClaims(true)
+
     try {
       // 调用AI分析API
       const response = await fetch('/api/claim-analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          events,
-          caseType: caseData?.basicInfo?.caseType,
+          events: stableEvents,
+          caseType: caseType,
           focusAreas: ['claims', 'defenses', 'limitations', 'burden-of-proof'],
           depth: 'comprehensive'
         })
       })
-      
+
       if (!response.ok) throw new Error('分析失败')
-      
+
       const result: ClaimAnalysisResult = await response.json()
-      
+
       // 存入缓存
-      cache.set(events, result, caseData?.basicInfo?.caseType)
-      
-      store.setClaimAnalysis(result)
+      cache.set(stableEvents, result, caseType)
+
+      setClaimAnalysis(result)
       onAnalysisComplete?.(result)
     } catch (error) {
       console.error('AI分析错误:', error)
       // 显示错误提示
       alert('分析失败，请稍后重试')
     } finally {
-      store.setIsAnalyzingClaims(false)
+      setIsAnalyzingClaims(false)
     }
-  }
-  
-  // 切换视图模式
-  const handleModeChange = () => {
-    store.toggleTimelineViewMode()
-  }
+  }, [enableAI, stableEvents, caseType, cache, setClaimAnalysis, setIsAnalyzingClaims, onAnalysisComplete])
+
+  // 使用 useCallback 优化模式切换函数，移除对 store 对象的依赖
+  const handleModeChange = useCallback(() => {
+    // 这里可以添加防抖机制
+    setTimelineViewMode(stableMode === 'simple' ? 'enhanced' : stableMode === 'enhanced' ? 'analysis' : 'simple')
+  }, [stableMode, setTimelineViewMode])
   
   return (
     <div className={`space-y-4 ${className}`}>
@@ -144,8 +157,8 @@ function UnifiedTimelineInner({
           <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
             <Button
               size="sm"
-              variant={mode === 'simple' ? 'default' : 'ghost'}
-              onClick={() => store.setTimelineViewMode('simple')}
+              variant={stableMode === 'simple' ? 'default' : 'ghost'}
+              onClick={() => setTimelineViewMode('simple')}
               className="h-7"
             >
               <Layers className="w-4 h-4 mr-1" />
@@ -153,8 +166,8 @@ function UnifiedTimelineInner({
             </Button>
             <Button
               size="sm"
-              variant={mode === 'enhanced' ? 'default' : 'ghost'}
-              onClick={() => store.setTimelineViewMode('enhanced')}
+              variant={stableMode === 'enhanced' ? 'default' : 'ghost'}
+              onClick={() => setTimelineViewMode('enhanced')}
               className="h-7"
             >
               <Clock className="w-4 h-4 mr-1" />
@@ -162,8 +175,8 @@ function UnifiedTimelineInner({
             </Button>
             <Button
               size="sm"
-              variant={mode === 'analysis' ? 'default' : 'ghost'}
-              onClick={() => store.setTimelineViewMode('analysis')}
+              variant={stableMode === 'analysis' ? 'default' : 'ghost'}
+              onClick={() => setTimelineViewMode('analysis')}
               className="h-7"
             >
               <Brain className="w-4 h-4 mr-1" />
@@ -184,11 +197,11 @@ function UnifiedTimelineInner({
         </div>
         
         {/* AI分析按钮 */}
-        {enableAI && mode === 'analysis' && (
+        {enableAI && stableMode === 'analysis' && (
           <div className="flex items-center gap-2">
             <Button
               onClick={handleAIAnalysis}
-              disabled={isAnalyzing || !events.length}
+              disabled={isAnalyzing || !stableEvents.length}
               className="gap-2"
             >
               {isAnalyzing ? (

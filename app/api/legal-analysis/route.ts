@@ -1,32 +1,94 @@
+/**
+ * 法律事件分析API
+ * @description 基于AI和规则引擎的法律事件深度分析系统，为法学教育提供智能化的法律要点提取和分析
+ * @author DeepPractice Legal Intelligence System
+ * @version 1.0.0
+ *
+ * 核心功能：
+ * - 法律事件智能摘要生成
+ * - 法学要点自动提取
+ * - 相关法条精确匹配
+ * - 多维度法律分析（法律关系、举证责任、时效问题）
+ * - AI分析失败时的规则引擎备选方案
+ * - 容错性强的JSON解析机制
+ *
+ * 技术特点：
+ * - DeepSeek AI模型驱动的专业法律分析
+ * - 双重保障：AI分析 + 规则引擎备选
+ * - 智能JSON提取和格式化
+ * - 完整的错误处理和降级策略
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
 
+// DeepSeek API配置
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || ''
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'
 
+/**
+ * 法律分析请求接口
+ * @description 定义API请求体的数据结构
+ */
 interface LegalAnalysisRequest {
+  /** 待分析的法律事件信息 */
   event: {
+    /** 事件发生日期 */
     date: string
+    /** 事件标题 */
     title: string
+    /** 事件详细描述 */
     description: string
+    /** 相关当事方（可选） */
     party?: string
   }
+  /** 案件背景上下文（可选） */
   caseContext?: string
 }
 
+/**
+ * 法律分析响应接口
+ * @description 定义API响应数据的结构化格式
+ */
 interface LegalAnalysisResponse {
-  summary: string // 简短摘要（30字以内）
-  legalPoints: string[] // 法学要点
-  legalBasis: string[] // 相关法条
+  /** 简短摘要（30字以内） */
+  summary: string
+  /** 法学要点列表 */
+  legalPoints: string[]
+  /** 相关法条依据 */
+  legalBasis: string[]
+  /** 深度分析结果 */
   analysis: {
+    /** 法律关系认定 */
     legalRelation?: string
+    /** 举证责任分配 */
     burdenOfProof?: string
+    /** 诉讼时效分析 */
     limitation?: string
+    /** 关键法律要点 */
     keyPoint?: string
+    /** 风险评估 */
     riskAssessment?: string
   }
 }
 
-// 基于规则的法律分析（作为后备方案）
+/**
+ * 基于规则引擎的法律分析备选方案
+ * @description 当AI分析失败时，使用关键词匹配和规则库生成基础法律分析
+ * @param event - 待分析的法律事件对象
+ * @returns 规则引擎生成的法律分析结果
+ *
+ * 分析逻辑：
+ * - Step 1: 关键词提取和分类识别
+ * - Step 2: 基于法律知识库的要点匹配
+ * - Step 3: 相关法条自动关联
+ * - Step 4: 分析要素智能推导
+ *
+ * 支持的法律领域：
+ * - 合同法律关系分析
+ * - 违约责任认定
+ * - 证据和举证问题
+ * - 诉讼程序要点
+ */
 function generateRuleBasedAnalysis(event: any): LegalAnalysisResponse {
   const desc = event.description?.toLowerCase() || ''
   const title = event.title?.toLowerCase() || ''
@@ -89,10 +151,51 @@ function generateRuleBasedAnalysis(event: any): LegalAnalysisResponse {
   }
 }
 
+/**
+ * POST /api/legal-analysis - 法律事件智能分析处理器
+ * @description 接收法律事件数据，通过AI和规则引擎进行深度法律分析
+ * @param req - Next.js请求对象，包含事件信息和案件背景
+ * @returns 结构化的法律分析结果
+ *
+ * 请求体格式：
+ * {
+ *   "event": {
+ *     "date": "事件日期",
+ *     "title": "事件标题",
+ *     "description": "详细描述",
+ *     "party": "当事方（可选）"
+ *   },
+ *   "caseContext": "案件背景（可选）"
+ * }
+ *
+ * 响应格式：
+ * {
+ *   "summary": "30字以内摘要",
+ *   "legalPoints": ["法学要点1", "法学要点2"],
+ *   "legalBasis": ["相关法条1", "相关法条2"],
+ *   "analysis": {
+ *     "legalRelation": "法律关系认定",
+ *     "burdenOfProof": "举证责任分配",
+ *     "limitation": "时效问题",
+ *     "keyPoint": "关键法律要点",
+ *     "riskAssessment": "风险评估"
+ *   }
+ * }
+ *
+ * 处理流程：
+ * - Step 1: 请求数据解析和验证
+ * - Step 2: 构建专业法学分析提示词
+ * - Step 3: DeepSeek AI模型分析调用
+ * - Step 4: AI响应的智能JSON解析
+ * - Step 5: 失败时规则引擎备选分析
+ * - Step 6: 统一错误处理和降级策略
+ */
 export async function POST(req: NextRequest) {
   try {
+    // Step 1: 解析请求数据并进行类型检查
     const { event, caseContext } = await req.json() as LegalAnalysisRequest
 
+    // Step 2: 构建专业的法学分析提示词模板
     const prompt = `你是一位专业的法学教授，请分析以下案件事件的法律意义。
 
 案件背景：${caseContext || '民事诉讼案件'}
@@ -117,6 +220,7 @@ export async function POST(req: NextRequest) {
 
 请用专业但易懂的语言回答，返回JSON格式。`
 
+    // Step 3: 调用DeepSeek AI进行专业法律分析
     const response = await fetch(DEEPSEEK_API_URL, {
       method: 'POST',
       headers: {
@@ -141,8 +245,9 @@ export async function POST(req: NextRequest) {
       })
     })
 
+    // Step 4: 检查API响应状态
     if (!response.ok) {
-      // 如果API调用失败，返回基础分析
+      // API调用失败时的降级处理：返回基础分析结果
       return NextResponse.json({
         summary: event.title.substring(0, 30),
         legalPoints: [
@@ -163,8 +268,8 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await response.json()
-    
-    // 安全解析AI返回的内容
+
+    // Step 5: 智能解析AI响应的JSON数据
     let aiAnalysis: LegalAnalysisResponse
     try {
       const content = data.choices[0].message.content
@@ -187,17 +292,19 @@ export async function POST(req: NextRequest) {
       })
       
     } catch (parseError) {
+      // Step 6: JSON解析失败时的错误处理和日志记录
       console.error('Failed to parse AI response:', parseError)
       console.log('Raw AI response:', data.choices[0]?.message?.content)
-      
-      // 返回基于规则的分析
+
+      // 降级到规则引擎分析
       return NextResponse.json(generateRuleBasedAnalysis(event))
     }
 
   } catch (error) {
+    // Step 7: 全局异常处理和错误日志记录
     console.error('Legal analysis error:', error)
-    
-    // 返回默认分析结果
+
+    // 返回默认分析结果作为最终降级保障
     return NextResponse.json({
       summary: '事件概要',
       legalPoints: ['法律关系分析', '证据要求', '程序问题'],

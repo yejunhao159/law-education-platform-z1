@@ -8,8 +8,8 @@ import { EnvironmentConfig } from '@/lib/config/environment';
 import { createLogger } from '@/lib/utils/socratic-logger';
 import { redis } from '@/lib/redis';
 import { checkRateLimit } from '@/lib/middleware/rate-limiter';
-import { CacheManager } from '@/lib/services/cache/manager';
-import { socraticPerformance } from '@/lib/services/socratic-performance';
+import { CacheManager } from '@/src/domains/shared/infrastructure/cache/CacheManager';
+import { defaultPerformanceMonitor } from '@/src/domains/socratic-dialogue/monitoring/PerformanceMonitor';
 import { WebSocketManager } from '@/lib/services/websocket/manager';
 
 const logger = createLogger('health-check');
@@ -409,7 +409,7 @@ export async function GET(request: NextRequest) {
     ];
     
     // 获取性能指标
-    const performanceMetrics = socraticPerformance.getMetrics();
+    const performanceMetrics = defaultPerformanceMonitor.getMetrics();
     
     // 计算整体健康状态
     const { status, issues } = calculateOverallHealth(components);
@@ -424,8 +424,8 @@ export async function GET(request: NextRequest) {
       components,
       metrics: {
         requests: performanceMetrics.totalRequests,
-        errors: performanceMetrics.errorCount,
-        averageResponseTime: performanceMetrics.averageResponseTime,
+        errors: performanceMetrics.failedRequests,
+        averageResponseTime: performanceMetrics.avgResponseTime,
         cacheHitRate: cacheHealth.metadata?.hitRate || 0,
         activeConnections: webSocketHealth.metadata?.activeConnections || 0
       }

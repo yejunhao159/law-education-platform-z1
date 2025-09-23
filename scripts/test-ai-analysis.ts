@@ -3,7 +3,7 @@
  * 测试时间轴AI分析的点击功能集成
  */
 
-import { timelineAnalyzer } from '../lib/ai-timeline-analyzer';
+import { timelineAnalyzer } from '../src/domains/legal-analysis/services/TimelineAnalyzer';
 import { cacheManager } from '../lib/utils/analysis-cache';
 import * as dotenv from 'dotenv';
 

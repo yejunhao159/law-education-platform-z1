@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react';
-import { FileParser } from '@/lib/file-parser';
+import { FileParser } from '@/src/domains/document-processing';
 
 interface FileUploaderProps {
   onFileSelect: (file: File) => Promise<void>;

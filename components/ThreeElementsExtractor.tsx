@@ -1,16 +1,16 @@
 'use client'
 
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
 import { SimpleFileUploader } from '@/components/SimpleFileUploader'
-import { FileParser, type ParseProgress } from '@/lib/file-parser'
+import { FileParser, type ParseProgress } from "@/src/domains/document-processing";
 import { ElementEditor } from '@/components/ElementEditor'
 import { InlineEditor } from '@/components/InlineEditor'
 import { Loader2, FileText, CheckCircle, AlertCircle, Edit, Eye, ArrowRight } from 'lucide-react'
-import { useCurrentCase, useCaseStore } from '@/src/domains/stores'
+import { useCurrentCase, useCaseManagementStore, useTeachingStore } from '@/src/domains/stores'
 import type { LegalCase } from '@/types/legal-case'
 
 interface ExtractedElements {
@@ -212,8 +212,9 @@ export function ThreeElementsExtractor() {
   const [editedData, setEditedData] = useState<ExtractedElements | null>(null)
   const [parseProgress, setParseProgress] = useState<ParseProgress | null>(null)
   
-  // Zustand store hooks
-  const { setCaseData, setCurrentAct } = useCaseStore()
+  // Zustand store hooks - 直接使用原始store避免兼容性问题
+  const setCaseData = useCaseManagementStore((state) => state.setCurrentCase)
+  const setCurrentAct = useTeachingStore((state) => state.setCurrentAct)
 
   const handleFileSelect = useCallback(async (file: File) => {
     setError(null)
@@ -229,7 +230,7 @@ export function ThreeElementsExtractor() {
         // 文件解析占总进度的30%
         setProgress(10 + Math.round(parseProgress.progress * 0.3))
       })
-      
+
       setDocumentText(text)
       setParseProgress(null)
       setProgress(40)
@@ -270,7 +271,7 @@ export function ThreeElementsExtractor() {
     } finally {
       setIsProcessing(false)
     }
-  }, [])
+  }, [setCaseData])
 
 
   const handleEditClick = useCallback(() => {
@@ -374,39 +375,52 @@ export function ThreeElementsExtractor() {
     setProgress(100)
   }, [setCaseData])
 
-  // 内联编辑处理函数
+  // 内联编辑处理函数 - 使用 useCallback 避免无限循环
   const updateBasicInfo = useCallback((field: string, value: string) => {
-    const currentData = editedData || extractedData
-    if (!currentData) return
+    setExtractedData(currentData => {
+      if (!currentData) return null
 
-    const updatedData = {
-      ...currentData,
-      basicInfo: {
-        ...currentData.basicInfo,
-        [field]: value
-      }
-    }
-    setEditedData(updatedData)
-    setExtractedData(updatedData) // 实时更新显示数据
-  }, [editedData, extractedData])
-
-  const updateThreeElements = useCallback((element: 'facts' | 'evidence' | 'reasoning', field: string, value: string) => {
-    const currentData = editedData || extractedData
-    if (!currentData) return
-
-    const updatedData = {
-      ...currentData,
-      threeElements: {
-        ...currentData.threeElements,
-        [element]: {
-          ...currentData.threeElements[element],
+      return {
+        ...currentData,
+        basicInfo: {
+          ...currentData.basicInfo,
           [field]: value
         }
       }
+    })
+  }, [])
+
+  const updateThreeElements = useCallback((element: 'facts' | 'evidence' | 'reasoning', field: string, value: string) => {
+    setExtractedData(currentData => {
+      if (!currentData) return null
+
+      return {
+        ...currentData,
+        threeElements: {
+          ...currentData.threeElements,
+          [element]: {
+            ...currentData.threeElements[element],
+            [field]: value
+          }
+        }
+      }
+    })
+  }, [])
+
+  // 分离的同步函数，避免在setState中调用
+  // 使用 useRef 缓存转换结果，避免无限重新渲染
+  const lastConvertedRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (extractedData) {
+      const dataString = JSON.stringify(extractedData)
+      if (lastConvertedRef.current !== dataString) {
+        lastConvertedRef.current = dataString
+        const legalCase = convertToLegalCase(extractedData)
+        setCaseData(legalCase)
+      }
     }
-    setEditedData(updatedData)
-    setExtractedData(updatedData) // 实时更新显示数据
-  }, [editedData, extractedData])
+  }, [extractedData, setCaseData])
 
   return (
     <div className="space-y-6">
