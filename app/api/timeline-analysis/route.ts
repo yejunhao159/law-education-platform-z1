@@ -75,12 +75,12 @@ async function parseRequest(req: NextRequest) {
       includeAI: body.includeAI !== false, // 默认启用AI
       focusAreas: body.focusAreas || [],
       options: {
+        ...body.options,
         enableRiskAnalysis: body.options?.enableRiskAnalysis !== false,
         enablePredictions: body.options?.enablePredictions !== false,
         enableEvidenceChain: body.options?.enableEvidenceChain !== false,
         maxTurningPoints: body.options?.maxTurningPoints || 5,
-        confidenceThreshold: body.options?.confidenceThreshold || 0.7,
-        ...body.options
+        confidenceThreshold: body.options?.confidenceThreshold || 0.7
       }
     };
   } catch (error) {

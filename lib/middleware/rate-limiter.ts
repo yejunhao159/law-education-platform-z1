@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createLogger } from '../utils/socratic-logger';
+import { createLogger } from '../logging';
 
 const logger = createLogger('rate-limiter');
 

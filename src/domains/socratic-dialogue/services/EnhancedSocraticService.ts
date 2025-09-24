@@ -1,21 +1,20 @@
 /**
  * 增强版苏格拉底对话服务
- * 集成官方DeeChat包进行上下文管理和AI通信
+ * 集成所有模块化组件：UnifiedPromptBuilder + XML结构化 + 双提示词模式
  * DeepPractice Standards Compliant
  */
 
-import { AIChat } from '@deepracticex/ai-chat';
-import { ContextFormatter } from '@deepracticex/context-manager';
-import { SOCRATIC_ROLE_CONFIG } from '../prompts/socratic-role';
+import { DeeChatAIClient, createDeeChatConfig, type DeeChatConfig } from './DeeChatAIClient';
+import { UnifiedPromptBuilder, buildAPICompatiblePrompt } from '../prompts/builders/UnifiedPromptBuilder';
+import { ContextFormatter } from '../utils/LocalContextFormatter';
 import {
   SocraticRequest,
   SocraticResponse,
   SocraticMessage,
   SocraticDifficultyLevel,
   SocraticMode,
-  SocraticDifficulty,
   SocraticErrorCode
-} from '@/lib/types/socratic';
+} from '@/lib/types/socratic/ai-service';
 
 interface EnhancedSocraticConfig {
   apiUrl: string;
@@ -23,97 +22,171 @@ interface EnhancedSocraticConfig {
   model: string;
   temperature: number;
   maxTokens: number;
+  enableXMLStructure: boolean;
+  enableModularPrompts: boolean;
 }
 
 export class EnhancedSocraticService {
   private config: EnhancedSocraticConfig;
-  private contextFormatter = ContextFormatter;
-  private aiChat: AIChat;
+  private aiClient: DeeChatAIClient;
 
   constructor(config?: Partial<EnhancedSocraticConfig>) {
     this.config = {
-      apiUrl: process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1',
+      apiUrl: process.env.NEXT_PUBLIC_DEEPSEEK_API_URL || 'https://api.deepseek.com/v1',
       apiKey: process.env.DEEPSEEK_API_KEY || '',
       model: 'deepseek-chat',
       temperature: 0.7,
-      maxTokens: 500,
+      maxTokens: 1200,
+      enableXMLStructure: true,
+      enableModularPrompts: true,
       ...config
     };
 
-    // 初始化AIChat实例
-    this.aiChat = new AIChat({
-      baseUrl: this.config.apiUrl,
-      model: this.config.model,
+    // 创建DeeChatAIClient实例，配置支持双提示词
+    const deeChatConfig = createDeeChatConfig({
+      provider: 'deepseek',
       apiKey: this.config.apiKey,
+      apiUrl: this.config.apiUrl,
+      model: this.config.model,
       temperature: this.config.temperature,
-      maxTokens: this.config.maxTokens
+      maxContextTokens: 8000,
+      reserveTokens: 200,
+      costThreshold: 0.02,
+      enableCostOptimization: true
     });
+
+    this.aiClient = new DeeChatAIClient(deeChatConfig);
   }
 
   /**
-   * 使用DeeChat context-manager构建苏格拉底对话上下文
+   * 生成苏格拉底式问题 - 使用完整的模块化架构
    */
-  private buildSocraticContext(request: SocraticRequest): string {
-    const roleContent = this.buildRolePrompt(request.level, request.mode);
-    const toolsContent = this.buildToolsContext();
-    const conversationContent = this.buildConversationHistory(request.messages || []);
-    const currentContent = this.buildCurrentContext(request);
+  async generateSocraticQuestion(request: SocraticRequest): Promise<SocraticResponse> {
+    try {
+      // 第1步：使用UnifiedPromptBuilder构建System Prompt
+      const systemPrompt = this.buildSystemPrompt(request);
 
-    return this.contextFormatter.format({
-      role: roleContent,
-      tools: toolsContent,
-      conversation: conversationContent,
-      current: currentContent
-    });
+      // 第2步：使用LocalContextFormatter构建XML结构化的User Prompt
+      const userPrompt = this.buildUserPrompt(request);
+
+      // 第3步：使用修改后的DeeChatAIClient进行双提示词调用
+      const aiResponse = await this.callAIWithDualPrompts(systemPrompt, userPrompt, request);
+
+      return {
+        success: true,
+        data: {
+          question: aiResponse.content,
+          content: aiResponse.content,
+          level: request.level || SocraticDifficultyLevel.INTERMEDIATE,
+          mode: request.mode || SocraticMode.EXPLORATION,
+          timestamp: new Date().toISOString(),
+          sessionId: request.sessionId || 'enhanced-session',
+          metadata: {
+            tokensUsed: aiResponse.tokensUsed,
+            cost: aiResponse.cost,
+            model: aiResponse.model,
+            processingTime: aiResponse.duration
+          }
+        }
+      };
+
+    } catch (error) {
+      console.error('EnhancedSocraticService Error:', error);
+      return {
+        success: false,
+        error: {
+          code: SocraticErrorCode.AI_SERVICE_ERROR,
+          message: '增强苏格拉底对话生成失败: ' + (error instanceof Error ? error.message : '未知错误'),
+          timestamp: new Date().toISOString()
+        }
+      };
+    }
   }
 
   /**
-   * 构建苏格拉底导师角色提示词
-   * 使用统一的角色配置，避免重复定义
+   * 构建System Prompt - 使用UnifiedPromptBuilder的模块化提示词
    */
-  private buildRolePrompt(level: SocraticDifficultyLevel, mode: SocraticMode): string {
-    // 使用统一的角色配置
-    const roleConfig = SOCRATIC_ROLE_CONFIG;
+  private buildSystemPrompt(request: SocraticRequest): string {
+    if (!this.config.enableModularPrompts) {
+      // 简化版系统提示词
+      return `你是一位专业的中国法学苏格拉底导师，使用问题引导学生思考。
+每次只问一个问题，提供3-5个思考选项，保持开放性探索。`;
+    }
 
-    // 动态教学策略
-    const modeDescriptions = {
-      [SocraticMode.EXPLORATION]: '探索模式 - 鼓励学生广泛思考，提出开放性问题，激发好奇心和探索欲',
-      [SocraticMode.ANALYSIS]: '分析模式 - 引导学生深入分析具体法律条文和案例细节，培养细致的分析能力',
-      [SocraticMode.SYNTHESIS]: '综合模式 - 帮助学生整合知识，形成完整的法律理解框架，建立系统性思维',
-      [SocraticMode.EVALUATION]: '评估模式 - 引导学生评价不同观点的优缺点，培养批判性思维和判断能力'
+    // 使用完整的模块化提示词系统
+    const difficulty = this.mapToModernDifficultyLevel(request.level || SocraticDifficultyLevel.INTERMEDIATE);
+    const mode = this.mapToModernTeachingMode(request.mode || SocraticMode.EXPLORATION);
+
+    const builder = new UnifiedPromptBuilder({
+      identity: {
+        level: difficulty,
+        focus: 'mixed'
+      },
+      teaching: {
+        mode: mode,
+        difficulty: difficulty,
+        apiMode: 'response'
+      },
+      protocols: {
+        includeISSUE: true,
+        includeQualityControl: mode === 'evaluation',
+        currentISSUEPhase: 'socratic'
+      },
+      output: {
+        verbosity: 'standard',
+        maxLength: this.config.maxTokens,
+        includeDiagnostics: false,
+        includeExamples: true
+      },
+      context: {
+        topic: request.currentTopic,
+        caseInfo: request.caseContext
+      }
+    });
+
+    return builder.build();
+  }
+
+  /**
+   * 构建User Prompt - 使用LocalContextFormatter的XML结构化
+   */
+  private buildUserPrompt(request: SocraticRequest): string {
+    if (!this.config.enableXMLStructure) {
+      // 简单文本格式
+      return this.buildSimpleContext(request);
+    }
+
+    // 使用XML结构化格式
+    const contextData = {
+      current: this.buildCurrentContext(request),
+      conversation: this.buildConversationHistory(request.messages || []),
+      case: request.caseContext || '无特定案例',
+      topic: request.currentTopic || '法学基础讨论'
     };
 
-    const levelDescriptions = {
-      [SocraticDifficultyLevel.BEGINNER]: '基础水平 - 简单直接，重点关注基本概念和事实认定',
-      [SocraticDifficultyLevel.INTERMEDIATE]: '中等水平 - 适度复杂，涉及多个概念的关联和简单推理',
-      [SocraticDifficultyLevel.ADVANCED]: '高级水平 - 高度复杂，涉及深层次的法理思考和价值判断'
-    };
-
-    return `${roleConfig.baseRole}
-
-## 核心教学原则
-${roleConfig.teachingPrinciples.map((principle, index) => `${index + 1}. ${principle}`).join('\n')}
-
-${roleConfig.methodology}
-
-## 当前教学策略
-${modeDescriptions[mode]}
-
-## 学生水平
-${levelDescriptions[level]}
-
-## 执行要求
-${roleConfig.requirements.map((req, index) => `${index + 1}. ${req}`).join('\n')}
-
-记住：你的目标不是教授知识，而是通过巧妙的问题引导学生自己发现和构建知识。保持苏格拉底的谦逊："我知道我什么都不知道"，与学生一起探索法律的奥秘。`;
+    return ContextFormatter.format(contextData);
   }
 
   /**
-   * 构建工具和资源上下文
-   * 使用统一的工具配置
+   * 调用AI服务 - 支持双提示词模式
    */
-  private buildToolsContext(): string[] {
-    return SOCRATIC_ROLE_CONFIG.availableTools;
+  private async callAIWithDualPrompts(
+    systemPrompt: string,
+    userPrompt: string,
+    request: SocraticRequest
+  ) {
+    // 构造双提示词消息数组
+    const messages = [
+      { role: 'system' as const, content: systemPrompt },
+      { role: 'user' as const, content: userPrompt }
+    ];
+
+    // 使用扩展的DeeChatAIClient方法
+    return await this.aiClient.sendCustomMessage(messages, {
+      temperature: this.config.temperature,
+      maxTokens: this.config.maxTokens,
+      enableCostOptimization: true
+    });
   }
 
   /**
@@ -124,8 +197,7 @@ ${roleConfig.requirements.map((req, index) => `${index + 1}. ${req}`).join('\n')
       return ['这是对话的开始，还没有历史消息。'];
     }
 
-    const recentMessages = messages.slice(-6); // 只保留最近6条消息
-    return recentMessages.map(msg => {
+    return messages.slice(-6).map(msg => {
       const role = msg.role === 'user' ? '学生' : '导师';
       return `${role}: ${msg.content}`;
     });
@@ -150,67 +222,91 @@ ${roleConfig.requirements.map((req, index) => `${index + 1}. ${req}`).join('\n')
       parts.push(`学生的最新回答：${lastMessage.content}`);
     }
 
-    if (request.difficulty) {
-      const difficultyText = {
-        [SocraticDifficulty.EASY]: '简单',
-        [SocraticDifficulty.MEDIUM]: '中等',
-        [SocraticDifficulty.HARD]: '困难'
-      };
-      parts.push(`期望难度：${difficultyText[request.difficulty]}`);
-    }
-
-    return parts.join('\n\n');
+    return parts.join('\n');
   }
 
   /**
-   * 生成苏格拉底式问题
+   * 构建简单上下文（备选方案）
    */
-  async generateSocraticQuestion(request: SocraticRequest): Promise<SocraticResponse> {
-    try {
-      // 使用context-manager构建结构化上下文
-      const contextPrompt = this.buildSocraticContext(request);
+  private buildSimpleContext(request: SocraticRequest): string {
+    let context = '';
 
-      // 使用AIChat进行对话
-      const response = await this.aiChat.chat([
-        {
-          role: 'user',
-          content: contextPrompt
-        }
-      ]);
+    if (request.currentTopic) {
+      context += `当前主题：${request.currentTopic}\n`;
+    }
 
-      const aiResponse = response.choices[0].message.content;
+    if (request.caseContext) {
+      context += `案例信息：${request.caseContext}\n`;
+    }
 
-      return {
-        success: true,
-        data: {
-          question: aiResponse,
-          content: aiResponse,
-          level: request.level || SocraticDifficultyLevel.INTERMEDIATE,
-          mode: request.mode || SocraticMode.EXPLORATION,
-          timestamp: new Date().toISOString(),
-          sessionId: request.sessionId || 'unknown'
-        }
-      };
+    if (request.messages && request.messages.length > 0) {
+      const lastMessage = request.messages[request.messages.length - 1];
+      context += `学生说：${lastMessage.content}\n`;
+    }
 
-    } catch (error) {
-      console.error('Enhanced Socratic Service Error:', error);
+    context += '\n请基于以上信息，提出一个引导性的苏格拉底问题。';
+    return context;
+  }
 
-      return {
-        success: false,
-        error: {
-          code: SocraticErrorCode.AI_SERVICE_ERROR,
-          message: '苏格拉底对话生成失败',
-          timestamp: new Date().toISOString()
-        }
-      };
+  /**
+   * 映射难度级别
+   */
+  private mapToModernDifficultyLevel(level: SocraticDifficultyLevel): 'basic' | 'intermediate' | 'advanced' {
+    switch (level) {
+      case SocraticDifficultyLevel.BEGINNER:
+        return 'basic';
+      case SocraticDifficultyLevel.INTERMEDIATE:
+        return 'intermediate';
+      case SocraticDifficultyLevel.ADVANCED:
+        return 'advanced';
+      default:
+        return 'intermediate';
     }
   }
 
   /**
-   * 流式生成苏格拉底式问题（未来扩展）
+   * 映射教学模式
    */
-  async generateSocraticQuestionStream(request: SocraticRequest): Promise<ReadableStream> {
-    // 为未来的流式实现保留接口
-    throw new Error('流式生成功能将在未来版本中实现');
+  private mapToModernTeachingMode(mode: SocraticMode): 'exploration' | 'analysis' | 'synthesis' | 'evaluation' {
+    switch (mode) {
+      case SocraticMode.EXPLORATION:
+        return 'exploration';
+      case SocraticMode.ANALYSIS:
+        return 'analysis';
+      case SocraticMode.SYNTHESIS:
+        return 'synthesis';
+      case SocraticMode.EVALUATION:
+        return 'evaluation';
+      default:
+        return 'exploration';
+    }
+  }
+
+  /**
+   * 获取服务配置
+   */
+  getConfig(): EnhancedSocraticConfig {
+    return { ...this.config };
+  }
+
+  /**
+   * 更新服务配置
+   */
+  updateConfig(updates: Partial<EnhancedSocraticConfig>): void {
+    this.config = { ...this.config, ...updates };
+  }
+
+  /**
+   * 检查服务可用性
+   */
+  isAvailable(): boolean {
+    return this.aiClient.isAvailable();
+  }
+
+  /**
+   * 获取使用统计
+   */
+  getUsageStats() {
+    return this.aiClient.getUsageStats();
   }
 }

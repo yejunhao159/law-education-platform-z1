@@ -1,18 +1,87 @@
 /**
- * 苏格拉底教学提示词模块
- * 统一导出所有提示词相关的配置和工具函数
+ * 苏格拉底教学提示词模块 - 模块化重构版本
+ * 统一导出所有模块化组件和工具函数
  */
 
+// 核心模块导出
 export {
-  SOCRATIC_ROLE_CONFIG,
+  UNIFIED_SOCRATIC_IDENTITY,
+  getSocraticIdentityPrompt,
+  getAdaptiveSocraticIdentity,
+  type SocraticIdentityConfig
+} from './core/SocraticIdentity';
+
+export {
+  MANDATORY_CONSTRAINTS,
+  EXECUTION_GUIDELINES,
+  PHILOSOPHICAL_PRINCIPLES,
+  getCognitiveConstraintsPrompt,
+  validateQuestionAgainstConstraints,
+  generateConstraintViolationWarning
+} from './core/CognitiveConstraints';
+
+export {
+  ISSUE_COLLABORATION_PRINCIPLES,
+  ADVICE_SOCRATIC_STANDARDS,
+  FIVE_LAYER_PROGRESSION,
+  getTeachingPrinciplesPrompt,
+  recommendNextTeachingStrategy,
+  generateLayerSpecificQuestion,
+  type TeachingPrinciple
+} from './core/TeachingPrinciples';
+
+// 协议模块导出
+export {
+  ISSUE_PROTOCOL_PHASES,
+  ISSUEProtocolExecutor,
+  getISSUEProtocolPrompt,
+  recommendISSUEStrategy,
+  type ISSUEPhase
+} from './protocols/ISSUEProtocol';
+
+export {
   SOCRATIC_QUESTION_TYPES,
-  TEACHING_MODE_STRATEGIES,
+  QUALITY_DIMENSIONS,
+  QuestionQualityAssessor,
+  IntelligentQuestionGenerator,
+  getQuestionQualityProtocolPrompt,
+  quickQualityCheck,
+  type QuestionType
+} from './protocols/QuestionQualityProtocol';
+
+// 策略模块导出
+export {
   DIFFICULTY_STRATEGIES,
-  buildSocraticRolePrompt,
-  getTeachingStrategy,
-  selectQuestionType,
-  generateQuestionTemplate,
-  type SocraticRoleConfig
+  ADAPTIVE_ADJUSTMENT_RULES,
+  DifficultyStrategyExecutor,
+  getDifficultyStrategiesPrompt,
+  quickDifficultyAssessment,
+  type DifficultyLevel
+} from './strategies/DifficultyStrategies';
+
+export {
+  TEACHING_MODE_STRATEGIES,
+  API_MODE_MAPPING,
+  TeachingModeExecutor,
+  getTeachingModeStrategiesPrompt,
+  recommendTeachingMode,
+  type TeachingMode
+} from './strategies/ModeStrategies';
+
+// 构建器模块导出
+export {
+  UnifiedPromptBuilder,
+  buildUnifiedSocraticPrompt,
+  buildAPICompatiblePrompt,
+  buildSocraticRolePrompt, // 兼容性导出
+  type PromptBuildConfiguration
+} from './builders';
+
+// 兼容性导出：保留原有接口
+export {
+  SOCRATIC_QUESTION_TYPES as SOCRATIC_QUESTION_TYPES_LEGACY,
+  TEACHING_MODE_STRATEGIES as TEACHING_MODE_STRATEGIES_LEGACY,
+  DIFFICULTY_STRATEGIES as DIFFICULTY_STRATEGIES_LEGACY
 } from './socratic-role';
 
 // 提示词相关的常量
@@ -23,7 +92,12 @@ export const PROMPT_CONSTANTS = {
   MAX_CONTEXT_LENGTH: 8000
 } as const;
 
-// 提示词类型定义
+// 更新的类型定义
+export type ModernTeachingMode = 'exploration' | 'analysis' | 'synthesis' | 'evaluation';
+export type ModernDifficultyLevel = 'basic' | 'intermediate' | 'advanced';
+export type ModernQuestionType = 'clarification' | 'assumption' | 'evidence' | 'implication';
+
+// 兼容性类型定义
 export type TeachingMode = 'EXPLORATION' | 'ANALYSIS' | 'SYNTHESIS' | 'EVALUATION';
 export type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD';
 export type QuestionType = 'CLARIFICATION' | 'ASSUMPTION' | 'EVIDENCE' | 'IMPLICATION';

@@ -3,7 +3,7 @@
  * 管理WebSocket连接和状态
  */
 
-import { createLogger } from '@/lib/utils/socratic-logger';
+import { createLogger } from '@/lib/logging';
 
 const logger = createLogger('websocket-manager');
 

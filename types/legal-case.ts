@@ -223,15 +223,19 @@ export const LegalCaseSchema = z.object({
   id: z.string().optional(),
   basicInfo: BasicInfoSchema,
   threeElements: ThreeElementsSchema,
-  // 添加timeline字段用于时间轴AI分析组件
-  timeline: z.array(z.object({
+  // 使用统一的TimelineEventSchema，支持可选的扩展字段
+  timeline: z.array(TimelineEventSchema.extend({
     id: z.number().optional(),
-    date: z.string(),
-    title: z.string(),
+    title: z.string().optional(), // 作为event的别名
     description: z.string().optional(),
-    type: z.string().optional(),
-    importance: z.string().optional()
-  })).optional(),
+    type: z.string().optional()
+  }).transform(item => ({
+    ...item,
+    // 确保event字段存在，如果没有则使用title
+    event: item.event || item.title || '',
+    // 确保title字段存在，如果没有则使用event
+    title: item.title || item.event || ''
+  }))).optional(),
   metadata: MetadataSchema,
   originalText: z.string().optional(),
   attachments: z.array(z.object({

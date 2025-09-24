@@ -5,7 +5,7 @@
 
 import { StructuredLogger, LogContext, LogLevel } from './structured-logger';
 import { EventEmitter } from 'events';
-import { createLogger } from '../utils/socratic-logger';
+import { createLogger } from '../logging';
 
 const logger = createLogger('log-aggregator');
 

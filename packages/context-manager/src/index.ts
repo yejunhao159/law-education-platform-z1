@@ -3,7 +3,7 @@
  */
 
 // 核心功能
-export * from "./core/index.js";
+export * from "./core/index";
 
 // 模板系统
-export * from "./templates/index.js";
+export * from "./templates/index";

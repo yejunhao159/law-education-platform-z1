@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+// 移除复杂的标签页系统
 import ArgumentTree, { ArgumentNode } from './ArgumentTree';
 import { 
   Send, 
@@ -47,12 +47,8 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
   // 当前输入
   const [currentInput, setCurrentInput] = useState('');
   
-  // 教学模式
-  const [teachingMode, setTeachingMode] = useState<'guided' | 'free' | 'evaluation'>('guided');
-  
-  // 会话状态
+  // 简化后的会话状态 - 移除复杂的模式和难度选择
   const [isActive, setIsActive] = useState(false);
-  const [currentLevel, setCurrentLevel] = useState<'basic' | 'intermediate' | 'advanced'>('basic');
   
   // AI建议的问题
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([
@@ -107,7 +103,6 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
         },
         body: JSON.stringify({
           question: content,
-          level: currentLevel,
           context: {
             caseTitle: caseData.title,
             facts: caseData.facts,
@@ -117,8 +112,7 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
               role: m.role,
               content: m.content
             }))
-          },
-          mode: 'response'
+          }
         })
       });
 
@@ -151,7 +145,7 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
       } else {
         // 如果API调用失败，使用备用响应
         console.error('API调用失败:', result.error);
-        const fallbackResponse = generateAIResponse(content, currentLevel);
+        const fallbackResponse = generateAIResponse(content);
         const aiMessage = {
           id: `msg-${Date.now() + 1}`,
           role: 'ai' as const,
@@ -165,7 +159,7 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
     } catch (error) {
       console.error('调用API时出错:', error);
       // 使用备用响应
-      const fallbackResponse = generateAIResponse(content, currentLevel);
+      const fallbackResponse = generateAIResponse(content);
       const aiMessage = {
         id: `msg-${Date.now() + 1}`,
         role: 'ai' as const,
@@ -179,35 +173,16 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
   };
 
   // 生成AI响应（简化版）
-  const generateAIResponse = (question: string, level: string) => {
-    const responses = {
-      basic: {
-        answer: "根据案件事实，这里需要考虑合同法的相关规定。建议引导学生关注合同的成立要件和违约责任。",
-        followUpQuestions: [
-          "合同的成立需要哪些要件？",
-          "本案中这些要件是否都满足？",
-          "违约责任如何认定？"
-        ]
-      },
-      intermediate: {
-        answer: "这个问题涉及到要件分析。建议让学生逐一对照法条要件，分析每个要件在本案中的体现。",
-        followUpQuestions: [
-          "每个法条要件如何对应案件事实？",
-          "是否存在要件缺失的情况？",
-          "对方可能如何反驳？"
-        ]
-      },
-      advanced: {
-        answer: "这需要进行深层次的法律推理。可以引导学生考虑不同的解释方法和价值判断。",
-        followUpQuestions: [
-          "不同的解释方法会得出什么结论？",
-          "如何平衡各方利益？",
-          "判决的社会效果如何？"
-        ]
-      }
+  // 简化后的AI响应生成 - 移除难度级别
+  const generateAIResponse = (question: string) => {
+    return {
+      answer: "这个问题需要结合案件事实进行法律分析。建议引导学生从法条要件、案件事实和法律推理等角度深入思考。",
+      followUpQuestions: [
+        "案件的关键法律问题是什么？",
+        "相关法条如何适用到本案？",
+        "学生的分析还需要补充哪些方面？"
+      ]
     };
-
-    return responses[level as keyof typeof responses] || responses.basic;
   };
 
   // 使用建议问题
@@ -238,15 +213,13 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
           },
           body: JSON.stringify({
             question: '请为这个案件生成初始的引导性问题',
-            level: currentLevel,
             context: {
               caseTitle: caseData.title,
               facts: caseData.facts,
               laws: caseData.laws,
               dispute: caseData.dispute,
               previousMessages: []
-            },
-            mode: 'suggestions'
+            }
           })
         });
 
@@ -285,7 +258,6 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
     setMessages([]);
     setArgumentNodes([]);
     setIsActive(false);
-    setCurrentLevel('basic');
   };
 
   // 导出对话记录
@@ -314,17 +286,6 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
         </div>
         
         <div className="flex items-center gap-3">
-          {/* 难度选择 */}
-          <select
-            value={currentLevel}
-            onChange={(e) => setCurrentLevel(e.target.value as any)}
-            className="px-3 py-2 border rounded-lg"
-          >
-            <option value="basic">基础</option>
-            <option value="intermediate">进阶</option>
-            <option value="advanced">高级</option>
-          </select>
-
           {/* 控制按钮 */}
           <Button
             onClick={toggleSession}
@@ -349,14 +310,7 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 左侧：对话区域 */}
         <Card className="p-4">
-          <Tabs value={teachingMode} onValueChange={(v) => setTeachingMode(v as any)}>
-            <TabsList className="mb-4">
-              <TabsTrigger value="guided">引导模式</TabsTrigger>
-              <TabsTrigger value="free">自由模式</TabsTrigger>
-              <TabsTrigger value="evaluation">评估模式</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value={teachingMode} className="space-y-4">
+          <div className="space-y-4">
               {/* 消息列表 */}
               <div className="h-[400px] overflow-y-auto border rounded-lg p-4 space-y-3">
                 {messages.map((msg) => (
@@ -449,8 +403,7 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
                   <Send className="w-4 h-4" />
                 </Button>
               </div>
-            </TabsContent>
-          </Tabs>
+          </div>
         </Card>
 
         {/* 右侧：论证树 */}

@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { EnvironmentConfig } from '@/lib/config/environment';
-import { createLogger } from '@/lib/utils/socratic-logger';
+import { createLogger } from '@/lib/logging';
 import { redis } from '@/lib/redis';
 import { checkRateLimit } from '@/lib/middleware/rate-limiter';
 import { CacheManager } from '@/src/domains/shared/infrastructure/cache/CacheManager';

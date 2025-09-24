@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import { createLogger } from '../utils/socratic-logger';
+import { createLogger } from '../logging';
 
 const logger = createLogger('environment');
 

@@ -20,18 +20,24 @@ interface StorageItem<T> {
 class OptimizedStorage {
   private cache = new Map<string, any>()
   private pendingSaves = new Map<string, any>()
-  
+  private isClient = typeof window !== 'undefined'
+
   /**
    * 带版本控制的读取
    */
   get<T>(key: string, defaultValue?: T): T | undefined {
     const fullKey = STORAGE_PREFIX + key
-    
+
     // 先检查缓存
     if (this.cache.has(fullKey)) {
       return this.cache.get(fullKey)
     }
-    
+
+    // SSR安全检查
+    if (!this.isClient) {
+      return defaultValue
+    }
+
     try {
       const item = localStorage.getItem(fullKey)
       if (!item) return defaultValue
@@ -64,15 +70,20 @@ class OptimizedStorage {
       timestamp: Date.now(),
       data
     }
-    
+
+    // SSR安全检查
+    if (!this.isClient) {
+      return
+    }
+
     try {
       const serialized = JSON.stringify(item)
-      
+
       // 检查大小限制（5MB警告）
       if (serialized.length > 5 * 1024 * 1024) {
         console.warn(`Storage item ${key} is large (${(serialized.length / 1024 / 1024).toFixed(2)}MB)`)
       }
-      
+
       localStorage.setItem(fullKey, serialized)
       this.cache.set(fullKey, data)
       
@@ -82,7 +93,9 @@ class OptimizedStorage {
         this.cleanup()
         // 重试一次
         try {
-          localStorage.setItem(fullKey, JSON.stringify(item))
+          if (this.isClient) {
+            localStorage.setItem(fullKey, JSON.stringify(item))
+          }
         } catch {
           console.error('Failed to save after cleanup')
         }
@@ -109,7 +122,12 @@ class OptimizedStorage {
       timestamp: Date.now(),
       data
     }
-    
+
+    // SSR安全检查
+    if (!this.isClient) {
+      return
+    }
+
     try {
       localStorage.setItem(fullKey, JSON.stringify(item))
       this.cache.set(fullKey, data)
@@ -123,7 +141,12 @@ class OptimizedStorage {
    */
   remove(key: string): void {
     const fullKey = STORAGE_PREFIX + key
-    localStorage.removeItem(fullKey)
+
+    // SSR安全检查
+    if (this.isClient) {
+      localStorage.removeItem(fullKey)
+    }
+
     this.cache.delete(fullKey)
   }
   
@@ -131,19 +154,24 @@ class OptimizedStorage {
    * 清理过期数据
    */
   cleanup(maxAge: number = 30 * 24 * 60 * 60 * 1000): void { // 默认30天
+    // SSR安全检查
+    if (!this.isClient) {
+      return
+    }
+
     const now = Date.now()
     const keysToRemove: string[] = []
-    
+
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
       if (!key?.startsWith(STORAGE_PREFIX)) continue
-      
+
       try {
         const item = localStorage.getItem(key)
         if (!item) continue
-        
+
         const parsed: StorageItem<any> = JSON.parse(item)
-        
+
         // 删除过期数据或版本不匹配的数据
         if (now - parsed.timestamp > maxAge || parsed.version !== STORAGE_VERSION) {
           keysToRemove.push(key)
@@ -166,15 +194,20 @@ class OptimizedStorage {
    * 获取存储使用情况
    */
   getUsage(): { used: number; items: number; largestKey?: string } {
+    // SSR安全检查
+    if (!this.isClient) {
+      return { used: 0, items: 0 }
+    }
+
     let totalSize = 0
     let itemCount = 0
     let largestKey = ''
     let largestSize = 0
-    
+
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
       if (!key?.startsWith(STORAGE_PREFIX)) continue
-      
+
       const item = localStorage.getItem(key)
       if (!item) continue
       

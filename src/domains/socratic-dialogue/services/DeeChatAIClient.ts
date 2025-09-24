@@ -5,13 +5,27 @@
  */
 
 import { AIChat } from '@deepracticex/ai-chat';
-import { countTokens, getCostCalculator } from '@deepracticex/token-calculator';
+import { countTokens, CostCalculator, TokenCalculator } from '@deepracticex/token-calculator';
 import { ContextFormatter } from '@deepracticex/context-manager';
-import {
-  SocraticMessage,
-  SocraticRequest,
-  SocraticErrorCode
-} from '@/lib/types/socratic';
+// import {
+//   SocraticMessage,
+//   SocraticRequest,
+//   SocraticErrorCode
+// } from '@/lib/types/socratic/ai-service';
+
+// 临时类型定义，解决导入问题
+type SocraticMessage = {
+  role: string;
+  content: string;
+  timestamp?: string;
+};
+
+type SocraticRequest = {
+  messages?: SocraticMessage[];
+  level?: string;
+  mode?: string;
+  currentTopic?: string;
+};
 
 export interface DeeChatConfig {
   // AI提供商配置
@@ -49,7 +63,7 @@ interface AIResponse {
 }
 
 interface StreamingResponse {
-  stream: ReadableStream;
+  stream: AsyncIterable<any>;
   metadata: {
     estimatedTokens: number;
     estimatedCost: number;
@@ -137,7 +151,8 @@ export class DeeChatAIClient {
     withinBudget: boolean;
   }> {
     try {
-      const costCalculator = getCostCalculator();
+      const tokenCalculator = new TokenCalculator();
+      const costCalculator = new CostCalculator(tokenCalculator);
       const tokenUsage = {
         inputTokens,
         outputTokens,
@@ -197,13 +212,13 @@ export class DeeChatAIClient {
       ];
 
       // 发送请求
-      const response = await this.aiChat.sendMessage(messages, {
+      const response = await this.aiChat.sendMessageComplete(messages, {
         temperature: this.config.temperature,
-        max_tokens: tokenInfo.maxOutputTokens
+        maxTokens: tokenInfo.maxOutputTokens
       });
 
       // 计算实际使用的token和成本
-      const outputTokens = countTokens(response.content, this.config.provider, this.config.model);
+      const outputTokens = countTokens(response.message.content, this.config.provider, this.config.model);
       const actualCost = await this.estimateRequestCost(tokenInfo.inputTokens, outputTokens);
 
       // 更新统计
@@ -213,7 +228,7 @@ export class DeeChatAIClient {
       const duration = Date.now() - startTime;
 
       return {
-        content: response.content,
+        content: response.message.content,
         tokensUsed: {
           input: tokenInfo.inputTokens,
           output: outputTokens,
@@ -264,9 +279,9 @@ export class DeeChatAIClient {
       ];
 
       // 发送流式请求
-      const stream = await this.aiChat.sendMessageStream(messages, {
+      const stream = this.aiChat.sendMessage(messages, {
         temperature: this.config.temperature,
-        max_tokens: tokenInfo.maxOutputTokens
+        maxTokens: tokenInfo.maxOutputTokens
       });
 
       return {
@@ -325,6 +340,133 @@ export class DeeChatAIClient {
       model: this.config.model,
       apiKey: this.config.apiKey
     });
+  }
+
+  /**
+   * 发送自定义消息 - 支持双提示词模式 (System + User)
+   * 为EnhancedSocraticService的模块化架构提供支持
+   */
+  async sendCustomMessage(
+    messages: Array<{ role: 'system' | 'user' | 'assistant', content: string }>,
+    options?: {
+      temperature?: number;
+      maxTokens?: number;
+      enableCostOptimization?: boolean;
+    }
+  ): Promise<AIResponse> {
+    const startTime = Date.now();
+
+    try {
+      // 合并配置选项
+      const finalOptions = {
+        temperature: options?.temperature || this.config.temperature,
+        maxTokens: options?.maxTokens || 1000,
+        enableCostOptimization: options?.enableCostOptimization ?? this.config.enableCostOptimization
+      };
+
+      // 计算输入token数（合并所有消息内容）
+      const combinedContent = messages.map(m => m.content).join('\n');
+      const inputTokens = countTokens(combinedContent, this.config.provider, this.config.model);
+
+      // 成本检查
+      if (finalOptions.enableCostOptimization) {
+        const costEstimate = await this.estimateRequestCost(
+          inputTokens,
+          finalOptions.maxTokens
+        );
+
+        if (!costEstimate.withinBudget) {
+          throw new Error(`预估成本 $${costEstimate.totalCost.toFixed(4)} 超出阈值 $${this.config.costThreshold}`);
+        }
+      }
+
+      // 发送请求到AI服务
+      const response = await this.aiChat.sendMessageComplete(messages, {
+        temperature: finalOptions.temperature,
+        maxTokens: finalOptions.maxTokens
+      });
+
+      // 计算实际使用的token和成本
+      const outputTokens = countTokens(response.message.content, this.config.provider, this.config.model);
+      const actualCost = await this.estimateRequestCost(inputTokens, outputTokens);
+
+      // 更新统计
+      this.requestCount++;
+      this.totalCost += actualCost.totalCost;
+
+      const duration = Date.now() - startTime;
+
+      return {
+        content: response.message.content,
+        tokensUsed: {
+          input: inputTokens,
+          output: outputTokens,
+          total: inputTokens + outputTokens
+        },
+        cost: {
+          input: actualCost.inputCost,
+          output: actualCost.outputCost,
+          total: actualCost.totalCost
+        },
+        model: this.config.model,
+        provider: this.config.provider,
+        duration
+      };
+
+    } catch (error) {
+      console.error('DeeChat自定义消息调用失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 发送流式自定义消息 - 支持双提示词模式的流式响应
+   */
+  async sendCustomMessageStream(
+    messages: Array<{ role: 'system' | 'user' | 'assistant', content: string }>,
+    options?: {
+      temperature?: number;
+      maxTokens?: number;
+      enableCostOptimization?: boolean;
+    }
+  ): Promise<StreamingResponse> {
+    try {
+      // 合并配置选项
+      const finalOptions = {
+        temperature: options?.temperature || this.config.temperature,
+        maxTokens: options?.maxTokens || 1000,
+        enableCostOptimization: options?.enableCostOptimization ?? this.config.enableCostOptimization
+      };
+
+      // 计算输入token数和成本预估
+      const combinedContent = messages.map(m => m.content).join('\n');
+      const inputTokens = countTokens(combinedContent, this.config.provider, this.config.model);
+      const costEstimate = await this.estimateRequestCost(inputTokens, finalOptions.maxTokens);
+
+      if (finalOptions.enableCostOptimization && !costEstimate.withinBudget) {
+        throw new Error(`预估成本超出预算`);
+      }
+
+      // 发送流式请求
+      const stream = this.aiChat.sendMessage(messages, {
+        temperature: finalOptions.temperature,
+        maxTokens: finalOptions.maxTokens
+      });
+
+      return {
+        stream,
+        metadata: {
+          estimatedTokens: inputTokens + finalOptions.maxTokens,
+          estimatedCost: costEstimate.totalCost,
+          model: this.config.model,
+          provider: this.config.provider
+        }
+      };
+
+    } catch (error) {
+      console.error('DeeChat自定义流式调用失败:', error);
+      throw error;
+    }
   }
 }
 

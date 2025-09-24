@@ -2,10 +2,10 @@
  * 标准四层模板 - 基于现有 formatters 架构的标准模板
  */
 
-import type { ContextData, AIMessage } from "../../core/CoreTypes.js";
-import type { ContextTemplate } from "../types.js";
-import type { StandardInput } from './types.js';
-import { formatRole, formatTools, formatConversation, formatCurrent } from "./formatters/index.js";
+import type { ContextData, AIMessage } from "../../core/CoreTypes";
+import type { ContextTemplate } from "../types";
+import type { StandardInput } from './types';
+import { formatRole, formatTools, formatConversation, formatCurrent } from "./formatters/index";
 
 export type { StandardInput };
 

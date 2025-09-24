@@ -130,18 +130,32 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
           })
         }).then(res => res.ok ? res.json() : Promise.reject(new Error(`Claim analysis failed: ${res.status}`))),
 
-        // 4. 证据质量评估
+        // 4. 证据质量评估 - AI增强版
         fetch('/api/evidence-quality', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            evidence: timelineEvents.filter(e => e.evidence && e.evidence.length > 0),
+            evidence: timelineEvents.filter(e => e.evidence && e.evidence.length > 0).map(e => ({
+              id: e.id || e.date,
+              content: e.description || e.title,
+              type: e.type || 'document'
+            })),
             claimElements: timelineEvents.map(e => ({
               id: e.id || e.date,
-              type: e.type || 'fact',
-              description: e.description || e.title
+              name: e.title,
+              description: e.description || e.title,
+              type: e.type || 'fact'
             })),
-            mode: 'auto'
+            mode: 'comprehensive', // 使用AI增强的综合分析模式
+            caseContext: {
+              basicInfo: {
+                caseNumber: caseData.basicInfo?.caseNumber,
+                caseType: caseData.basicInfo?.caseType || 'civil',
+                court: caseData.basicInfo?.court
+              },
+              disputes: caseData.threeElements?.disputes || [],
+              timeline: timelineEvents
+            }
           })
         }).then(res => res.ok ? res.json() : Promise.reject(new Error(`Evidence analysis failed: ${res.status}`)))
       ])
@@ -182,12 +196,40 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
         }
       }
 
-      // 处理证据分析结果
+      // 处理证据分析结果 - 适配AI增强版响应结构
       if (evidenceResult.status === 'fulfilled' && evidenceResult.value.success) {
-        setEvidenceAnalysis(evidenceResult.value)
-        console.log('✅ 证据分析完成')
+        const enhancedEvidence = evidenceResult.value;
+
+        // 转换为兼容原有显示逻辑的格式
+        const adaptedEvidenceAnalysis = {
+          success: true,
+          mode: enhancedEvidence.mode,
+          // 保持向下兼容的mappings字段
+          mappings: enhancedEvidence.basicMappings || enhancedEvidence.mappings || [],
+          // AI增强的字段
+          qualityAssessments: enhancedEvidence.qualityAssessments || [],
+          chainAnalyses: enhancedEvidence.chainAnalyses || [],
+          summary: enhancedEvidence.summary || {},
+          // 传统字段
+          analysis: enhancedEvidence.analysis,
+          unmappedElements: enhancedEvidence.unmappedElements || [],
+          conflicts: enhancedEvidence.conflicts || []
+        };
+
+        setEvidenceAnalysis(adaptedEvidenceAnalysis);
+        console.log('✅ AI增强证据分析完成', {
+          mode: enhancedEvidence.mode,
+          qualityCount: enhancedEvidence.qualityAssessments?.length || 0,
+          chainCount: enhancedEvidence.chainAnalyses?.length || 0
+        });
       } else {
-        console.warn('⚠️ 证据分析失败:', evidenceResult.status === 'rejected' ? evidenceResult.reason.message : '未知错误')
+        const errorMsg = evidenceResult.status === 'rejected'
+          ? (evidenceResult.reason?.message || evidenceResult.reason?.toString() || 'AI证据分析服务异常')
+          : (evidenceResult.value?.error || 'AI证据分析返回格式异常');
+        console.warn('⚠️ AI证据分析失败:', errorMsg);
+        if (!analysisError) {
+          setAnalysisError(`证据分析失败: ${errorMsg}`);
+        }
       }
 
       setAnalysisProgress('✅ 综合智能分析完成!')
@@ -541,12 +583,31 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
           </div>
         </div>
 
-        {/* 证据学习问答组件 */}
+        {/* 证据学习问答组件 - 基于真实时间轴证据 */}
         <EvidenceQuizSection
+          evidences={caseData?.threeElements?.facts?.timeline
+            ?.filter(event => event.evidence && event.evidence.length > 0)
+            ?.map(event => ({
+              id: event.id || event.date,
+              title: event.title,
+              description: event.description || event.title,
+              type: event.type || 'document',
+              content: event.description || '',
+              relevance: 1.0, // 默认相关性，将由AI分析确定
+              source: 'timeline-event',
+              date: event.date
+            })) || []
+          }
           autoGenerate={true}
           maxQuizzes={5}
           onSessionComplete={(session) => {
-            console.log('Evidence quiz session completed:', session);
+            console.log('AI证据学习问答会话完成:', {
+              sessionId: session.id,
+              score: session.score,
+              totalQuestions: session.quizzes.length,
+              accuracy: session.score / session.totalPossibleScore,
+              aiGeneratedCount: session.quizzes.filter(q => q.metadata?.source === 'ai-generated').length
+            });
           }}
           onAnswerSubmit={(quizId, answer) => {
             console.log('Answer submitted:', { quizId, answer });

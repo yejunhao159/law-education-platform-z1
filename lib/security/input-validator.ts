@@ -4,7 +4,7 @@
  * @author 法律教育平台团队
  */
 
-import { createLogger } from '../utils/socratic-logger'
+import { createLogger } from '../logging'
 
 const logger = createLogger('security')
 

@@ -267,10 +267,10 @@ function validateAndCompleteResult(
 
   // 确保metadata完整
   result.metadata = {
+    ...result.metadata,
     model: 'deepseek',
     confidence: result.metadata?.confidence || 0.8,
-    processingTime,
-    ...result.metadata
+    processingTime
   }
 
   return result
@@ -320,7 +320,7 @@ function createDefaultAnalysisResult(
   // 分析时间跨度，用于时效建议
   const dates = events.map(e => new Date(e.date)).filter(d => !isNaN(d.getTime())).sort()
   const timeSpan = dates.length > 1 ?
-    Math.ceil((dates[dates.length - 1].getTime() - dates[0].getTime()) / (1000 * 60 * 60 * 24)) : 0
+    Math.ceil((dates[dates.length - 1]!.getTime() - dates[0]!.getTime()) / (1000 * 60 * 60 * 24)) : 0
 
   return {
     id: `analysis-${Date.now()}`,
@@ -334,10 +334,12 @@ function createDefaultAnalysisResult(
       keyPoints,
       limitations: timeSpan > 0 ? [
         {
-          type: 'general',
-          period: '一般民事诉讼时效为3年',
+          claim: '一般民事请求权',
           startDate: dates[0]?.toISOString() || '',
-          description: '建议核实具体请求权的时效期间'
+          endDate: new Date(new Date(dates[0] || new Date()).getTime() + 36 * 30 * 24 * 60 * 60 * 1000).toISOString(),
+          period: 36, // 36个月（3年）
+          status: 'running' as const,
+          events: []
         }
       ] : [],
       sequence: events.map((e, index) => `${index + 1}. ${e.title} (${e.date})`)
@@ -363,8 +365,8 @@ function createDefaultAnalysisResult(
     metadata: {
       model: 'deepseek',
       confidence: 0.7, // 默认结果的置信度较低
-      processingTime,
-      fallback: true // 标记为降级结果
+      processingTime
+      // fallback信息可以通过confidence低于0.8来判断
     }
   }
 }

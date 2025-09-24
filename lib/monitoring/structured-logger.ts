@@ -3,7 +3,7 @@
  * 提供生产环境的JSON格式日志和高级日志功能
  */
 
-import { createLogger as createBaseLogger, LogLevel } from '../utils/socratic-logger';
+import { LogLevel } from '../types/socratic';
 import { defaultPerformanceMonitor } from '../../src/domains/socratic-dialogue/monitoring/PerformanceMonitor';
 
 export interface LogContext {
@@ -47,13 +47,12 @@ export interface LoggerConfig {
 }
 
 export class StructuredLogger {
-  private baseLogger: ReturnType<typeof createBaseLogger>;
   private config: Required<LoggerConfig>;
   private correlationMap = new Map<string, string>();
   private performanceMap = new Map<string, number>();
   private buffer: LogContext[] = [];
   private readonly maxBufferSize = 1000;
-  
+
   constructor(config: LoggerConfig) {
     this.config = {
       level: LogLevel.INFO,
@@ -69,8 +68,6 @@ export class StructuredLogger {
       redactFields: ['password', 'token', 'apiKey', 'secret'],
       ...config
     };
-    
-    this.baseLogger = createBaseLogger({ module: config.module });
   }
 
   /**

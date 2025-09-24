@@ -332,7 +332,7 @@ function handleError(error: unknown): NextResponse {
   return NextResponse.json({
     success: false,
     error: {
-      message: '服务器内部错误',
+      message: message,
       code: ClassroomErrorCode.INTERNAL_ERROR
     }
   }, { status: 500 });

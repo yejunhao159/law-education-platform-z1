@@ -4,7 +4,14 @@
  * DeepPractice Standards Compliant
  */
 
-import { DeeChatConfig } from '../services/DeeChatAIClient';
+// 移除对已删除的DeeChatAIClient的依赖
+export interface DeeChatConfig {
+  apiKey: string;
+  model: string;
+  temperature: number;
+  maxTokens: number;
+  baseUrl?: string;
+}
 
 export interface AIProviderConfig {
   provider: 'deepseek' | 'openai' | 'claude';

@@ -19,7 +19,11 @@ import { Badge } from '@/components/ui/badge'
 import { StoryView } from './StoryView'
 import { useCurrentCase, useStoryMode } from '@/src/domains/stores'
 import { useTeachingStore } from '@/src/domains/teaching-acts/stores/useTeachingStore'
-import { BookOpen, FileText, ToggleLeft, ToggleRight, Clock } from 'lucide-react'
+import { BookOpen, FileText, ToggleLeft, ToggleRight, Clock, Sparkles, Loader2 } from 'lucide-react'
+import { caseNarrativeService, type StoryChapter } from '@/src/domains/legal-analysis/services/CaseNarrativeService'
+import { createLogger } from '@/lib/logging'
+
+const logger = createLogger('CaseOverview');
 
 export function CaseOverview() {
   // 直接使用领域 store，避免兼容性层
@@ -34,42 +38,69 @@ export function CaseOverview() {
   // 本地状态控制，完全避免 store 方法的循环依赖
   const [hasInitializedStory, setHasInitializedStory] = useState(false)
   const [isGeneratingStory, setIsGeneratingStory] = useState(false)
+  const [aiGenerationError, setAIGenerationError] = useState<string | null>(null)
 
-  // 稳定的生成故事章节函数
+  // 🚀 真正的AI智能故事生成函数
   const generateStoryChapters = useCallback(async () => {
     if (!caseData || isGeneratingStory) return
 
     setIsGeneratingStory(true)
-    try {
-      // 基于案例数据生成故事章节
-      const mockChapters = [
-        {
-          id: 'chapter-1',
-          title: '案件起源',
-          content: `${caseData.basicInfo?.caseNumber || '本案'} 的故事开始于...`,
-          icon: '📋',
-          color: 'blue'
-        },
-        {
-          id: 'chapter-2',
-          title: '争议焦点',
-          content: '案件的核心争议在于...',
-          icon: '⚖️',
-          color: 'orange'
-        },
-        {
-          id: 'chapter-3',
-          title: '法院审理',
-          content: `${caseData.basicInfo?.court || '法院'} 经过审理认为...`,
-          icon: '🏛️',
-          color: 'green'
-        }
-      ]
+    setAIGenerationError(null)
 
-      // 直接调用 store 的 setStoryChapters 方法
-      useTeachingStore.getState().setStoryChapters(mockChapters)
+    try {
+      logger.info('开始AI智能故事生成', {
+        caseNumber: caseData.basicInfo?.caseNumber,
+        timelineLength: caseData.threeElements?.facts?.timeline?.length || 0
+      });
+
+      // 🎯 调用真实的AI智能叙事服务
+      const intelligentChapters = await caseNarrativeService.generateStoryChapters(caseData);
+
+      logger.info('AI故事生成成功', {
+        chaptersCount: intelligentChapters.length,
+        titles: intelligentChapters.map(ch => ch.title)
+      });
+
+      // 转换为store期望的格式
+      const formattedChapters = intelligentChapters.map(chapter => ({
+        id: chapter.id,
+        title: chapter.title,
+        content: chapter.content,
+        icon: chapter.icon,
+        color: chapter.color,
+        // 🆕 新增AI增强字段
+        legalSignificance: chapter.legalSignificance,
+        keyParties: chapter.keyParties,
+        disputeElements: chapter.disputeElements
+      }));
+
+      // 存储到store
+      useTeachingStore.getState().setStoryChapters(formattedChapters);
+
     } catch (error) {
-      console.warn('生成故事章节失败:', error)
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      logger.error('AI故事生成失败', { error: errorMessage });
+      setAIGenerationError(errorMessage);
+
+      // 提供备选方案：基础故事结构
+      const fallbackChapters = [
+        {
+          id: 'chapter-fallback-1',
+          title: '案件基本情况',
+          content: `${caseData.basicInfo?.caseNumber || '本案'} 涉及 ${caseData.threeElements?.facts?.parties?.join('、') || '相关当事人'} 之间的法律纠纷。`,
+          icon: '📋',
+          color: 'blue' as const
+        },
+        {
+          id: 'chapter-fallback-2',
+          title: '争议与分歧',
+          content: '双方当事人在事实认定和法律适用方面存在分歧，需要通过法律程序解决。',
+          icon: '⚖️',
+          color: 'orange' as const
+        }
+      ];
+
+      useTeachingStore.getState().setStoryChapters(fallbackChapters);
     } finally {
       setIsGeneratingStory(false)
     }
@@ -130,27 +161,59 @@ export function CaseOverview() {
                   : '以结构化数据呈现，便于快速查看关键信息'}
               </CardDescription>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={toggleStoryMode}
-              className="flex items-center gap-2"
-            >
-              {storyMode ? (
-                <>
-                  <ToggleRight className="w-4 h-4" />
-                  故事模式
-                </>
-              ) : (
-                <>
-                  <ToggleLeft className="w-4 h-4" />
-                  数据模式
-                </>
+            <div className="flex items-center gap-2">
+              {/* AI生成状态指示 */}
+              {isGeneratingStory && (
+                <div className="flex items-center gap-2 text-sm text-blue-600 mr-3">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>AI生成中...</span>
+                </div>
               )}
-            </Button>
+
+              {/* AI增强标识 */}
+              {storyMode && storyChapters.length > 0 && !isGeneratingStory && (
+                <div className="flex items-center gap-1 text-xs text-green-600 mr-3 px-2 py-1 bg-green-50 rounded">
+                  <Sparkles className="w-3 h-3" />
+                  <span>AI增强</span>
+                </div>
+              )}
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={toggleStoryMode}
+                className="flex items-center gap-2"
+                disabled={isGeneratingStory}
+              >
+                {storyMode ? (
+                  <>
+                    <ToggleRight className="w-4 h-4" />
+                    故事模式
+                  </>
+                ) : (
+                  <>
+                    <ToggleLeft className="w-4 h-4" />
+                    数据模式
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
+          {/* AI生成错误提示 */}
+          {aiGenerationError && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-center gap-2 text-amber-700">
+                <Clock className="w-4 h-4" />
+                <span className="text-sm font-medium">AI生成遇到问题</span>
+              </div>
+              <p className="text-xs text-amber-600 mt-1">
+                {aiGenerationError}，已切换到基础模式
+              </p>
+            </div>
+          )}
+
           {/* 案件基本信息 */}
           <div className="flex items-center gap-2 mb-4">
             <Badge variant="outline">

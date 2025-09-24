@@ -474,57 +474,241 @@ export function EvidenceQuizSection({
   );
 }
 
-// 辅助函数：从证据生成问答题目
+/**
+ * 🚀 AI智能证据学习问题生成函数 - 真实版
+ * 基于真实证据内容和案例上下文，调用AI服务生成专业的证据法学习问题
+ */
 async function generateQuizzesFromEvidence(evidences: Evidence[], maxCount: number): Promise<EvidenceQuiz[]> {
-  // 模拟AI生成过程
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  try {
+    console.log('🎯 开始AI智能生成证据学习问题', {
+      evidenceCount: evidences.length,
+      maxQuestions: maxCount
+    });
 
+    // 构建AI请求数据
+    const requestData = {
+      evidence: evidences.map(e => ({
+        id: e.id,
+        content: e.description || e.title,
+        type: e.type || 'document'
+      })),
+      claimElements: evidences.map(e => ({
+        id: e.id,
+        name: e.title,
+        description: e.description || e.title,
+        type: e.type || 'fact'
+      })),
+      mode: 'generate-questions',
+      config: {
+        targetLevel: 'intermediate',
+        focusAreas: ['relevance', 'admissibility', 'probative-value'],
+        questionTypes: ['single-choice', 'multiple-choice'],
+        maxQuestions: maxCount,
+        includeExplanations: true
+      },
+      caseContext: {
+        basicInfo: {
+          caseType: 'civil',
+          summary: '基于时间轴事件的证据学习'
+        }
+      }
+    };
+
+    console.log('📡 调用AI证据学习问题生成API...');
+
+    // 调用AI增强的证据质量评估API（生成问题模式）
+    const response = await fetch('/api/evidence-quality', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestData)
+    });
+
+    if (!response.ok) {
+      throw new Error(`API请求失败: ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || 'AI生成失败');
+    }
+
+    console.log('✅ AI问题生成成功', {
+      generatedCount: result.questions?.length || 0,
+      mode: result.mode
+    });
+
+    // 转换AI生成的问题为组件期望的格式
+    const aiQuestions = result.questions || [];
+    const quizzes: EvidenceQuiz[] = aiQuestions.map((q: any, index: number) => ({
+      id: q.id || `ai_quiz_${index}`,
+      evidenceId: q.relatedEvidence?.[0] || evidences[index % evidences.length]?.id,
+      evidence: evidences.find(e => e.id === q.relatedEvidence?.[0]) || evidences[index % evidences.length],
+      questionType: mapFocusAreaToQuestionType(q.focusArea),
+      question: q.question,
+      options: q.options || ['选项A', '选项B', '选项C', '选项D'],
+      correctAnswer: getCorrectAnswerIndex(q.correctAnswer, q.options),
+      explanation: q.explanation || '专业解释',
+      points: Math.round((q.difficulty || 0.5) * 20), // 基于难度计算分数
+      difficulty: mapAILevelToQuizLevel(q.level),
+      metadata: {
+        evidenceTitle: evidences.find(e => e.id === q.relatedEvidence?.[0])?.title || '相关证据',
+        evidenceType: evidences.find(e => e.id === q.relatedEvidence?.[0])?.type || 'document',
+        timeGenerated: new Date().toISOString(),
+        source: 'ai-generated',
+        legalBasis: q.legalBasis || [],
+        teachingPoints: q.teachingPoints || [],
+        aiConfidence: q.difficulty || 0.5
+      }
+    }));
+
+    // 如果AI生成的问题数量不足，用备选问题补充
+    if (quizzes.length < maxCount) {
+      const additionalQuizzes = generateFallbackQuizzes(
+        evidences,
+        maxCount - quizzes.length,
+        quizzes.length
+      );
+      quizzes.push(...additionalQuizzes);
+    }
+
+    console.log('🎉 证据学习问题生成完成', {
+      totalQuizzes: quizzes.length,
+      aiGenerated: aiQuestions.length,
+      fallbackGenerated: quizzes.length - aiQuestions.length
+    });
+
+    return quizzes.slice(0, maxCount);
+
+  } catch (error) {
+    console.error('❌ AI证据学习问题生成失败:', error);
+
+    // 使用备选问题生成逻辑
+    console.log('🔄 切换到备选问题生成逻辑...');
+    return generateFallbackQuizzes(evidences, maxCount, 0);
+  }
+}
+
+/**
+ * 备选问题生成逻辑（当AI服务不可用时）
+ */
+function generateFallbackQuizzes(evidences: Evidence[], count: number, startIndex: number): EvidenceQuiz[] {
   const questionTemplates = [
     {
-      type: 'type' as const,
-      template: '根据证据内容，该证据属于什么类型？',
-      options: ['书证', '物证', '证人证言', '专家证言'],
+      type: 'relevance' as const,
+      template: '该证据与案件争议的关联性程度如何？',
+      options: ['直接关联', '间接关联', '关联性较弱', '无关联'],
+      correctAnswer: 0,
       difficulty: 'beginner' as const
-    },
-    {
-      type: 'burden' as const,
-      template: '关于该证据的举证责任，下列说法正确的是？',
-      options: ['原告承担', '被告承担', '双方共同承担', '法院调查取证'],
-      difficulty: 'intermediate' as const
     },
     {
       type: 'admissibility' as const,
       template: '该证据的可采纳性如何？',
       options: ['完全可采纳', '部分可采纳', '不可采纳', '需要补强'],
+      correctAnswer: 0,
       difficulty: 'intermediate' as const
     },
     {
-      type: 'relevance' as const,
-      template: '该证据与待证事实的关联性程度是？',
-      options: ['高度相关', '中度相关', '低度相关', '无关'],
-      difficulty: 'beginner' as const
+      type: 'strength' as const,
+      template: '该证据的证明力强度如何？',
+      options: ['证明力很强', '证明力中等', '证明力较弱', '无证明力'],
+      correctAnswer: 1,
+      difficulty: 'intermediate' as const
     },
     {
-      type: 'strength' as const,
-      template: '评估该证据的证明力强度？',
-      options: ['证明力很强', '证明力较强', '证明力一般', '证明力较弱'],
+      type: 'burden' as const,
+      template: '关于该证据的举证责任，下列说法正确的是？',
+      options: ['原告承担', '被告承担', '双方共同承担', '法院调查取证'],
+      correctAnswer: 0,
       difficulty: 'advanced' as const
     }
   ];
 
-  return evidences.slice(0, maxCount).map((evidence, index) => {
-    const template = questionTemplates[index % questionTemplates.length];
-    return {
-      id: `quiz_${evidence.id}_${Date.now()}_${index}`,
+  const quizzes: EvidenceQuiz[] = [];
+
+  for (let i = 0; i < count && i < evidences.length; i++) {
+    const evidence = evidences[i];
+    const template = questionTemplates[i % questionTemplates.length];
+
+    const quiz: EvidenceQuiz = {
+      id: `fallback_quiz_${startIndex + i}_${evidence.id}`,
       evidenceId: evidence.id,
       evidence,
-      question: template.template,
       questionType: template.type,
+      question: `关于证据"${evidence.title}"：${template.template}`,
       options: template.options,
-      correctAnswer: Math.floor(Math.random() * template.options.length), // 随机正确答案，实际应该通过AI分析确定
-      explanation: `基于证据"${evidence.title}"的特征分析，正确答案的依据是其在法律事实认定中的具体作用和证据规则的适用。`,
+      correctAnswer: template.correctAnswer,
+      explanation: `关于证据"${evidence.title}"的专业分析：${getExplanationForType(template.type)}`,
+      points: template.difficulty === 'beginner' ? 5 : template.difficulty === 'intermediate' ? 10 : 15,
       difficulty: template.difficulty,
-      points: template.difficulty === 'beginner' ? 5 : template.difficulty === 'intermediate' ? 10 : 15
+      metadata: {
+        evidenceTitle: evidence.title,
+        evidenceType: evidence.type || 'document',
+        timeGenerated: new Date().toISOString(),
+        source: 'fallback-generated'
+      }
     };
-  });
+
+    quizzes.push(quiz);
+  }
+
+  return quizzes;
+}
+
+/**
+ * 辅助函数：映射AI焦点领域到问题类型
+ */
+function mapFocusAreaToQuestionType(focusArea: string): EvidenceQuiz['questionType'] {
+  switch (focusArea) {
+    case 'relevance': return 'relevance';
+    case 'admissibility': return 'admissibility';
+    case 'probative-value': return 'strength';
+    case 'authentication': return 'type';
+    default: return 'relevance';
+  }
+}
+
+/**
+ * 辅助函数：映射AI级别到问答难度
+ */
+function mapAILevelToQuizLevel(level: string): EvidenceQuiz['difficulty'] {
+  switch (level) {
+    case 'beginner': return 'beginner';
+    case 'intermediate': return 'intermediate';
+    case 'advanced': return 'advanced';
+    default: return 'intermediate';
+  }
+}
+
+/**
+ * 辅助函数：获取正确答案索引
+ */
+function getCorrectAnswerIndex(correctAnswer: string | string[], options: string[]): number {
+  if (Array.isArray(correctAnswer)) {
+    // 多选题处理（暂时返回第一个选项）
+    return options.indexOf(correctAnswer[0]) !== -1 ? options.indexOf(correctAnswer[0]) : 0;
+  }
+
+  const index = options.indexOf(correctAnswer);
+  return index !== -1 ? index : 0;
+}
+
+/**
+ * 辅助函数：根据问题类型生成解释
+ */
+function getExplanationForType(type: string): string {
+  switch (type) {
+    case 'relevance':
+      return '证据的相关性是指证据与待证事实之间的客观联系。相关性是证据的基本属性，只有与案件事实相关的材料才能作为证据使用。';
+    case 'admissibility':
+      return '证据的可采性是指证据是否符合法定的采纳条件。不可采的证据不能在法庭上提出或不能作为认定事实的依据。';
+    case 'strength':
+      return '证据的证明力是指证据对案件事实的证明价值和说服力。证明力的强弱直接影响法官对案件事实的认定。';
+    case 'burden':
+      return '举证责任是指当事人对自己提出的主张有责任提供证据加以证明的法律责任。一般遵循"谁主张，谁举证"的原则。';
+    default:
+      return '这是证据法领域的专业问题，需要结合具体证据内容和法律规定进行分析。';
+  }
 }

@@ -68,11 +68,12 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
   let timeline = extracted.threeElements.facts.timeline?.map((item: any, index: number) => ({
     id: `event-${index + 1}`,
     date: item.date || new Date().toISOString().split('T')[0],
+    event: item.event || item.title || '事件',
     title: item.event || item.title || '事件',
     description: item.description || item.event || item.title || '无详细描述',
     type: 'fact' as const,
-    importance: (item.importance === 'critical' ? 'critical' : 
-                 item.importance === 'important' ? 'important' : 'reference') as const
+    importance: (item.importance === 'critical' ? 'critical' :
+                 item.importance === 'important' ? 'important' : 'normal') as 'critical' | 'important' | 'normal'
   })) || []
 
   // 如果没有时间轴数据，添加示例数据以便演示
@@ -81,14 +82,16 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
       {
         id: 'event-1',
         date: '2024-01-15',
+        event: '签订合同',
         title: '签订合同',
         description: '双方当事人签订买卖合同，约定交付时间和付款方式',
         type: 'fact' as const,
         importance: 'critical' as const
       },
       {
-        id: 'event-2', 
+        id: 'event-2',
         date: '2024-02-01',
+        event: '逾期交付',
         title: '逾期交付',
         description: '卖方未能按约定时间交付货物，构成违约',
         type: 'fact' as const,
@@ -96,18 +99,20 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
       },
       {
         id: 'event-3',
-        date: '2024-02-15', 
+        date: '2024-02-15',
+        event: '催告履行',
         title: '催告履行',
         description: '买方书面催告卖方履行交付义务',
-        type: 'procedure' as const,
+        type: 'fact' as const,
         importance: 'important' as const
       },
       {
         id: 'event-4',
         date: '2024-03-01',
+        event: '提起诉讼',
         title: '提起诉讼',
         description: '买方向法院提起违约损害赔偿诉讼',
-        type: 'filing' as const,
+        type: 'fact' as const,
         importance: 'critical' as const
       }
     ]
@@ -117,7 +122,7 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
     basicInfo: {
       caseNumber: extracted.basicInfo?.caseNumber || '(2024)京0105民初12345号',
       court: extracted.basicInfo?.court || '北京市朝阳区人民法院',
-      date: extracted.basicInfo?.date || '2024-03-15',
+      judgeDate: extracted.basicInfo?.date || '2024-03-15',
       parties: {
         plaintiff: typeof extracted.basicInfo?.parties?.plaintiff === 'string' 
           ? [{ name: extracted.basicInfo.parties.plaintiff, type: '自然人' }]
@@ -153,6 +158,7 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
           type: item.type,
           submittedBy: item.submittedBy,
           credibilityScore: item.credibilityScore,
+          relevanceScore: item.credibilityScore || 80, // 如果没有relevanceScore，使用credibilityScore或默认值
           accepted: item.accepted,
           content: ''
         })) || [
@@ -162,15 +168,17 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
             type: '书证',
             submittedBy: '原告',
             credibilityScore: 95,
+            relevanceScore: 95,
             accepted: true,
             content: '双方签订的标准买卖合同'
           },
           {
-            id: 'invoice', 
+            id: 'invoice',
             name: '发票',
             type: '书证',
             submittedBy: '原告',
             credibilityScore: 90,
+            relevanceScore: 85,
             accepted: true,
             content: '购货发票及相关凭证'
           }
@@ -197,7 +205,8 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
       extractedAt: new Date().toISOString(),
       confidence: extracted.metadata?.confidence || 0,
       processingTime: extracted.metadata?.processingTime || 0,
-      aiModel: extracted.metadata?.aiModel || 'unknown'
+      aiModel: extracted.metadata?.aiModel || 'unknown',
+      extractionMethod: extracted.metadata?.aiModel === 'demo' ? 'manual' : 'pure-ai' as const
     }
   }
 }
@@ -338,13 +347,15 @@ export function ThreeElementsExtractor() {
               type: '书证',
               submittedBy: '原告',
               credibilityScore: 95,
+              relevanceScore: 95,
               accepted: true
             },
             {
               name: '发票',
-              type: '书证', 
+              type: '书证',
               submittedBy: '原告',
               credibilityScore: 90,
+              relevanceScore: 85,
               accepted: true
             }
           ]
@@ -365,7 +376,8 @@ export function ThreeElementsExtractor() {
       metadata: {
         confidence: 85,
         processingTime: 2000,
-        aiModel: 'demo'
+        aiModel: 'demo',
+        extractionMethod: 'manual' as const
       }
     }
     
