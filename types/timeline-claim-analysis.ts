@@ -17,7 +17,7 @@ export interface TimelineEvent {
   type: 'filing' | 'evidence' | 'hearing' | 'judgment' | 'execution' | 'fact' | 'procedure' | 'legal'
   importance: 'critical' | 'important' | 'reference'
   actor?: string
-  
+
   // 请求权相关字段
   claims?: {
     basis: string[]           // 请求权基础（法条）
@@ -25,7 +25,7 @@ export interface TimelineEvent {
     fulfilled: boolean        // 是否满足
     type: 'contractual' | 'tort' | 'unjust-enrichment' | 'property' | 'other'
   }
-  
+
   // 法律关系
   legalRelation?: {
     type: string             // 法律关系类型（买卖、借贷、侵权等）
@@ -33,7 +33,7 @@ export interface TimelineEvent {
     change: 'created' | 'modified' | 'terminated'
     description?: string
   }
-  
+
   // 举证责任
   burdenOfProof?: {
     party: string            // 举证责任方
@@ -41,7 +41,7 @@ export interface TimelineEvent {
     evidence: string[]       // 相关证据
     satisfied?: boolean
   }
-  
+
   // 时效相关
   limitation?: {
     startDate: string        // 起算日
@@ -49,9 +49,51 @@ export interface TimelineEvent {
     suspended?: boolean     // 是否中止
     interrupted?: boolean   // 是否中断
   }
-  
+
   // 因果关系
   relatedTo?: string[]      // 关联事件ID
+
+  // ========== 新增：智能分析增强字段 ==========
+
+  // 争议焦点标记
+  disputeFocus?: {
+    isKeyDispute: boolean     // 是否为争议焦点
+    disputeType: 'factual' | 'legal' | 'procedural' // 争议类型
+    description: string       // 争议描述
+    parties: string[]         // 争议方
+    resolved?: boolean        // 是否已解决
+  }
+
+  // 法条关联信息
+  relatedProvisions?: Array<{
+    id: string               // 法条ID
+    title: string            // 法条标题
+    content?: string         // 法条内容
+    relevance: 'high' | 'medium' | 'low' // 关联度
+    applicationType: 'direct' | 'analogical' | 'reference' // 适用类型
+  }>
+
+  // AI洞察信息
+  aiInsights?: {
+    reasoning: string         // AI推理过程
+    legalSignificance: string // 法律意义
+    suggestions: string[]     // 建议
+    relatedCases?: Array<{   // 相关案例
+      title: string
+      summary: string
+      relevance: number
+    }>
+    confidence: number        // 置信度 0-1
+  }
+
+  // 证据相关信息
+  evidenceInfo?: {
+    evidenceType: 'documentary' | 'testimonial' | 'physical' | 'expert' // 证据类型
+    strength: number          // 证据强度 0-1
+    admissibility: boolean    // 可采纳性
+    authenticity: 'verified' | 'disputed' | 'unverified' // 真实性
+    relevance: number         // 关联性 0-1
+  }
 }
 
 /**
@@ -220,4 +262,100 @@ export interface ViewModeControllerProps {
   aiEnabled: boolean
   onAIToggle: (enabled: boolean) => void
   isAnalyzing?: boolean
+}
+
+/**
+ * ========== 新增：智能时间轴相关接口 ==========
+ */
+
+/**
+ * 智能时间轴节点属性
+ */
+export interface SmartTimelineNodeProps {
+  event: TimelineEvent
+  isExpanded?: boolean
+  showInsights?: boolean
+  onExpand?: () => void
+  onInsightClick?: () => void
+  onEvidenceClick?: () => void
+  className?: string
+}
+
+/**
+ * AI洞察气泡组件属性
+ */
+export interface AIInsightBubbleProps {
+  insights: TimelineEvent['aiInsights']
+  position?: 'top' | 'bottom' | 'left' | 'right'
+  isVisible: boolean
+  onClose: () => void
+  className?: string
+}
+
+/**
+ * 证据学习相关接口
+ */
+
+/**
+ * 证据信息
+ */
+export interface Evidence {
+  id: string
+  title: string
+  description: string
+  content: string
+  type: 'documentary' | 'testimonial' | 'physical' | 'expert'
+  relatedEvents: string[]  // 关联的时间轴事件ID
+  metadata?: {
+    source: string
+    dateCreated: string
+    author?: string
+  }
+}
+
+/**
+ * 证据问答题目
+ */
+export interface EvidenceQuiz {
+  id: string
+  evidenceId: string
+  evidence: Evidence
+  question: string
+  questionType: 'type' | 'burden' | 'relevance' | 'admissibility' | 'strength'
+  options: string[]
+  correctAnswer: number
+  explanation: string
+  difficulty: 'beginner' | 'intermediate' | 'advanced'
+  points?: number
+}
+
+/**
+ * 证据学习会话状态
+ */
+export interface EvidenceQuizSession {
+  id: string
+  startTime: string
+  currentQuizIndex: number
+  quizzes: EvidenceQuiz[]
+  userAnswers: Array<{
+    quizId: string
+    selectedAnswer: number
+    isCorrect: boolean
+    timeSpent: number
+  }>
+  score: number
+  totalPossibleScore: number
+  completed: boolean
+}
+
+/**
+ * 证据学习组件属性
+ */
+export interface EvidenceQuizSectionProps {
+  evidences?: Evidence[]
+  autoGenerate?: boolean  // 是否自动生成题目
+  maxQuizzes?: number    // 最大题目数量
+  onSessionComplete?: (session: EvidenceQuizSession) => void
+  onAnswerSubmit?: (quizId: string, answer: number) => void
+  className?: string
 }

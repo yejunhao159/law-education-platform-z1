@@ -9,7 +9,7 @@ import {
   AIResponse,
   SocraticConfig,
   SocraticErrorCode
-} from './types/SocraticTypes';
+} from '@/lib/types/socratic';
 
 export class SocraticAIClient {
   private config: SocraticConfig;

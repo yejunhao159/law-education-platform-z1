@@ -16,7 +16,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { analyzeTimelineClaimsWithAI } from '@/src/domains/legal-analysis/services/ClaimAnalysisService'
-import type { ClaimAnalysisRequest, ClaimAnalysisResult } from '@/types/timeline-claim-analysis'
+import type { ClaimAnalysisRequest, ClaimAnalysisResult } from '../../../types/timeline-claim-analysis'
 
 /**
  * POST /api/claim-analysis

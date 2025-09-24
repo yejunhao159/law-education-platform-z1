@@ -39,6 +39,13 @@ export {
   useTeacherMode,
   useLastResponse,
   useSocraticActions,
+  useCurrentCase as useSocraticCurrentCase,  // 重命名以避免冲突
+  useClassroomSession,
+  useClassroomCode,
+  useClassroomStudents,
+  useCurrentVote,
+  useIsClassroomMode,
+  useIsTeacherMode as useSocraticTeacherMode, // 重命名以避免冲突
 } from './socratic-dialogue/stores/useSocraticStore';
 
 // ========== 法律分析域 ==========

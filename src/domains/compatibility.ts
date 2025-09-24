@@ -55,6 +55,19 @@ export const useClaimAnalysis = () => useAnalysisStore((state) => state.claimAna
 export const useTimelineViewMode = () => useAnalysisStore((state) => state.timelineViewMode);
 export const useIsAnalyzingClaims = () => useAnalysisStore((state) => state.isAnalyzingClaims);
 
+// 分析操作函数
+export const useAnalysisActions = () => {
+  const setClaimAnalysis = useAnalysisStore((state) => state.setClaimAnalysis);
+  const setTimelineViewMode = useAnalysisStore((state) => state.setTimelineViewMode);
+  const setIsAnalyzingClaims = useAnalysisStore((state) => state.setIsAnalyzingClaims);
+
+  return {
+    setClaimAnalysis,
+    setTimelineViewMode,
+    setIsAnalyzingClaims,
+  };
+};
+
 // ========== 组合Store Hook ==========
 // 提供一个组合多个域状态的Hook，用于需要跨域数据的组件
 export const useAppState = () => {

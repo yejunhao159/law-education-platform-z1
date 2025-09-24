@@ -147,12 +147,12 @@ export class StructuredLogger {
     });
     
     // 记录到性能监控
-    // socraticPerformance.recordAPIRequest({
+    /* socraticPerformance.recordAPIRequest({
       endpoint: operationId,
       method: 'OPERATION',
       duration,
       status: 200
-    });
+    }); */
   }
 
   /**
@@ -383,13 +383,13 @@ export class StructuredLogger {
     console.error(`[ALERT][${severity.toUpperCase()}] ${message}`, error);
     
     // 记录到性能监控
-    // socraticPerformance.recordAPIRequest({
+    /* socraticPerformance.recordAPIRequest({
       endpoint: 'alert',
       method: 'ALERT',
       duration: 0,
       status: 500,
       error: message
-    });
+    }); */
   }
 
   /**

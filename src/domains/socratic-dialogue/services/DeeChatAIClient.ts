@@ -1,17 +1,17 @@
 /**
  * DeeChat驱动的AI客户端
- * 集成ai-chat/core和token-calculator，提供统一的AI接口
+ * 集成官方DeeChat包，提供统一的AI接口
  * DeepPractice Standards Compliant
  */
 
-import { AIChat } from '../../../lib/deechat-local/ai-client';
-import { countTokens, getCostCalculator } from '../../../lib/deechat-local/token-calculator';
-import { ContextFormatter } from '../../../lib/deechat-local/context-manager';
+import { AIChat } from '@deepracticex/ai-chat';
+import { countTokens, getCostCalculator } from '@deepracticex/token-calculator';
+import { ContextFormatter } from '@deepracticex/context-manager';
 import {
   SocraticMessage,
   SocraticRequest,
   SocraticErrorCode
-} from './types/SocraticTypes';
+} from '@/lib/types/socratic';
 
 export interface DeeChatConfig {
   // AI提供商配置

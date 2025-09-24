@@ -4,7 +4,7 @@
  */
 
 import { EnhancedSocraticService } from '../src/domains/socratic-dialogue/services/EnhancedSocraticService';
-import { DialogueLevel, SocraticMode, SocraticDifficulty } from '../src/domains/socratic-dialogue/services/types/SocraticTypes';
+import { SocraticDifficultyLevel, SocraticMode, SocraticDifficulty } from '@/lib/types/socratic';
 
 async function demonstrateEnhancedSocratic() {
   console.log('🎓 启动增强版苏格拉底对话服务演示...\n');
@@ -14,7 +14,7 @@ async function demonstrateEnhancedSocratic() {
   // 模拟一个合同法的教学场景
   const testRequest = {
     sessionId: 'demo-session-001',
-    level: DialogueLevel.INTERMEDIATE,
+    level: SocraticDifficultyLevel.INTERMEDIATE,
     mode: SocraticMode.ANALYSIS,
     difficulty: SocraticDifficulty.MEDIUM,
     caseContext: '甲公司与乙公司签订了一份货物买卖合同，约定甲公司向乙公司供应1000台设备，总价值500万元。合同约定交货期为3个月。但是，在第2个月时，由于原材料价格暴涨，甲公司发现继续履行合同将面临巨额亏损。',

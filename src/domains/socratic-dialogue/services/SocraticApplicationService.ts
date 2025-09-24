@@ -7,18 +7,19 @@
 import { validatePrompt, validateApiInput } from '../../../../lib/security/input-validator';
 import { defaultPerformanceMonitor } from '../monitoring/PerformanceMonitor';
 import { SocraticAIClient } from './SocraticAIClient';
+import { DialogueLevel } from '@/lib/types/socratic';
 import {
   SocraticRequest,
   SocraticResponse,
   SocraticResponseData,
   SocraticMessage,
-  DialogueLevel,
+  SocraticDifficultyLevel,
   SocraticMode,
   SocraticDifficulty,
   SocraticErrorCode,
   PerformanceMetrics,
   FallbackMetrics
-} from './types/SocraticTypes';
+} from '@/lib/types/socratic';
 
 export class SocraticApplicationService {
   private aiClient: SocraticAIClient;

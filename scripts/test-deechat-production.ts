@@ -3,14 +3,18 @@
  * 测试真实环境下的API调用、性能和稳定性
  */
 
-import { EnhancedSocraticServiceV2 } from '../src/domains/socratic-dialogue/services/EnhancedSocraticServiceV2';
-import { AIServiceConfigManager } from '../src/domains/socratic-dialogue/config/AIServiceConfig';
-import { PerformanceMonitor } from '../src/domains/socratic-dialogue/monitoring/PerformanceMonitor';
 import {
-  DialogueLevel,
+ EnhancedSocraticServiceV2 } from '../src/domains/socratic-dialogue/services/EnhancedSocraticServiceV2';
+import {
+ AIServiceConfigManager } from '../src/domains/socratic-dialogue/config/AIServiceConfig';
+import {
+ PerformanceMonitor } from '../src/domains/socratic-dialogue/monitoring/PerformanceMonitor';
+import {
+
+  SocraticDifficultyLevel,
   SocraticMode,
   SocraticDifficulty
-} from '../src/domains/socratic-dialogue/services/types/SocraticTypes';
+} from '@/lib/types/socratic';
 
 interface TestResult {
   testName: string;
@@ -72,7 +76,7 @@ class DeeChatProductionTester {
 
     const testRequest = {
       sessionId: 'test-basic-001',
-      level: DialogueLevel.INTERMEDIATE,
+      level: SocraticDifficultyLevel.INTERMEDIATE,
       mode: SocraticMode.EXPLORATION,
       difficulty: SocraticDifficulty.MEDIUM,
       caseContext: '张某驾驶机动车超速行驶，撞伤行人李某，造成李某轻伤。交警认定张某负全部责任。',
@@ -98,21 +102,21 @@ class DeeChatProductionTester {
     const complexRequests = [
       {
         name: '简单合同纠纷',
-        level: DialogueLevel.BEGINNER,
+        level: SocraticDifficultyLevel.BEGINNER,
         mode: SocraticMode.EXPLORATION,
         caseContext: '甲乙签订买卖合同，甲方延迟交货',
         currentTopic: '合同违约责任'
       },
       {
         name: '复杂刑事案件',
-        level: DialogueLevel.ADVANCED,
+        level: SocraticDifficultyLevel.ADVANCED,
         mode: SocraticMode.EVALUATION,
         caseContext: '某公司高管涉嫌内幕交易，获利数百万元，案情复杂',
         currentTopic: '内幕交易罪构成要件分析'
       },
       {
         name: '行政法争议',
-        level: DialogueLevel.INTERMEDIATE,
+        level: SocraticDifficultyLevel.INTERMEDIATE,
         mode: SocraticMode.SYNTHESIS,
         caseContext: '某市政府征收农民土地，补偿标准争议',
         currentTopic: '行政征收程序与补偿标准'
@@ -145,7 +149,7 @@ class DeeChatProductionTester {
     for (let i = 0; i < concurrentTests; i++) {
       const testRequest = {
         sessionId: `test-perf-${i}`,
-        level: DialogueLevel.INTERMEDIATE,
+        level: SocraticDifficultyLevel.INTERMEDIATE,
         mode: SocraticMode.ANALYSIS,
         difficulty: SocraticDifficulty.MEDIUM,
         caseContext: `测试案例${i + 1}：公司法律纠纷`,
@@ -178,7 +182,7 @@ class DeeChatProductionTester {
         name: '空上下文测试',
         request: {
           sessionId: 'test-error-001',
-          level: DialogueLevel.INTERMEDIATE,
+          level: SocraticDifficultyLevel.INTERMEDIATE,
           mode: SocraticMode.EXPLORATION,
           difficulty: SocraticDifficulty.MEDIUM,
           caseContext: '',
@@ -190,7 +194,7 @@ class DeeChatProductionTester {
         name: '超长内容测试',
         request: {
           sessionId: 'test-error-002',
-          level: DialogueLevel.ADVANCED,
+          level: SocraticDifficultyLevel.ADVANCED,
           mode: SocraticMode.EVALUATION,
           difficulty: SocraticDifficulty.HARD,
           caseContext: 'A'.repeat(5000), // 超长内容
@@ -225,7 +229,7 @@ class DeeChatProductionTester {
     // 测试成本阈值
     const costTestRequest = {
       sessionId: 'test-cost-001',
-      level: DialogueLevel.ADVANCED,
+      level: SocraticDifficultyLevel.ADVANCED,
       mode: SocraticMode.SYNTHESIS,
       difficulty: SocraticDifficulty.HARD,
       caseContext: '复杂的法律案例，涉及多个法律领域的交叉问题',
@@ -241,7 +245,7 @@ class DeeChatProductionTester {
 
     const streamRequest = {
       sessionId: 'test-stream-001',
-      level: DialogueLevel.INTERMEDIATE,
+      level: SocraticDifficultyLevel.INTERMEDIATE,
       mode: SocraticMode.EXPLORATION,
       difficulty: SocraticDifficulty.MEDIUM,
       caseContext: '民事纠纷案例',

@@ -30,6 +30,7 @@ import {
   ArrowRight,
   Loader2
 } from 'lucide-react'
+import QRCode from 'qrcode'
 import type { ClassroomSession } from '../../lib/types/socratic'
 
 // 课堂码状态
@@ -204,12 +205,34 @@ export const ClassroomCode: React.FC<ClassroomCodeProps> = ({
     }
   }
 
-  // 生成二维码数据（简化版，实际应使用qrcode库）
-  const generateQRCodeData = (code: string): string => {
-    // 这里应该使用实际的二维码生成库
-    // 返回一个占位符URL
-    return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect width='200' height='200' fill='%23f0f0f0'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' font-family='monospace' font-size='24'%3E${code}%3C/text%3E%3C/svg%3E`
-  }
+  // 生成二维码数据
+  const [qrCodeDataURL, setQRCodeDataURL] = useState<string>('')
+
+  useEffect(() => {
+    if (session?.code && codeStatus === 'active') {
+      const generateQRCode = async () => {
+        try {
+          // 生成包含课堂码和页面URL的二维码
+          const qrContent = `${window.location.origin}${window.location.pathname}?code=${session.code}`
+          const dataURL = await QRCode.toDataURL(qrContent, {
+            width: 200,
+            margin: 2,
+            color: {
+              dark: '#000000',
+              light: '#ffffff'
+            }
+          })
+          setQRCodeDataURL(dataURL)
+        } catch (error) {
+          console.error('生成二维码失败:', error)
+          setQRCodeDataURL('')
+        }
+      }
+      generateQRCode()
+    } else {
+      setQRCodeDataURL('')
+    }
+  }, [session?.code, codeStatus])
 
   // 渲染教师视图
   const renderTeacherView = () => {
@@ -303,15 +326,18 @@ export const ClassroomCode: React.FC<ClassroomCodeProps> = ({
           </div>
 
           {/* 二维码 */}
-          {defaultConfig.showQRCode && codeStatus === 'active' && (
+          {defaultConfig.showQRCode && codeStatus === 'active' && qrCodeDataURL && (
             <>
               <Separator />
-              <div className="flex justify-center">
+              <div className="flex flex-col items-center space-y-2">
                 <img
-                  src={generateQRCodeData(session.code)}
-                  alt="QR Code"
-                  className="w-48 h-48 border rounded"
+                  src={qrCodeDataURL}
+                  alt="课堂二维码"
+                  className="w-48 h-48 border rounded-lg shadow-sm"
                 />
+                <p className="text-xs text-muted-foreground text-center">
+                  扫描二维码快速加入课堂
+                </p>
               </div>
             </>
           )}

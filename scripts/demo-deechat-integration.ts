@@ -8,10 +8,10 @@ import { EnhancedSocraticServiceV2 } from '../src/domains/socratic-dialogue/serv
 import { AIServiceConfigManager } from '../src/domains/socratic-dialogue/config/AIServiceConfig';
 import { PerformanceMonitor } from '../src/domains/socratic-dialogue/monitoring/PerformanceMonitor';
 import {
-  DialogueLevel,
+  SocraticDifficultyLevel,
   SocraticMode,
   SocraticDifficulty
-} from '../src/domains/socratic-dialogue/services/types/SocraticTypes';
+} from '@/lib/types/socratic';
 
 // ANSI颜色代码
 const colors = {
@@ -120,7 +120,7 @@ async function demonstrateTeachingScenarios(service: EnhancedSocraticServiceV2) 
       name: '初级民法案例分析',
       request: {
         sessionId: 'demo-session-001',
-        level: DialogueLevel.BEGINNER,
+        level: SocraticDifficultyLevel.BEGINNER,
         mode: SocraticMode.EXPLORATION,
         difficulty: SocraticDifficulty.EASY,
         caseContext: '甲乙双方签订房屋买卖合同，甲方交房后乙方拒绝付款',
@@ -140,7 +140,7 @@ async function demonstrateTeachingScenarios(service: EnhancedSocraticServiceV2) 
       name: '高级刑法理论讨论',
       request: {
         sessionId: 'demo-session-002',
-        level: DialogueLevel.ADVANCED,
+        level: SocraticDifficultyLevel.ADVANCED,
         mode: SocraticMode.EVALUATION,
         difficulty: SocraticDifficulty.HARD,
         caseContext: '某公司高管利用内幕信息进行股票交易，获利100万元',
@@ -160,7 +160,7 @@ async function demonstrateTeachingScenarios(service: EnhancedSocraticServiceV2) 
       name: '中级商法案例综合',
       request: {
         sessionId: 'demo-session-003',
-        level: DialogueLevel.INTERMEDIATE,
+        level: SocraticDifficultyLevel.INTERMEDIATE,
         mode: SocraticMode.SYNTHESIS,
         difficulty: SocraticDifficulty.MEDIUM,
         caseContext: '有限责任公司股东要求查阅公司账簿，董事会以商业秘密为由拒绝',

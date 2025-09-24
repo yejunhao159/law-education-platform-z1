@@ -1,20 +1,21 @@
 /**
  * 增强版苏格拉底对话服务
- * 集成DeeChat的context-manager进行上下文管理
+ * 集成官方DeeChat包进行上下文管理和AI通信
  * DeepPractice Standards Compliant
  */
 
-import { ContextFormatter } from '../../../lib/deechat-local/context-manager';
+import { AIChat } from '@deepracticex/ai-chat';
+import { ContextFormatter } from '@deepracticex/context-manager';
 import { SOCRATIC_ROLE_CONFIG } from '../prompts/socratic-role';
 import {
   SocraticRequest,
   SocraticResponse,
   SocraticMessage,
-  DialogueLevel,
+  SocraticDifficultyLevel,
   SocraticMode,
   SocraticDifficulty,
   SocraticErrorCode
-} from './types/SocraticTypes';
+} from '@/lib/types/socratic';
 
 interface EnhancedSocraticConfig {
   apiUrl: string;
@@ -27,16 +28,26 @@ interface EnhancedSocraticConfig {
 export class EnhancedSocraticService {
   private config: EnhancedSocraticConfig;
   private contextFormatter = ContextFormatter;
+  private aiChat: AIChat;
 
   constructor(config?: Partial<EnhancedSocraticConfig>) {
     this.config = {
-      apiUrl: process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions',
+      apiUrl: process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1',
       apiKey: process.env.DEEPSEEK_API_KEY || '',
       model: 'deepseek-chat',
       temperature: 0.7,
       maxTokens: 500,
       ...config
     };
+
+    // 初始化AIChat实例
+    this.aiChat = new AIChat({
+      baseUrl: this.config.apiUrl,
+      model: this.config.model,
+      apiKey: this.config.apiKey,
+      temperature: this.config.temperature,
+      maxTokens: this.config.maxTokens
+    });
   }
 
   /**
@@ -60,7 +71,7 @@ export class EnhancedSocraticService {
    * 构建苏格拉底导师角色提示词
    * 使用统一的角色配置，避免重复定义
    */
-  private buildRolePrompt(level: DialogueLevel, mode: SocraticMode): string {
+  private buildRolePrompt(level: SocraticDifficultyLevel, mode: SocraticMode): string {
     // 使用统一的角色配置
     const roleConfig = SOCRATIC_ROLE_CONFIG;
 
@@ -73,9 +84,9 @@ export class EnhancedSocraticService {
     };
 
     const levelDescriptions = {
-      [DialogueLevel.BEGINNER]: '基础水平 - 简单直接，重点关注基本概念和事实认定',
-      [DialogueLevel.INTERMEDIATE]: '中等水平 - 适度复杂，涉及多个概念的关联和简单推理',
-      [DialogueLevel.ADVANCED]: '高级水平 - 高度复杂，涉及深层次的法理思考和价值判断'
+      [SocraticDifficultyLevel.BEGINNER]: '基础水平 - 简单直接，重点关注基本概念和事实认定',
+      [SocraticDifficultyLevel.INTERMEDIATE]: '中等水平 - 适度复杂，涉及多个概念的关联和简单推理',
+      [SocraticDifficultyLevel.ADVANCED]: '高级水平 - 高度复杂，涉及深层次的法理思考和价值判断'
     };
 
     return `${roleConfig.baseRole}
@@ -159,38 +170,22 @@ ${roleConfig.requirements.map((req, index) => `${index + 1}. ${req}`).join('\n')
       // 使用context-manager构建结构化上下文
       const contextPrompt = this.buildSocraticContext(request);
 
-      const response = await fetch(this.config.apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`
-        },
-        body: JSON.stringify({
-          model: this.config.model,
-          messages: [
-            {
-              role: 'user',
-              content: contextPrompt
-            }
-          ],
-          temperature: this.config.temperature,
-          max_tokens: this.config.maxTokens
-        })
-      });
+      // 使用AIChat进行对话
+      const response = await this.aiChat.chat([
+        {
+          role: 'user',
+          content: contextPrompt
+        }
+      ]);
 
-      if (!response.ok) {
-        throw new Error(`AI API调用失败: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const aiResponse = data.choices[0].message.content;
+      const aiResponse = response.choices[0].message.content;
 
       return {
         success: true,
         data: {
           question: aiResponse,
           content: aiResponse,
-          level: request.level || DialogueLevel.INTERMEDIATE,
+          level: request.level || SocraticDifficultyLevel.INTERMEDIATE,
           mode: request.mode || SocraticMode.EXPLORATION,
           timestamp: new Date().toISOString(),
           sessionId: request.sessionId || 'unknown'

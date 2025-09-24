@@ -61,13 +61,20 @@ export class TemplateManager implements ITemplateManager {
    * 列出所有模板
    */
   list(): Array<{ id: string; name: string; description: string; scenarios?: string[] }> {
-    return Array.from(this.templates.values()).map((template) => ({
-      id: template.id,
-      name: template.name,
-      description: template.description,
-      scenarios: template.scenarios,
-      usageCount: this.usageStats.get(template.id) || 0
-    }));
+    return Array.from(this.templates.values()).map((template) => {
+      const result: { id: string; name: string; description: string; scenarios?: string[] } = {
+        id: template.id,
+        name: template.name,
+        description: template.description,
+      };
+
+      // 只有当scenarios存在时才添加该属性
+      if (template.scenarios) {
+        result.scenarios = template.scenarios;
+      }
+
+      return result;
+    });
   }
 
   /**

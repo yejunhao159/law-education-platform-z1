@@ -6,15 +6,13 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { io, Socket } from 'socket.io-client'
-import { useSocraticStore } from '@/src/domains/stores'
+import { useSocraticStore } from '../../src/domains/stores'
 import type { 
   Message, 
   StudentInfo, 
   VoteData,
   ClassroomSession 
 } from '../types/socratic'
-import { LogLevel } from '../types/socratic'
-import { SocraticLogger } from '../utils/socratic-logger'
 
 // WebSocket连接配置
 interface WebSocketConfig {
@@ -129,7 +127,13 @@ const DEFAULT_CONFIG: WebSocketConfig = {
  * @returns WebSocket操作接口
  */
 export function useWebSocket(config: WebSocketConfig = {}): UseWebSocketReturn {
-  const logger = useRef(new SocraticLogger('useWebSocket'))
+  // 简化的日志记录器
+  const logger = useRef({
+    info: (message: string, context?: any) => console.log(`[WebSocket] INFO: ${message}`, context),
+    warn: (message: string, context?: any) => console.warn(`[WebSocket] WARN: ${message}`, context),
+    error: (message: string, context?: any) => console.error(`[WebSocket] ERROR: ${message}`, context),
+    debug: (message: string, context?: any) => console.debug(`[WebSocket] DEBUG: ${message}`, context)
+  })
   const socketRef = useRef<Socket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [connectionState, setConnectionState] = useState<UseWebSocketReturn['connectionState']>('disconnected')
@@ -144,15 +148,16 @@ export function useWebSocket(config: WebSocketConfig = {}): UseWebSocketReturn {
   
   // 从Store获取必要的方法
   const {
-    receiveMessage,
-    addStudent,
-    removeStudent,
+    addMessage,
     updateStudentStatus,
     setCurrentVote,
-    setCurrentQuestion,
     setConnectionStatus,
-    updatePerformance,
-    setCurrentLevel
+    setLevel,
+    setClassroomStudents,
+    addStudentToClassroom,
+    removeStudentFromClassroom,
+    syncClassroomState,
+    syncDialogueState,
   } = useSocraticStore()
   
   // 合并配置
@@ -198,7 +203,7 @@ export function useWebSocket(config: WebSocketConfig = {}): UseWebSocketReturn {
       logger.current.error('WebSocket连接错误', err)
       setError(err)
       setConnectionState('error')
-      setConnectionStatus('error')
+      setConnectionStatus('disconnected')
     })
     
     socket.on(WebSocketEvent.RECONNECT, (attemptNumber: number) => {
@@ -213,25 +218,29 @@ export function useWebSocket(config: WebSocketConfig = {}): UseWebSocketReturn {
     })
     
     // 学生事件处理
-    socket.on(WebSocketEvent.STUDENT_JOINED, (student: StudentInfo) => {
-      logger.current.info('学生加入', { studentId: student.id })
-      addStudent(student)
+    socket.on(WebSocketEvent.STUDENT_JOINED, (data: { student: StudentInfo; classroomCode: string }) => {
+      logger.current.info('学生加入课堂', { studentId: data.student.id, classroomCode: data.classroomCode })
+      // 触发状态同步而不是直接添加
+      syncClassroomState()
     })
-    
-    socket.on(WebSocketEvent.STUDENT_LEFT, (studentId: string) => {
-      logger.current.info('学生离开', { studentId })
-      removeStudent(studentId)
+
+    socket.on(WebSocketEvent.STUDENT_LEFT, (data: { studentId: string; classroomCode: string }) => {
+      logger.current.info('学生离开课堂', { studentId: data.studentId, classroomCode: data.classroomCode })
+      // 触发状态同步
+      syncClassroomState()
     })
-    
-    socket.on(WebSocketEvent.STUDENT_HAND_RAISED, (studentId: string) => {
-      updateStudentStatus(studentId, { 
-        handRaised: true, 
-        handRaisedAt: Date.now() 
+
+    socket.on(WebSocketEvent.STUDENT_HAND_RAISED, (data: { studentId: string; classroomCode: string }) => {
+      logger.current.info('学生举手', { studentId: data.studentId })
+      updateStudentStatus(data.studentId, {
+        handRaised: true,
+        handRaisedAt: Date.now()
       })
     })
-    
-    socket.on(WebSocketEvent.STUDENT_HAND_LOWERED, (studentId: string) => {
-      updateStudentStatus(studentId, { 
+
+    socket.on(WebSocketEvent.STUDENT_HAND_LOWERED, (data: { studentId: string; classroomCode: string }) => {
+      logger.current.info('学生放手', { studentId: data.studentId })
+      updateStudentStatus(data.studentId, {
         handRaised: false,
         handRaisedAt: undefined
       })
@@ -240,17 +249,17 @@ export function useWebSocket(config: WebSocketConfig = {}): UseWebSocketReturn {
     // 消息事件处理
     socket.on(WebSocketEvent.MESSAGE_RECEIVED, (message: Message) => {
       logger.current.debug('收到消息', { messageId: message.id })
-      receiveMessage(message)
-      setStats(prev => ({ 
-        ...prev, 
+      addMessage(message)
+      setStats(prev => ({
+        ...prev,
         messagesReceived: prev.messagesReceived + 1,
         lastActivity: Date.now()
       }))
     })
-    
+
     socket.on(WebSocketEvent.MESSAGE_BROADCAST, (message: Message) => {
       logger.current.debug('收到广播消息', { messageId: message.id })
-      receiveMessage(message)
+      addMessage(message)
     })
     
     // 投票事件处理
@@ -272,32 +281,27 @@ export function useWebSocket(config: WebSocketConfig = {}): UseWebSocketReturn {
     // 问题事件处理
     socket.on(WebSocketEvent.QUESTION_POSTED, (question: string) => {
       logger.current.debug('收到问题', { question })
-      setCurrentQuestion(question)
+      // 触发状态同步以获取最新问题状态
+      syncClassroomState()
     })
-    
+
     // 状态同步
     socket.on(WebSocketEvent.STATE_SYNC, (state: Partial<ClassroomSession>) => {
       logger.current.debug('状态同步', state)
-      // 同步课堂状态
-      if (state.students) {
-        state.students.forEach((student: StudentInfo) => addStudent(student))
-      }
-      if (state.currentVote) {
-        setCurrentVote(state.currentVote)
-      }
-      if (state.currentQuestion) {
-        setCurrentQuestion(state.currentQuestion)
-      }
+      // 直接触发完整状态同步，让适配器处理具体更新
+      syncClassroomState()
     })
-    
+
     socket.on(WebSocketEvent.LEVEL_CHANGED, (level: number) => {
       logger.current.info('层级变更', { level })
-      setCurrentLevel(level)
+      // 触发状态同步以更新层级
+      syncClassroomState()
     })
-    
+
     socket.on(WebSocketEvent.PERFORMANCE_UPDATE, (performance: any) => {
       logger.current.debug('性能更新', performance)
-      updatePerformance(performance)
+      // 性能更新不需要状态同步，可以忽略或记录到日志
+      logger.current.info('性能指标更新', performance)
     })
     
     // 延迟测量
@@ -318,9 +322,8 @@ export function useWebSocket(config: WebSocketConfig = {}): UseWebSocketReturn {
     
     socketRef.current = socket
     return socket
-  }, [finalConfig, addStudent, removeStudent, updateStudentStatus, setCurrentVote, 
-      setCurrentQuestion, setConnectionStatus, updatePerformance, setCurrentLevel, 
-      receiveMessage])
+  }, [finalConfig, updateStudentStatus, setCurrentVote, setConnectionStatus,
+      syncClassroomState, addMessage])
   
   // 连接管理
   const connect = useCallback(() => {

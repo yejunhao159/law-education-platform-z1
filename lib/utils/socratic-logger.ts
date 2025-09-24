@@ -4,7 +4,7 @@
  * @description 提供结构化日志记录、性能监控和调试支持
  */
 
-import { LogLevel, LogEntry, LogContext } from '@/lib/types/socratic'
+import { LogLevel, LogEntry, LogContext } from '../types/socratic'
 
 /**
  * 日志配置接口

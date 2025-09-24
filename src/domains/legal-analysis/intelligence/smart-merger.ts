@@ -125,14 +125,18 @@ export class SmartMerger {
   ): DateElement[] {
     const merged: DateElement[] = []
     const processed = new Set<string>()
-    
+
+    // 确保输入数组不为undefined
+    const safeRuleDates = ruleDates || []
+    const safeAiDates = aiDates || []
+
     // 先处理规则提取的日期
-    for (const ruleDate of ruleDates) {
+    for (const ruleDate of safeRuleDates) {
       const key = `${ruleDate.date}_${ruleDate.type}`
       processed.add(key)
-      
+
       // 查找AI中的对应日期
-      const aiMatch = aiDates.find(
+      const aiMatch = safeAiDates.find(
         d => d.date === ruleDate.date && d.type === ruleDate.type
       )
       
@@ -156,14 +160,14 @@ export class SmartMerger {
     }
     
     // 处理仅AI提取到的日期
-    for (const aiDate of aiDates) {
+    for (const aiDate of safeAiDates) {
       const key = `${aiDate.date}_${aiDate.type}`
       if (!processed.has(key)) {
         // 检查置信度
-        if (aiDate.confidence! >= config.confidenceThreshold) {
+        if ((aiDate.confidence || 0) >= config.confidenceThreshold) {
           merged.push({
             ...aiDate,
-            confidence: aiDate.confidence! * config.aiWeight
+            confidence: (aiDate.confidence || 0.7) * config.aiWeight
           })
         }
       }
@@ -246,9 +250,13 @@ export class SmartMerger {
   ): Party[] {
     const merged: Party[] = []
     const partyMap = new Map<string, Party>()
-    
+
+    // 确保输入数组不为undefined
+    const safeRuleParties = ruleParties || []
+    const safeAiParties = aiParties || []
+
     // 处理规则提取的当事人
-    for (const party of ruleParties) {
+    for (const party of safeRuleParties) {
       const existing = partyMap.get(party.name)
       if (existing) {
         // 合并信息
@@ -263,7 +271,7 @@ export class SmartMerger {
     }
     
     // 处理AI提取的当事人
-    for (const party of aiParties) {
+    for (const party of safeAiParties) {
       const existing = partyMap.get(party.name)
       if (existing) {
         // 检查类型冲突
@@ -313,17 +321,21 @@ export class SmartMerger {
   ): Amount[] {
     const merged: Amount[] = []
     const processed = new Set<string>()
-    
+
+    // 确保输入数组不为undefined
+    const safeRuleAmounts = ruleAmounts || []
+    const safeAiAmounts = aiAmounts || []
+
     // 处理规则提取的金额
-    for (const ruleAmount of ruleAmounts) {
+    for (const ruleAmount of safeRuleAmounts) {
       const key = `${ruleAmount.value}_${ruleAmount.type}`
       processed.add(key)
       
       // 查找相近的AI金额
-      const aiMatch = aiAmounts.find(
+      const aiMatch = safeAiAmounts.find(
         a => Math.abs(a.value - ruleAmount.value) < 0.01 && a.type === ruleAmount.type
       )
-      
+
       if (aiMatch) {
         // 合并描述和其他信息
         merged.push({
@@ -341,11 +353,11 @@ export class SmartMerger {
         merged.push(ruleAmount)
       }
     }
-    
+
     // 处理仅AI提取的金额
-    for (const aiAmount of aiAmounts) {
+    for (const aiAmount of safeAiAmounts) {
       const key = `${aiAmount.value}_${aiAmount.type}`
-      if (!processed.has(key) && aiAmount.confidence! >= config.confidenceThreshold) {
+      if (!processed.has(key) && (aiAmount.confidence || 0) >= config.confidenceThreshold) {
         merged.push(aiAmount)
       }
     }
@@ -366,15 +378,19 @@ export class SmartMerger {
   ): LegalClause[] {
     const merged: LegalClause[] = []
     const clauseMap = new Map<string, LegalClause>()
-    
+
+    // 确保输入数组不为undefined
+    const safeRuleClauses = ruleClauses || []
+    const safeAiClauses = aiClauses || []
+
     // 处理规则提取的条款
-    for (const clause of ruleClauses) {
+    for (const clause of safeRuleClauses) {
       const key = `${clause.source}_${clause.article || 'general'}`
       clauseMap.set(key, clause)
     }
     
     // 处理AI提取的条款
-    for (const clause of aiClauses) {
+    for (const clause of safeAiClauses) {
       const key = `${clause.source}_${clause.article || 'general'}`
       const existing = clauseMap.get(key)
       
@@ -420,10 +436,14 @@ export class SmartMerger {
   ): FactElement[] {
     const merged: FactElement[] = []
     const factMap = new Map<string, FactElement>()
-    
+
+    // 确保输入数组不为undefined
+    const safeRuleFacts = ruleFacts || []
+    const safeAiFacts = aiFacts || []
+
     // 使用内容相似度匹配事实
-    for (const ruleFact of ruleFacts) {
-      const similarAiFact = this.findSimilarFact(ruleFact, aiFacts)
+    for (const ruleFact of safeRuleFacts) {
+      const similarAiFact = this.findSimilarFact(ruleFact, safeAiFacts)
       
       if (similarAiFact) {
         // 合并相似事实
@@ -450,9 +470,9 @@ export class SmartMerger {
     
     // 添加仅AI提取的事实
     let factIdCounter = factMap.size + 1
-    for (const aiFact of aiFacts) {
+    for (const aiFact of safeAiFacts) {
       if (!this.isFactProcessed(aiFact, Array.from(factMap.values()))) {
-        if (aiFact.confidence! >= config.confidenceThreshold) {
+        if ((aiFact.confidence || 0) >= config.confidenceThreshold) {
           factMap.set(`fact_ai_${factIdCounter++}`, aiFact)
         }
       }

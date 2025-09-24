@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { SocraticApplicationService } from '../../../src/domains/socratic-dialogue/services/SocraticApplicationService';
-import { SocraticErrorCode } from '../../../src/domains/socratic-dialogue/services/types/SocraticTypes';
+import { SocraticErrorCode } from '@/lib/types/socratic';
 
 // 创建服务实例
 const socraticService = new SocraticApplicationService();

@@ -12,11 +12,11 @@ import {
   SocraticRequest,
   SocraticResponse,
   SocraticMessage,
-  DialogueLevel,
+  SocraticDifficultyLevel,
   SocraticMode,
   SocraticDifficulty,
   SocraticErrorCode
-} from './types/SocraticTypes';
+} from '@/lib/types/socratic';
 
 interface EnhancedSocraticConfig {
   // AI提供商配置
@@ -160,7 +160,7 @@ export class EnhancedSocraticServiceV2 {
    * 构建苏格拉底导师角色提示词
    * 基于PromptX legal-socrates角色的高质量提示词内容
    */
-  private buildRolePrompt(level: DialogueLevel, mode: SocraticMode): string {
+  private buildRolePrompt(level: SocraticDifficultyLevel, mode: SocraticMode): string {
     // 核心角色身份（来自PromptX legal-socrates）
     const baseRole = `你是一位具有深厚法学功底的苏格拉底式导师，专门运用苏格拉底教学法引导学生深度思考法律问题。
 
@@ -204,9 +204,9 @@ export class EnhancedSocraticServiceV2 {
     };
 
     const levelDescriptions = {
-      [DialogueLevel.BEGINNER]: '基础水平 - 简单直接，重点关注基本概念和事实认定',
-      [DialogueLevel.INTERMEDIATE]: '中等水平 - 适度复杂，涉及多个概念的关联和简单推理',
-      [DialogueLevel.ADVANCED]: '高级水平 - 高度复杂，涉及深层次的法理思考和价值判断'
+      [SocraticDifficultyLevel.BEGINNER]: '基础水平 - 简单直接，重点关注基本概念和事实认定',
+      [SocraticDifficultyLevel.INTERMEDIATE]: '中等水平 - 适度复杂，涉及多个概念的关联和简单推理',
+      [SocraticDifficultyLevel.ADVANCED]: '高级水平 - 高度复杂，涉及深层次的法理思考和价值判断'
     };
 
     // 执行要求（来自PromptX legal-socrates）
@@ -318,7 +318,7 @@ ${requirements}
       data: {
         question: randomQuestion,
         content: randomQuestion,
-        level: request.level || DialogueLevel.INTERMEDIATE,
+        level: request.level || SocraticDifficultyLevel.INTERMEDIATE,
         mode: request.mode || SocraticMode.EXPLORATION,
         timestamp: new Date().toISOString(),
         sessionId: request.sessionId || 'unknown',
@@ -388,7 +388,7 @@ ${requirements}
         data: {
           question: aiResponse.content,
           content: aiResponse.content,
-          level: request.level || DialogueLevel.INTERMEDIATE,
+          level: request.level || SocraticDifficultyLevel.INTERMEDIATE,
           mode: request.mode || SocraticMode.EXPLORATION,
           timestamp: new Date().toISOString(),
           sessionId: request.sessionId || 'unknown',

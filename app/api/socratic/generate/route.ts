@@ -1,19 +1,11 @@
 /**
- * 苏格拉底教学AI生成API
- * 集成DeeChat增强版服务，提供专业的AI教学支持
+ * 简化版苏格拉底教学API
+ * 使用原生 DeepSeek API，避免复杂的 DeeChat 依赖
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { EnhancedSocraticServiceV2 } from '@/src/domains/socratic-dialogue/services/EnhancedSocraticServiceV2';
-import {
-  SocraticRequest,
-  DialogueLevel,
-  SocraticMode,
-  SocraticDifficulty
-} from '@/src/domains/socratic-dialogue/services/types/SocraticTypes';
 
-// 兼容性接口 - 将旧格式转换为新的DeeChat标准格式
-interface LegacySocraticRequest {
+interface SocraticRequest {
   question: string;
   level: 'basic' | 'intermediate' | 'advanced';
   context: {
@@ -29,52 +21,95 @@ interface LegacySocraticRequest {
   mode: 'response' | 'suggestions' | 'analysis';
 }
 
-// 增强版苏格拉底服务实例
-const socraticService = new EnhancedSocraticServiceV2();
-
 export async function POST(request: NextRequest) {
   try {
-    const legacyBody: LegacySocraticRequest = await request.json();
+    const body: SocraticRequest = await request.json();
 
     // 验证请求
-    if (!legacyBody.question || !legacyBody.level) {
+    if (!body.question || !body.level) {
       return NextResponse.json({
         success: false,
         error: '缺少必要参数'
       }, { status: 400 });
     }
 
-    console.log('使用DeeChat增强版苏格拉底服务处理请求...');
+    console.log('使用简化版苏格拉底服务处理请求...');
 
-    // 转换为新的标准格式
-    const socraticRequest = convertLegacyToStandard(legacyBody);
+    // 构建系统提示词
+    const systemPrompt = buildSystemPrompt(body.level);
 
-    // 使用增强版服务生成苏格拉底问题
-    const response = await socraticService.generateSocraticQuestion(socraticRequest);
+    // 构建用户提示词
+    const userPrompt = buildUserPrompt(body);
 
-    if (response.success && response.data) {
-      // 将标准响应转换为兼容格式
-      const legacyResponse = {
-        success: true,
-        data: {
-          answer: response.data.question,
-          followUpQuestions: extractFollowUpQuestions(response.data.question),
-          analysis: {
-            keyPoints: ["基于DeeChat智能分析生成"],
-            weaknesses: ["使用多AI提供商确保质量"],
-            suggestions: ["集成成本优化和性能监控"]
-          }
-        }
-      };
+    // 调用 DeepSeek API
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    const apiUrl = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions';
 
-      return NextResponse.json(legacyResponse);
-    } else {
-      console.error('苏格拉底服务生成失败:', response.error);
+    if (!apiKey) {
       return NextResponse.json({
         success: false,
-        error: response.error?.message || '苏格拉底对话生成失败'
+        error: 'API密钥未配置'
       }, { status: 500 });
     }
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 1000,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('DeepSeek API 错误:', errorText);
+      return NextResponse.json({
+        success: false,
+        error: `AI服务错误: ${response.status}`
+      }, { status: 500 });
+    }
+
+    const data = await response.json();
+
+    if (!data.choices || !data.choices[0]) {
+      return NextResponse.json({
+        success: false,
+        error: 'AI响应格式异常'
+      }, { status: 500 });
+    }
+
+    const aiResponse = data.choices[0].message.content;
+
+    // 尝试解析 JSON 响应
+    let parsedResponse;
+    try {
+      parsedResponse = JSON.parse(aiResponse);
+    } catch {
+      // 如果不是 JSON 格式，创建一个简单的响应结构
+      parsedResponse = {
+        answer: aiResponse,
+        followUpQuestions: generateFollowUpQuestions(body.level),
+        analysis: {
+          keyPoints: ["基于苏力教授教学理念生成"],
+          weaknesses: ["需要结合中国法律实践"],
+          suggestions: ["引导学生关注法律的社会现实"]
+        }
+      };
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: parsedResponse
+    });
 
   } catch (error) {
     console.error('苏格拉底AI生成错误:', error);
@@ -85,101 +120,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * 转换旧格式到标准DeeChat格式
- */
-function convertLegacyToStandard(legacy: LegacySocraticRequest): SocraticRequest {
-  // 转换教学难度
-  const levelMap: Record<string, DialogueLevel> = {
-    'basic': DialogueLevel.BEGINNER,
-    'intermediate': DialogueLevel.INTERMEDIATE,
-    'advanced': DialogueLevel.ADVANCED
-  };
-
-  // 转换教学模式
-  const modeMap: Record<string, SocraticMode> = {
-    'response': SocraticMode.EXPLORATION,
-    'suggestions': SocraticMode.ANALYSIS,
-    'analysis': SocraticMode.SYNTHESIS
-  };
-
-  // 构建案例上下文
-  let caseContext = '';
-  if (legacy.context.caseTitle) {
-    caseContext += `案件：${legacy.context.caseTitle}\n`;
-  }
-  if (legacy.context.facts) {
-    caseContext += `事实：${legacy.context.facts.join('; ')}\n`;
-  }
-  if (legacy.context.laws) {
-    caseContext += `法条：${legacy.context.laws.join('; ')}\n`;
-  }
-
-  // 转换对话历史
-  const messages = legacy.context.previousMessages?.map(msg => ({
-    id: generateMessageId(),
-    role: msg.role === 'student' ? 'user' as const : 'assistant' as const,
-    content: msg.content,
-    timestamp: new Date().toISOString(),
-    metadata: {}
-  })) || [];
-
-  // 添加当前教师问题作为用户消息
-  messages.push({
-    id: generateMessageId(),
-    role: 'user' as const,
-    content: legacy.question,
-    timestamp: new Date().toISOString(),
-    metadata: { type: 'teacher_question' }
-  });
-
-  return {
-    sessionId: generateSessionId(),
-    level: levelMap[legacy.level] || DialogueLevel.INTERMEDIATE,
-    mode: modeMap[legacy.mode] || SocraticMode.EXPLORATION,
-    difficulty: SocraticDifficulty.MEDIUM,
-    caseContext: caseContext.trim(),
-    currentTopic: legacy.context.dispute || '法律案例分析',
-    messages
-  };
-}
-
-/**
- * 从生成的问题中提取追问建议
- */
-function extractFollowUpQuestions(question: string): string[] {
-  // 简单的启发式方法提取问题
-  const questions = question.split(/[？?]/).filter(q => q.trim().length > 5);
-
-  if (questions.length > 1) {
-    return questions.slice(1).map(q => q.trim() + '？').slice(0, 3);
-  }
-
-  // 如果没有多个问题，生成一些通用的追问
-  return [
-    "学生对这个问题的理解是否深入？",
-    "是否需要从其他角度继续引导？",
-    "学生的回答体现了哪些思维特点？"
-  ];
-}
-
-/**
- * 生成消息ID
- */
-function generateMessageId(): string {
-  return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-}
-
-/**
- * 生成会话ID
- */
-function generateSessionId(): string {
-  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-}
-
-/**
- * 构建系统提示词
- */
 function buildSystemPrompt(level: string): string {
   const levelDescriptions = {
     basic: '观察层-事实层水平：需要引导其仔细观察案例细节，识别基本事实，理清时间线和因果关系',
@@ -193,14 +133,7 @@ function buildSystemPrompt(level: string): string {
 1. **本土资源理论**：强调中国法治必须基于中国的历史、文化和社会现实
 2. **语境论法学**：法律必须在具体社会语境中理解和运用
 3. **经验优于逻辑**：从实践经验出发，而非抽象理论推演
-4. **关注生活正义**：重视普通人的正义感受，不忽视"秋菊的困惑"
-
-苏格拉底式五层递进教学法：
-- **观察层**：引导学生仔细观察案例细节，识别基本事实信息
-- **事实层**：帮助学生梳理时间线和因果关系，区分客观事实与主观推论
-- **分析层**：引导识别法律关系主体，分析权利义务，找出争议本质
-- **应用层**：指导学生选择适用法条，分析构成要件，进行法律推理
-- **价值层**：引发对公平正义的思考，平衡各方利益，考虑社会效果
+4. **关注生活正义**：重视普通人的正义感受
 
 当前学生水平：${levelDescriptions[level as keyof typeof levelDescriptions]}
 
@@ -208,61 +141,68 @@ function buildSystemPrompt(level: string): string {
 1. **不直接给答案**：通过层层递进的问题引导学生自己发现真理
 2. **重视中国实践**：结合中国法律实践和社会现实进行分析
 3. **批判性思维**：鼓励学生质疑，培养独立思考能力
-4. **语境化分析**：将法律问题放在具体的社会、文化、经济背景中分析
 
-回答要求：
-1. 用JSON格式回答，包含以下字段：
-   - answer: 基于苏力教学理念的引导建议（体现本土资源思维，不超过250字）
-   - followUpQuestions: 3-5个体现苏格拉底式递进逻辑的问题（数组）
-   - analysis: 包含keyPoints（关键点）、weaknesses（薄弱环节）、suggestions（教学建议，要体现中国法学特色）
+请用JSON格式回答，包含以下字段：
+- answer: 基于苏力教学理念的引导建议（不超过250字）
+- followUpQuestions: 3个苏格拉底式递进问题（数组）
+- analysis: 包含keyPoints（关键点）、weaknesses（薄弱环节）、suggestions（教学建议）
 
-2. 语言风格：
-   - 用平实的语言讲深刻的道理（苏力特色）
-   - 问题要具体且贴近中国法律实践
-   - 避免过度西化的法学术语
-
-3. 分层教学策略：
-   - 观察层-事实层：引导发现案例中的中国社会现实特征
-   - 分析层-应用层：结合中国法律传统和现代法治实践
-   - 价值层：思考法律与中国社会文化的深层关系`;
+语言风格要平实，避免过度西化的法学术语，体现中国法学特色。`;
 }
 
-/**
- * 构建用户提示词
- */
 function buildUserPrompt(request: SocraticRequest): string {
-  const { question, context, mode } = request;
-  
   let prompt = `案件背景：
-标题：${context.caseTitle || '法律案例'}
-争议焦点：${context.dispute || '待分析'}
+标题：${request.context.caseTitle || '法律案例'}
+争议焦点：${request.context.dispute || '待分析'}
 `;
 
-  if (context.facts && context.facts.length > 0) {
-    prompt += `\n关键事实：\n${context.facts.map((f, i) => `${i + 1}. ${f}`).join('\n')}`;
+  if (request.context.facts && request.context.facts.length > 0) {
+    prompt += `\n关键事实：\n${request.context.facts.map((f, i) => `${i + 1}. ${f}`).join('\n')}`;
   }
 
-  if (context.laws && context.laws.length > 0) {
-    prompt += `\n\n相关法条：\n${context.laws.map((l, i) => `${i + 1}. ${l}`).join('\n')}`;
+  if (request.context.laws && request.context.laws.length > 0) {
+    prompt += `\n\n相关法条：\n${request.context.laws.map((l, i) => `${i + 1}. ${l}`).join('\n')}`;
   }
 
-  if (context.previousMessages && context.previousMessages.length > 0) {
-    const recent = context.previousMessages.slice(-3);  // 只取最近3条
+  if (request.context.previousMessages && request.context.previousMessages.length > 0) {
+    const recent = request.context.previousMessages.slice(-3);
     prompt += `\n\n最近对话：\n${recent.map(m => `${m.role}: ${m.content}`).join('\n')}`;
   }
 
-  prompt += `\n\n教师当前问题：${question}`;
+  prompt += `\n\n教师当前问题：${request.question}`;
 
-  switch (mode) {
+  switch (request.mode) {
     case 'suggestions':
-      prompt += '\n\n请基于苏力教授的"本土资源"理论，为这个教学场景提供体现中国法学特色的引导性问题建议。问题应该帮助学生从中国的社会现实出发理解法律问题。';
+      prompt += '\n\n请基于苏力教授的"本土资源"理论，为这个教学场景提供体现中国法学特色的引导性问题建议。';
       break;
     case 'analysis':
-      prompt += '\n\n请从苏力教授的"语境论法学"视角，分析学生可能的思维盲点和教学重点。特别关注如何让学生理解法律与中国社会实践的关系。';
+      prompt += '\n\n请从苏力教授的"语境论法学"视角，分析学生可能的思维盲点和教学重点。';
       break;
     default:
-      prompt += '\n\n请提供体现苏力教授教学理念的苏格拉底式引导建议：1）从生活经验入手，而非抽象概念；2）关注中国法律实践的特殊性；3）引导学生思考法律背后的社会现实。';
+      prompt += '\n\n请提供体现苏力教授教学理念的苏格拉底式引导建议：从生活经验入手，关注中国法律实践的特殊性。';
   }
 
   return prompt;
+}
+
+function generateFollowUpQuestions(level: string): string[] {
+  const questionsByLevel = {
+    basic: [
+      "学生是否理解了案例的基本事实？",
+      "需要引导学生关注哪些细节？",
+      "如何帮助学生梳理时间顺序？"
+    ],
+    intermediate: [
+      "学生的法律分析是否深入？",
+      "是否需要引导学生思考其他角度？",
+      "如何帮助学生更好地运用法条？"
+    ],
+    advanced: [
+      "学生的价值判断是否成熟？",
+      "如何引导学生思考更深层的正义问题？",
+      "学生是否考虑到了社会影响？"
+    ]
+  };
+
+  return questionsByLevel[level as keyof typeof questionsByLevel] || questionsByLevel.intermediate;
 }

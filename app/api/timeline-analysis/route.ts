@@ -19,8 +19,15 @@ export async function POST(req: NextRequest) {
     // 解析请求
     const requestData = await parseRequest(req);
 
+    // 强制开启AI分析以支持智能时间轴功能
+    const enhancedRequestData = {
+      ...requestData,
+      includeAI: true,
+      analysisType: 'comprehensive' as const
+    };
+
     // 执行业务逻辑
-    const result = await timelineService.analyzeTimeline(requestData);
+    const result = await timelineService.analyzeTimeline(enhancedRequestData);
 
     // 返回响应
     return NextResponse.json(result, {

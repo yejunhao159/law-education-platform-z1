@@ -179,11 +179,31 @@ export class TimelineAnalysisApplicationService {
       return ruleAnalysis;
     }
 
+    // 确保数据结构兼容 SmartMerger
+    const formattedRuleData = {
+      dates: ruleAnalysis?.dates || [],
+      parties: ruleAnalysis?.parties || [],
+      amounts: ruleAnalysis?.amounts || [],
+      legalClauses: ruleAnalysis?.legalClauses || [],
+      facts: ruleAnalysis?.facts || [],
+      metadata: ruleAnalysis?.metadata || {},
+      confidence: ruleAnalysis?.confidence || 0.8,
+      source: 'rule'
+    };
+
+    const formattedAiData = {
+      dates: aiAnalysis?.analysis?.dates || [],
+      parties: aiAnalysis?.analysis?.parties || [],
+      amounts: aiAnalysis?.analysis?.amounts || [],
+      legalClauses: aiAnalysis?.analysis?.legalClauses || [],
+      facts: aiAnalysis?.analysis?.facts || [],
+      metadata: aiAnalysis?.analysis?.metadata || {},
+      confidence: aiAnalysis?.confidence || 0.7,
+      source: 'ai'
+    };
+
     // 使用智能合并器
-    return SmartMerger.merge(ruleAnalysis, {
-      analysis: aiAnalysis.analysis,
-      confidence: aiAnalysis.confidence
-    }, {
+    return SmartMerger.merge(formattedRuleData, formattedAiData, {
       strategy: 'confidence-based',
       aiWeight: 0.6,
       ruleWeight: 0.4

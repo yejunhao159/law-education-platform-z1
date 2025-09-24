@@ -5,10 +5,10 @@
 import { EnhancedSocraticService } from '../src/domains/socratic-dialogue/services/EnhancedSocraticService';
 import {
   SocraticRequest,
-  DialogueLevel,
+  SocraticDifficultyLevel,
   SocraticMode,
   SocraticDifficulty
-} from '../src/domains/socratic-dialogue/services/types/SocraticTypes';
+} from '@/lib/types/socratic';
 
 async function testSocraticService() {
   console.log('🧠 开始测试PromptX集成的苏格拉底服务...\n');
@@ -25,7 +25,7 @@ async function testSocraticService() {
   // 测试用例：合同违约案例
   const testRequest: SocraticRequest = {
     sessionId: 'test-session-001',
-    level: DialogueLevel.INTERMEDIATE,
+    level: SocraticDifficultyLevel.INTERMEDIATE,
     mode: SocraticMode.ANALYSIS,
     difficulty: SocraticDifficulty.MEDIUM,
     caseContext: `某公司与供应商签订采购合同，约定在2023年6月30日前交付1000台设备，
@@ -86,7 +86,7 @@ async function testDifferentModes() {
   const service = new EnhancedSocraticService();
   const baseRequest: SocraticRequest = {
     sessionId: 'mode-test',
-    level: DialogueLevel.INTERMEDIATE,
+    level: SocraticDifficultyLevel.INTERMEDIATE,
     difficulty: SocraticDifficulty.MEDIUM,
     caseContext: '刑事案件：某人涉嫌盗窃，但声称是借用物品。',
     currentTopic: '犯罪构成要件分析',
