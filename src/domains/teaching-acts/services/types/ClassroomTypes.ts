@@ -43,12 +43,43 @@ export interface ClassroomSession {
   participants: StudentInfo[];
   caseId?: string;
   settings: SessionSettings;
+  /** 当前进行中的投票 */
+  currentVote?: VoteSession;
 }
 
 export interface SessionSettings {
   difficulty: 'easy' | 'normal' | 'hard';
   mode: 'auto' | 'semi' | 'manual';
   maxDuration: number;
+}
+
+// ========== 投票系统类型 ==========
+export interface VoteOption {
+  /** 选项ID (A, B, C, D, E) */
+  id: string;
+  /** 选项描述文本 */
+  text: string;
+  /** 当前投票数 */
+  voteCount: number;
+}
+
+export interface VoteSession {
+  /** 投票会话ID */
+  id: string;
+  /** 投票问题 */
+  question: string;
+  /** 投票选项列表 */
+  options: VoteOption[];
+  /** 投票创建时间 */
+  createdAt: number;
+  /** 投票结束时间 */
+  endsAt?: number;
+  /** 是否激活状态 */
+  isActive: boolean;
+  /** 参与者投票记录 studentId -> optionId */
+  participantVotes: Record<string, string>;
+  /** 允许的最大选项数 */
+  maxOptions: number;
 }
 
 // ========== 请求类型 ==========
@@ -95,6 +126,30 @@ export interface GetClassroomListRequest {
 
 export interface GetClassroomDetailRequest {
   classroomId: string;
+}
+
+// ========== 投票相关请求类型 ==========
+export interface StartVoteRequest {
+  sessionId: string;
+  teacherId: string;
+  question: string;
+  options: string[]; // 最多5个选项 (A, B, C, D, E)
+  duration?: number; // 投票持续时间（秒）
+}
+
+export interface SubmitVoteRequest {
+  sessionId: string;
+  studentId: string;
+  optionId: string; // 'A', 'B', 'C', 'D', 'E'
+}
+
+export interface EndVoteRequest {
+  sessionId: string;
+  teacherId: string;
+}
+
+export interface GetVoteResultsRequest {
+  sessionId: string;
 }
 
 // ========== 响应类型 ==========
@@ -160,13 +215,47 @@ export interface GetClassroomDetailResponse extends ClassroomResponse {
   };
 }
 
+// ========== 投票相关响应类型 ==========
+export interface StartVoteResponse extends ClassroomResponse {
+  data?: {
+    voteSession: VoteSession;
+    message: string;
+  };
+}
+
+export interface SubmitVoteResponse extends ClassroomResponse {
+  data?: {
+    voteSession: VoteSession;
+    message: string;
+  };
+}
+
+export interface EndVoteResponse extends ClassroomResponse {
+  data?: {
+    voteSession: VoteSession;
+    results: VoteOption[];
+    message: string;
+  };
+}
+
+export interface GetVoteResultsResponse extends ClassroomResponse {
+  data?: {
+    voteSession: VoteSession | null;
+    results: VoteOption[];
+  };
+}
+
 // ========== 操作类型枚举 ==========
 export enum ClassroomAction {
   CREATE = 'create',
   JOIN = 'join',
   START_SESSION = 'start-session',
   END_SESSION = 'end-session',
-  GET_STATUS = 'get-status'
+  GET_STATUS = 'get-status',
+  START_VOTE = 'start-vote',
+  SUBMIT_VOTE = 'submit-vote',
+  END_VOTE = 'end-vote',
+  GET_VOTE_RESULTS = 'get-vote-results'
 }
 
 // ========== 错误代码枚举 ==========
@@ -179,5 +268,11 @@ export enum ClassroomErrorCode {
   CLASSROOM_UNAVAILABLE = 'CLASSROOM_UNAVAILABLE',
   UNAUTHORIZED = 'UNAUTHORIZED',
   SESSION_ALREADY_ACTIVE = 'SESSION_ALREADY_ACTIVE',
-  SESSION_NOT_FOUND = 'SESSION_NOT_FOUND'
+  SESSION_NOT_FOUND = 'SESSION_NOT_FOUND',
+  VOTE_ALREADY_ACTIVE = 'VOTE_ALREADY_ACTIVE',
+  VOTE_NOT_FOUND = 'VOTE_NOT_FOUND',
+  VOTE_ENDED = 'VOTE_ENDED',
+  VOTE_ALREADY_SUBMITTED = 'VOTE_ALREADY_SUBMITTED',
+  INVALID_VOTE_OPTION = 'INVALID_VOTE_OPTION',
+  TOO_MANY_OPTIONS = 'TOO_MANY_OPTIONS'
 }

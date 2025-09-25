@@ -7,7 +7,8 @@
 import {
   ClassroomInfo,
   ClassroomSession,
-  StudentInfo
+  StudentInfo,
+  VoteSession
 } from './types/ClassroomTypes';
 
 export class ClassroomStateManager {
@@ -154,6 +155,80 @@ export class ClassroomStateManager {
    */
   removeStudentFromSession(studentId: string): void {
     this.studentSessions.delete(studentId);
+  }
+
+  // ========== 投票管理 ==========
+
+  /**
+   * 开始投票
+   */
+  startVote(sessionId: string, voteSession: VoteSession): boolean {
+    const session = this.classroomSessions.get(sessionId);
+    if (!session) return false;
+
+    session.currentVote = voteSession;
+    this.classroomSessions.set(sessionId, session);
+    return true;
+  }
+
+  /**
+   * 提交投票
+   */
+  submitVote(sessionId: string, studentId: string, optionId: string): boolean {
+    const session = this.classroomSessions.get(sessionId);
+    if (!session || !session.currentVote) return false;
+
+    const voteSession = session.currentVote;
+
+    // 检查是否已经投票
+    if (voteSession.participantVotes[studentId]) {
+      return false;
+    }
+
+    // 记录投票
+    voteSession.participantVotes[studentId] = optionId;
+
+    // 更新选项计数
+    const option = voteSession.options.find(opt => opt.id === optionId);
+    if (option) {
+      option.voteCount++;
+    }
+
+    // 更新会话
+    this.classroomSessions.set(sessionId, session);
+    return true;
+  }
+
+  /**
+   * 结束投票
+   */
+  endVote(sessionId: string): boolean {
+    const session = this.classroomSessions.get(sessionId);
+    if (!session || !session.currentVote) return false;
+
+    session.currentVote.isActive = false;
+    session.currentVote.endsAt = Date.now();
+
+    this.classroomSessions.set(sessionId, session);
+    return true;
+  }
+
+  /**
+   * 获取投票会话
+   */
+  getVoteSession(sessionId: string): VoteSession | undefined {
+    const session = this.classroomSessions.get(sessionId);
+    return session?.currentVote;
+  }
+
+  /**
+   * 检查学生是否已投票
+   */
+  hasStudentVoted(sessionId: string, studentId: string): boolean {
+    const session = this.classroomSessions.get(sessionId);
+    if (!session || !session.currentVote) return false;
+
+    return studentId in session.currentVote.participantVotes;
   }
 
   // ========== 验证和辅助方法 ==========

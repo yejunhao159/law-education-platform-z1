@@ -10,6 +10,8 @@ import {
   ClassroomInfo,
   ClassroomSession,
   StudentInfo,
+  VoteSession,
+  VoteOption,
   CreateClassroomRequest,
   CreateClassroomResponse,
   JoinClassroomRequest,
@@ -24,6 +26,14 @@ import {
   GetClassroomListResponse,
   GetClassroomDetailRequest,
   GetClassroomDetailResponse,
+  StartVoteRequest,
+  StartVoteResponse,
+  SubmitVoteRequest,
+  SubmitVoteResponse,
+  EndVoteRequest,
+  EndVoteResponse,
+  GetVoteResultsRequest,
+  GetVoteResultsResponse,
   ClassroomErrorCode
 } from './types/ClassroomTypes';
 
@@ -332,6 +342,245 @@ export class ClassroomApplicationService {
     } catch (error) {
       return this.buildErrorResponse(
         error instanceof Error ? error.message : '获取课堂详情失败',
+        ClassroomErrorCode.INTERNAL_ERROR
+      );
+    }
+  }
+
+  // ========== 投票管理 ==========
+
+  /**
+   * 开始投票
+   */
+  async startVote(request: StartVoteRequest): Promise<StartVoteResponse> {
+    try {
+      // 验证教师权限
+      if (!this.stateManager.verifyTeacherAccess(request.sessionId, request.teacherId)) {
+        return this.buildErrorResponse(
+          '无权限操作此会话',
+          ClassroomErrorCode.UNAUTHORIZED
+        );
+      }
+
+      const session = this.stateManager.getSession(request.sessionId);
+      if (!session) {
+        return this.buildErrorResponse(
+          '会话不存在',
+          ClassroomErrorCode.SESSION_NOT_FOUND
+        );
+      }
+
+      // 检查是否已有活跃投票
+      if (session.currentVote && session.currentVote.isActive) {
+        return this.buildErrorResponse(
+          '已有活跃的投票进行中',
+          ClassroomErrorCode.VOTE_ALREADY_ACTIVE
+        );
+      }
+
+      // 验证选项数量（最多5个）
+      if (request.options.length > 5) {
+        return this.buildErrorResponse(
+          '投票选项不能超过5个',
+          ClassroomErrorCode.TOO_MANY_OPTIONS
+        );
+      }
+
+      // 创建投票选项（ABCDE格式）
+      const letters = ['A', 'B', 'C', 'D', 'E'];
+      const voteOptions: VoteOption[] = request.options.slice(0, 5).map((text, index) => ({
+        id: letters[index],
+        text: text.trim(),
+        voteCount: 0
+      }));
+
+      // 创建投票会话
+      const voteId = uuidv4();
+      const voteSession: VoteSession = {
+        id: voteId,
+        question: request.question.trim(),
+        options: voteOptions,
+        createdAt: Date.now(),
+        endsAt: request.duration ? Date.now() + (request.duration * 1000) : undefined,
+        isActive: true,
+        participantVotes: {},
+        maxOptions: voteOptions.length
+      };
+
+      // 更新会话
+      this.stateManager.startVote(request.sessionId, voteSession);
+
+      return {
+        success: true,
+        data: {
+          voteSession,
+          message: '投票已开始'
+        }
+      };
+
+    } catch (error) {
+      return this.buildErrorResponse(
+        error instanceof Error ? error.message : '开始投票失败',
+        ClassroomErrorCode.INTERNAL_ERROR
+      );
+    }
+  }
+
+  /**
+   * 提交投票
+   */
+  async submitVote(request: SubmitVoteRequest): Promise<SubmitVoteResponse> {
+    try {
+      const session = this.stateManager.getSession(request.sessionId);
+      if (!session) {
+        return this.buildErrorResponse(
+          '会话不存在',
+          ClassroomErrorCode.SESSION_NOT_FOUND
+        );
+      }
+
+      const voteSession = session.currentVote;
+      if (!voteSession) {
+        return this.buildErrorResponse(
+          '当前没有进行中的投票',
+          ClassroomErrorCode.VOTE_NOT_FOUND
+        );
+      }
+
+      if (!voteSession.isActive) {
+        return this.buildErrorResponse(
+          '投票已结束',
+          ClassroomErrorCode.VOTE_ENDED
+        );
+      }
+
+      // 检查是否已经投过票
+      if (voteSession.participantVotes[request.studentId]) {
+        return this.buildErrorResponse(
+          '您已经投过票了',
+          ClassroomErrorCode.VOTE_ALREADY_SUBMITTED
+        );
+      }
+
+      // 验证投票选项
+      const validOptions = ['A', 'B', 'C', 'D', 'E'];
+      if (!validOptions.includes(request.optionId.toUpperCase())) {
+        return this.buildErrorResponse(
+          '无效的投票选项',
+          ClassroomErrorCode.INVALID_VOTE_OPTION
+        );
+      }
+
+      // 检查选项是否存在
+      const optionExists = voteSession.options.some(opt => opt.id === request.optionId.toUpperCase());
+      if (!optionExists) {
+        return this.buildErrorResponse(
+          '投票选项不存在',
+          ClassroomErrorCode.INVALID_VOTE_OPTION
+        );
+      }
+
+      // 提交投票
+      this.stateManager.submitVote(request.sessionId, request.studentId, request.optionId.toUpperCase());
+
+      // 获取更新后的投票会话
+      const updatedSession = this.stateManager.getSession(request.sessionId)!;
+
+      return {
+        success: true,
+        data: {
+          voteSession: updatedSession.currentVote!,
+          message: '投票提交成功'
+        }
+      };
+
+    } catch (error) {
+      return this.buildErrorResponse(
+        error instanceof Error ? error.message : '提交投票失败',
+        ClassroomErrorCode.INTERNAL_ERROR
+      );
+    }
+  }
+
+  /**
+   * 结束投票
+   */
+  async endVote(request: EndVoteRequest): Promise<EndVoteResponse> {
+    try {
+      // 验证教师权限
+      if (!this.stateManager.verifyTeacherAccess(request.sessionId, request.teacherId)) {
+        return this.buildErrorResponse(
+          '无权限操作此会话',
+          ClassroomErrorCode.UNAUTHORIZED
+        );
+      }
+
+      const session = this.stateManager.getSession(request.sessionId);
+      if (!session) {
+        return this.buildErrorResponse(
+          '会话不存在',
+          ClassroomErrorCode.SESSION_NOT_FOUND
+        );
+      }
+
+      const voteSession = session.currentVote;
+      if (!voteSession) {
+        return this.buildErrorResponse(
+          '当前没有进行中的投票',
+          ClassroomErrorCode.VOTE_NOT_FOUND
+        );
+      }
+
+      // 结束投票
+      this.stateManager.endVote(request.sessionId);
+
+      // 获取最终结果
+      const updatedSession = this.stateManager.getSession(request.sessionId)!;
+      const finalVoteSession = updatedSession.currentVote!;
+
+      return {
+        success: true,
+        data: {
+          voteSession: finalVoteSession,
+          results: finalVoteSession.options,
+          message: '投票已结束'
+        }
+      };
+
+    } catch (error) {
+      return this.buildErrorResponse(
+        error instanceof Error ? error.message : '结束投票失败',
+        ClassroomErrorCode.INTERNAL_ERROR
+      );
+    }
+  }
+
+  /**
+   * 获取投票结果
+   */
+  async getVoteResults(request: GetVoteResultsRequest): Promise<GetVoteResultsResponse> {
+    try {
+      const session = this.stateManager.getSession(request.sessionId);
+      if (!session) {
+        return this.buildErrorResponse(
+          '会话不存在',
+          ClassroomErrorCode.SESSION_NOT_FOUND
+        );
+      }
+
+      const voteSession = session.currentVote;
+
+      return {
+        success: true,
+        data: {
+          voteSession: voteSession || null,
+          results: voteSession ? voteSession.options : []
+        }
+      };
+
+    } catch (error) {
+      return this.buildErrorResponse(
+        error instanceof Error ? error.message : '获取投票结果失败',
         ClassroomErrorCode.INTERNAL_ERROR
       );
     }

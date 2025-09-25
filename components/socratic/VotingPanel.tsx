@@ -17,7 +17,7 @@ import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
 import { Alert, AlertDescription } from '../ui/alert'
 import { ScrollArea } from '../ui/scroll-area'
-import { 
+import {
   BarChart,
   Bar,
   XAxis,
@@ -30,7 +30,7 @@ import {
   Pie,
   Cell
 } from 'recharts'
-import { 
+import {
   Vote,
   Users,
   Clock,
@@ -44,13 +44,17 @@ import {
   RefreshCw,
   Timer,
   Eye,
-  EyeOff
+  EyeOff,
+  Wifi,
+  WifiOff
 } from 'lucide-react'
-import { 
+import {
   type VoteData,
   type VoteChoice,
   type StudentInfo
 } from '../../lib/types/socratic'
+import { useSSEVoting } from '../../src/hooks/useSSEVoting'
+import { SSEConnectionStatus } from '../../src/lib/sse/types'
 
 // 图表颜色
 const CHART_COLORS = [
@@ -90,42 +94,47 @@ export interface VotingConfig {
 
 // 组件属性
 export interface VotingPanelProps {
-  /** 当前投票数据 */
-  currentVote?: VoteData | null
-  /** 学生列表 */
-  students?: Map<string, StudentInfo>
+  /** 课堂ID（用于SSE连接） */
+  classroomId: string
+  /** 会话ID（用于投票操作） */
+  sessionId?: string
   /** 当前用户ID */
   currentUserId?: string
   /** 是否为教师 */
   isTeacher?: boolean
+  /** 教师ID（教师权限验证） */
+  teacherId?: string
   /** 投票配置 */
   config?: VotingConfig
-  /** 创建投票回调 */
-  onCreateVote?: (question: string, choices: string[], type: VoteType, config?: VotingConfig) => void
-  /** 投票回调 */
-  onVote?: (voteId: string, choiceIds: string[]) => void
-  /** 关闭投票回调 */
-  onCloseVote?: (voteId: string) => void
-  /** 重置投票回调 */
-  onResetVote?: (voteId: string) => void
   /** 样式类名 */
   className?: string
+  /** 已弃用的属性（向后兼容） */
+  currentVote?: VoteData | null
+  students?: Map<string, StudentInfo>
+  onCreateVote?: (question: string, choices: string[], type: VoteType, config?: VotingConfig) => void
+  onVote?: (voteId: string, choiceIds: string[]) => void
+  onCloseVote?: (voteId: string) => void
+  onResetVote?: (voteId: string) => void
 }
 
 /**
  * 投票面板组件
  */
 export const VotingPanel: React.FC<VotingPanelProps> = ({
-  currentVote = null,
-  students = new Map(),
+  classroomId,
+  sessionId,
   currentUserId = '',
   isTeacher = false,
+  teacherId,
   config = {},
-  onCreateVote,
-  onVote,
-  onCloseVote,
-  onResetVote,
-  className
+  className,
+  // 向后兼容的属性（可选）
+  currentVote: legacyCurrentVote = null,
+  students: legacyStudents = new Map(),
+  onCreateVote: legacyOnCreateVote,
+  onVote: legacyOnVote,
+  onCloseVote: legacyOnCloseVote,
+  onResetVote: legacyOnResetVote
 }) => {
   // 默认配置
   const defaultConfig: VotingConfig = {
@@ -133,50 +142,100 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
     showRealTimeResults: true,
     autoCloseAfter: 300, // 5分钟
     minChoices: 1,
-    maxChoices: 1,
+    maxChoices: 5, // 支持最多5个选项 (ABCDE)
     allowChangeVote: true,
     showVoters: false,
     ...config
   }
 
+  // SSE连接
+  const sseConfig = useMemo(() => ({
+    classroomId,
+    studentId: isTeacher ? undefined : currentUserId,
+    reconnectInterval: 3000,
+    maxReconnectAttempts: 10,
+    heartbeatInterval: 30000
+  }), [classroomId, isTeacher, currentUserId])
+
+  const {
+    connectionState,
+    voteState,
+    classroomState,
+    connect,
+    disconnect,
+    reconnect,
+    submitVote: sseSubmitVote,
+    onVoteStarted,
+    onVoteUpdate,
+    onVoteEnded,
+    onStudentActivity
+  } = useSSEVoting(sseConfig)
+
   // 状态管理
-  const [voteStatus, setVoteStatus] = useState<VoteStatus>('draft')
   const [voteType, setVoteType] = useState<VoteType>('single')
   const [question, setQuestion] = useState('')
   const [choices, setChoices] = useState<string[]>(['', ''])
   const [selectedChoices, setSelectedChoices] = useState<Set<string>>(new Set())
   const [showResults, setShowResults] = useState(defaultConfig.showRealTimeResults)
-  const [remainingTime, setRemainingTime] = useState<number | null>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
 
-  // 更新投票状态
-  useEffect(() => {
-    if (currentVote) {
-      if (currentVote.isEnded) {
-        setVoteStatus('closed')
-      } else {
-        setVoteStatus('active')
-      }
-    } else {
-      setVoteStatus('draft')
-    }
-  }, [currentVote])
+  // 使用SSE的投票数据或回退到legacy数据
+  const currentVote = voteState.voteId ? {
+    id: voteState.voteId,
+    question: voteState.question || '',
+    choices: voteState.options.map(opt => ({
+      id: opt.id,
+      text: opt.text,
+      count: opt.count,
+      percentage: opt.percentage
+    })),
+    votedStudents: new Set<string>(), // SSE不直接提供此信息
+    createdAt: voteState.startedAt || Date.now(),
+    endsAt: voteState.endsAt,
+    isEnded: !voteState.isActive,
+    totalVotes: voteState.totalVotes
+  } : legacyCurrentVote
 
-  // 倒计时
+  const students = legacyStudents // 保持向后兼容
+
+  // 自动连接SSE
   useEffect(() => {
-    if (currentVote && currentVote.endsAt && !currentVote.isEnded) {
-      const timer = setInterval(() => {
-        const remaining = Math.max(0, Math.floor((currentVote.endsAt! - Date.now()) / 1000))
-        setRemainingTime(remaining)
-        
-        if (remaining === 0) {
-          onCloseVote?.(currentVote.id)
-        }
-      }, 1000)
-      
-      return () => clearInterval(timer)
+    if (classroomId) {
+      connect()
     }
-  }, [currentVote, onCloseVote])
+
+    return () => {
+      disconnect()
+    }
+  }, [classroomId, connect, disconnect])
+
+  // SSE事件监听
+  useEffect(() => {
+    onVoteStarted((data) => {
+      console.log('投票已开始:', data)
+      setShowCreateForm(false)
+    })
+
+    onVoteUpdate((data) => {
+      console.log('投票结果更新:', data)
+    })
+
+    onVoteEnded((data) => {
+      console.log('投票已结束:', data)
+    })
+
+    onStudentActivity((data) => {
+      console.log('学生活动:', data)
+    })
+  }, [onVoteStarted, onVoteUpdate, onVoteEnded, onStudentActivity])
+
+  // 计算剩余时间
+  const remainingTime = useMemo(() => {
+    if (voteState.endsAt && voteState.isActive) {
+      return Math.max(0, Math.floor((voteState.endsAt - Date.now()) / 1000))
+    }
+    return null
+  }, [voteState.endsAt, voteState.isActive])
 
   // 计算投票统计
   const voteStats = useMemo(() => {
@@ -210,14 +269,15 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
     }
   }, [currentVote, students])
 
-  // 检查是否已投票
+  // 检查是否已投票（学生端）
   const hasVoted = useMemo(() => {
+    if (isTeacher) return false
     return currentVote?.votedStudents.has(currentUserId) || false
-  }, [currentVote, currentUserId])
+  }, [currentVote, currentUserId, isTeacher])
 
   // 添加选项
   const handleAddChoice = useCallback(() => {
-    if (choices.length < 8) {
+    if (choices.length < 5) { // ABCDE最多5个选项
       setChoices([...choices, ''])
     }
   }, [choices])
@@ -237,54 +297,122 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
   }, [choices])
 
   // 创建投票
-  const handleCreateVote = useCallback(() => {
-    const validChoices = choices.filter(c => c.trim() !== '')
-    
+  const handleCreateVote = useCallback(async () => {
+    const validChoices = choices.filter(c => c.trim() !== '').slice(0, 5) // 最多5个选项
+
     if (!question.trim()) {
       alert('请输入投票问题')
       return
     }
-    
+
     if (validChoices.length < 2) {
       alert('至少需要两个选项')
       return
     }
-    
-    onCreateVote?.(question, validChoices, voteType, defaultConfig)
-    setShowCreateForm(false)
-    setQuestion('')
-    setChoices(['', ''])
-  }, [question, choices, voteType, defaultConfig, onCreateVote])
 
-  // 提交投票
-  const handleSubmitVote = useCallback(() => {
-    if (!currentVote || selectedChoices.size === 0) return
-    
-    if (voteType === 'single' && selectedChoices.size > 1) {
-      alert('单选投票只能选择一个选项')
+    if (!sessionId) {
+      alert('未找到会话ID，请确保课堂会话已启动')
       return
     }
-    
-    onVote?.(currentVote.id, Array.from(selectedChoices))
-    setSelectedChoices(new Set())
-  }, [currentVote, selectedChoices, voteType, onVote])
+
+    try {
+      const response = await fetch(`/api/classroom/${classroomId}/vote`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sessionId,
+          teacherId: teacherId || currentUserId,
+          question: question.trim(),
+          options: validChoices,
+          duration: defaultConfig.autoCloseAfter
+        })
+      })
+
+      if (response.ok) {
+        setShowCreateForm(false)
+        setQuestion('')
+        setChoices(['', ''])
+      } else {
+        const error = await response.json()
+        alert(`创建投票失败: ${error.error?.message || '未知错误'}`)
+      }
+    } catch (error) {
+      console.error('创建投票错误:', error)
+      alert('创建投票失败，请重试')
+    }
+  }, [question, choices, defaultConfig.autoCloseAfter, sessionId, classroomId, teacherId, currentUserId])
+
+  // 提交投票
+  const handleSubmitVote = useCallback(async () => {
+    if (!currentVote || selectedChoices.size === 0) return
+
+    if (selectedChoices.size > 1) {
+      alert('ABCDE投票只能选择一个选项')
+      return
+    }
+
+    if (isTeacher) {
+      alert('教师无法参与投票')
+      return
+    }
+
+    const selectedOption = Array.from(selectedChoices)[0]
+
+    try {
+      // 优先使用SSE提交投票
+      const success = await sseSubmitVote(selectedOption)
+
+      if (success) {
+        setSelectedChoices(new Set())
+      } else {
+        alert('投票提交失败，请重试')
+      }
+    } catch (error) {
+      console.error('提交投票错误:', error)
+      alert('投票提交失败，请重试')
+    }
+  }, [currentVote, selectedChoices, isTeacher, sseSubmitVote])
 
   // 选择选项
   const handleSelectChoice = useCallback((choiceId: string) => {
-    if (voteType === 'single') {
-      setSelectedChoices(new Set([choiceId]))
-    } else {
-      const newSelected = new Set(selectedChoices)
-      if (newSelected.has(choiceId)) {
-        newSelected.delete(choiceId)
-      } else {
-        if (newSelected.size < (defaultConfig.maxChoices || 5)) {
-          newSelected.add(choiceId)
+    if (hasVoted) return
+
+    // ABCDE投票只支持单选
+    setSelectedChoices(new Set([choiceId]))
+  }, [hasVoted])
+
+  // 结束投票
+  const handleCloseVote = useCallback(async () => {
+    if (!currentVote || !sessionId) return
+
+    try {
+      const response = await fetch(
+        `/api/classroom/${classroomId}/vote?sessionId=${sessionId}&teacherId=${teacherId || currentUserId}`,
+        {
+          method: 'DELETE'
         }
+      )
+
+      if (!response.ok) {
+        const error = await response.json()
+        alert(`结束投票失败: ${error.error?.message || '未知错误'}`)
       }
-      setSelectedChoices(newSelected)
+    } catch (error) {
+      console.error('结束投票错误:', error)
+      alert('结束投票失败，请重试')
     }
-  }, [voteType, selectedChoices, defaultConfig.maxChoices])
+  }, [currentVote, sessionId, classroomId, teacherId, currentUserId])
+
+  // 重新投票（重置投票）
+  const handleResetVote = useCallback(() => {
+    // 清理本地状态，准备创建新投票
+    setSelectedChoices(new Set())
+    setShowCreateForm(true)
+    setQuestion('')
+    setChoices(['', ''])
+  }, [])
 
   // 格式化时间
   const formatTime = (seconds: number): string => {
@@ -320,10 +448,10 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
               size="sm"
               variant="outline"
               onClick={handleAddChoice}
-              disabled={choices.length >= 8}
+              disabled={choices.length >= 5}
             >
               <Plus className="h-4 w-4 mr-1" />
-              添加选项
+              添加选项 ({choices.length}/5)
             </Button>
           </div>
           <div className="space-y-2">
@@ -504,49 +632,82 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
 
   // 渲染控制按钮
   const renderControls = () => {
-    if (!isTeacher) return null
-
     return (
-      <div className="flex items-center gap-2">
-        {!currentVote && (
-          <Button onClick={() => setShowCreateForm(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            创建投票
-          </Button>
-        )}
-        
-        {currentVote && !currentVote.isEnded && (
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowResults(!showResults)}
-            >
-              {showResults ? (
-                <><EyeOff className="h-4 w-4 mr-1" /> 隐藏结果</>
-              ) : (
-                <><Eye className="h-4 w-4 mr-1" /> 显示结果</>
-              )}
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => onCloseVote?.(currentVote.id)}
-            >
-              结束投票
-            </Button>
-          </>
-        )}
-        
-        {currentVote?.isEnded && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onResetVote?.(currentVote.id)}
-          >
-            <RefreshCw className="h-4 w-4 mr-1" />
-            重新投票
-          </Button>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {/* 连接状态指示器 */}
+          <Badge variant="outline" className="flex items-center gap-1">
+            {connectionState.status === SSEConnectionStatus.CONNECTED ? (
+              <>
+                <Wifi className="h-3 w-3 text-green-500" />
+                已连接
+              </>
+            ) : connectionState.status === SSEConnectionStatus.RECONNECTING ? (
+              <>
+                <RefreshCw className="h-3 w-3 text-yellow-500 animate-spin" />
+                重连中
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-3 w-3 text-red-500" />
+                未连接
+              </>
+            )}
+          </Badge>
+
+          {/* 课堂信息 */}
+          <Badge variant="secondary">
+            <Users className="h-3 w-3 mr-1" />
+            {classroomState.connectedStudents} 在线
+          </Badge>
+        </div>
+
+        {isTeacher && (
+          <div className="flex items-center gap-2">
+            {!currentVote && (
+              <Button
+                onClick={() => setShowCreateForm(true)}
+                disabled={connectionState.status !== SSEConnectionStatus.CONNECTED || !sessionId}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                创建投票
+              </Button>
+            )}
+
+            {currentVote && !currentVote.isEnded && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowResults(!showResults)}
+                >
+                  {showResults ? (
+                    <><EyeOff className="h-4 w-4 mr-1" /> 隐藏结果</>
+                  ) : (
+                    <><Eye className="h-4 w-4 mr-1" /> 显示结果</>
+                  )}
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleCloseVote}
+                >
+                  结束投票
+                </Button>
+              </>
+            )}
+
+            {currentVote?.isEnded && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResetVote}
+              >
+                <RefreshCw className="h-4 w-4 mr-1" />
+                重新投票
+              </Button>
+            )}
+          </div>
         )}
       </div>
     )

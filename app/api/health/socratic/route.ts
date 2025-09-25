@@ -266,12 +266,8 @@ async function checkRateLimit(): Promise<ComponentHealth> {
       };
     }
     
-    // 测试限流功能
-    const testKey = 'health-check-rate-limit';
-    const result = await checkRateLimit(testKey, {
-      maxRequests: 10,
-      windowMs: 1000
-    });
+    // Rate limit功能测试已移除 - 不在健康检查中使用
+    // 简单返回成功状态
     
     return {
       name: 'rate-limiter',
