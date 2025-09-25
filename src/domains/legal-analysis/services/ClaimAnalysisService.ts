@@ -171,9 +171,18 @@ ${depth === 'comprehensive' ? '进行全面深度分析，包含详细的法条�
       throw new Error('AI响应为空');
     }
 
-    // 尝试解析JSON响应
+    // 尝试解析JSON响应，支持markdown包装格式
     try {
-      return JSON.parse(content);
+      // 处理markdown包装的JSON响应
+      let jsonContent = content;
+      if (content.includes('```json')) {
+        const match = content.match(/```json\n([\s\S]*?)\n```/);
+        if (match && match[1]) {
+          jsonContent = match[1];
+        }
+      }
+
+      return JSON.parse(jsonContent);
     } catch {
       console.warn('AI响应不是有效JSON，返回原始文本');
       return { raw: content };

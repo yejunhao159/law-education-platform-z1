@@ -263,7 +263,16 @@ ${documentText}
         throw new Error('API响应为空');
       }
 
-      const parsed = JSON.parse(content);
+      // 处理markdown包装的JSON响应
+      let jsonContent = content;
+      if (content.includes('```json')) {
+        const match = content.match(/```json\n([\s\S]*?)\n```/);
+        if (match && match[1]) {
+          jsonContent = match[1];
+        }
+      }
+
+      const parsed = JSON.parse(jsonContent);
 
       return {
         success: true,

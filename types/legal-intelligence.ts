@@ -301,31 +301,4 @@ export interface LegalElementMarking {
   correctedValue?: any
 }
 
-/**
- * 导出所有类型
- */
-export type {
-  LegalCase,
-  ExtractedData,
-  DateElement,
-  Party,
-  Amount,
-  LegalClause,
-  FactElement,
-  DocumentMetadata,
-  LegalProvision,
-  Citation,
-  AIPromptTemplate,
-  Example,
-  ElementType,
-  ProcessedDocument,
-  MergedData,
-  Conflict,
-  Resolution,
-  CachedData,
-  BatchTask,
-  ExtractionConfig,
-  AnalysisResult,
-  TimelineAnalysis,
-  LegalElementMarking
-}
+// 所有类型已通过 export interface 直接导出，无需重复导出

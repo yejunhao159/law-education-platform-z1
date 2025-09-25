@@ -119,7 +119,7 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
         }).then(res => res.ok ? res.json() : Promise.reject(new Error(`Dispute analysis failed: ${res.status}`))),
 
         // 3. 请求权分析
-        fetch('/api/claim-analysis', {
+        fetch('/api/legal-analysis/claims', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

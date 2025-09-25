@@ -82,6 +82,16 @@ export {
   CACHE_SIMILARITY_THRESHOLD
 } from './case';
 
+// ============== 日志相关类型 ==============
+export {
+  // 枚举
+  LogLevel,
+
+  // 接口
+  type LogEntry,
+  type LogContext
+} from '../socratic';
+
 // ============== 快捷类型别名 ==============
 
 // 类型别名已移除，请直接使用原类型：

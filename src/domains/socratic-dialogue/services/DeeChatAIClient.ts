@@ -478,7 +478,7 @@ export function createDeeChatConfig(overrides: Partial<DeeChatConfig> = {}): Dee
     model: 'deepseek-chat',
     maxContextTokens: 8000,
     reserveTokens: 100,
-    costThreshold: 0.01, // 1分钱
+    costThreshold: 0.10, // 10分钱，给AI对话更多预算空间
     temperature: 0.7,
     enableStreaming: true,
     enableCostOptimization: true,

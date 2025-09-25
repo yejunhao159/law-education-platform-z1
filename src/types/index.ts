@@ -12,40 +12,15 @@ export * from './domains/legal-analysis';
 export * from './domains/socratic-dialogue';
 export * from './domains/teaching-acts';
 
+// ========== 根目录类型导入 ==========
+export type { LegalCase, LawReference, Party as LegalParty } from '../../types/legal-case';
+export type { ExtractedData, DateElement, Amount, LegalClause, FactElement, DocumentMetadata } from '../../types/legal-intelligence';
+
 // ========== 工厂函数导出 ==========
-export { createDefaultLegalCase } from './domains/case-management';
+// export { createDefaultLegalCase } from './domains/case-management';
 
 // ========== 向后兼容的类型别名 ==========
 // 保持与现有代码的兼容性，逐步迁移
-export type {
-  // 从案例管理域导出的兼容类型
-  LegalCase,
-  BasicInfo,
-  TimelineEvent,
-  Party,
-  CaseMetadata,
-
-  // 从法律分析域导出的兼容类型
-  ThreeElements,
-  Facts,
-  Evidence,
-  EvidenceItem,
-  Reasoning,
-  TimelineAnalysis,
-  LegalAnalysis,
-
-  // 从苏格拉底对话域导出的兼容类型
-  DialogueSession,
-  Message,
-  SocraticRequest,
-  SocraticResponse,
-
-  // 从教学活动域导出的兼容类型
-  TeachingSession,
-  ActState,
-  ActType,
-  TeachingProgress,
-} from './domains/case-management';
 
 export type {
   ThreeElements,

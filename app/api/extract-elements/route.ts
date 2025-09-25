@@ -22,7 +22,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { LegalParser } from '@/src/domains/document-processing';
 // 使用DeepSeek版本的AI Agent
-import { LegalAIAgent, DeepSeekLegalAgent, IntelligentMerger } from '@/lib/ai-legal-agent';
+import { LegalAIAgent, IntelligentMerger } from '@/lib/ai-legal-agent';
 
 /**
  * POST /api/extract-elements - 智能判决书三要素提取处理器
@@ -75,10 +75,47 @@ export async function POST(request: NextRequest) {
     
     // Step 2: 根据配置决定是否启用AI增强
     if (!useAI) {
+      const ruleOnlyData = {
+        basicInfo: {
+          caseNumber: ruleBasedResult.caseNumber || '',
+          court: ruleBasedResult.court || '',
+          date: ruleBasedResult.date || '',
+          parties: {
+            plaintiff: '',
+            defendant: ''
+          }
+        },
+        threeElements: {
+          facts: {
+            summary: '基于规则引擎提取的事实摘要',
+            timeline: [],
+            keyFacts: [],
+            disputedFacts: [],
+            undisputedFacts: []
+          },
+          evidence: {
+            summary: '基于规则引擎提取的证据概况',
+            items: ruleBasedResult.evidence || []
+          },
+          reasoning: {
+            summary: '基于规则引擎提取的推理摘要',
+            legalBasis: [],
+            logicChain: [],
+            keyArguments: [],
+            judgment: ''
+          }
+        },
+        metadata: {
+          confidence: 60,
+          processingTime: Date.now(),
+          aiModel: 'rule-based-only'
+        }
+      };
+
       return NextResponse.json({
         success: true,
         method: 'rule-based',
-        data: ruleBasedResult,
+        data: ruleOnlyData,
         confidence: 60
       });
     }
@@ -93,36 +130,54 @@ export async function POST(request: NextRequest) {
       console.log('Step 3: 智能融合规则和AI结果...');
       const mergedResult = IntelligentMerger.merge(aiResult, ruleBasedResult);
 
+      // 构建前端期望的数据结构
+      const standardizedData = {
+        // 基础信息（统一字段名称）
+        basicInfo: {
+          caseNumber: aiResult.basicInfo?.caseNumber || ruleBasedResult.caseNumber || '',
+          court: aiResult.basicInfo?.court || ruleBasedResult.court || '',
+          date: aiResult.basicInfo?.judgeDate || ruleBasedResult.date || '', // 统一使用date字段
+          parties: aiResult.basicInfo?.parties || {
+            plaintiff: '',
+            defendant: ''
+          }
+        },
+
+        // 三要素（AI深度分析结果）
+        threeElements: {
+          facts: {
+            summary: aiResult.facts?.summary || '事实摘要待完善',
+            timeline: aiResult.facts?.timeline || [],
+            keyFacts: aiResult.facts?.keyFacts || [],
+            disputedFacts: aiResult.facts?.disputedFacts || [],
+            undisputedFacts: aiResult.facts?.undisputedFacts || []
+          },
+          evidence: {
+            summary: aiResult.evidence?.summary || '证据概况待完善',
+            items: aiResult.evidence?.items || []
+          },
+          reasoning: {
+            summary: aiResult.reasoning?.summary || '推理摘要待完善',
+            legalBasis: aiResult.reasoning?.legalBasis || [],
+            logicChain: aiResult.reasoning?.logicChain || [],
+            keyArguments: aiResult.reasoning?.keyArguments || [],
+            judgment: aiResult.reasoning?.judgment || ''
+          }
+        },
+
+        // 元数据信息
+        metadata: {
+          confidence: aiResult.metadata?.confidence || 85,
+          processingTime: aiResult.metadata?.processingTime || Date.now(),
+          aiModel: aiResult.metadata?.aiModel || 'deepseek-chat'
+        }
+      };
+
       return NextResponse.json({
         success: true,
         method: 'ai-enhanced',
-        data: {
-          // 基础信息（优先使用AI提取，规则引擎作为补充）
-          basicInfo: {
-            ...aiResult.basicInfo,
-            // 如果AI未能提取某些字段，使用规则引擎的结果
-            caseNumber: aiResult.basicInfo.caseNumber || ruleBasedResult.caseNumber || '',
-            court: aiResult.basicInfo.court || ruleBasedResult.court || '',
-            judgeDate: aiResult.basicInfo.judgeDate || ruleBasedResult.date || ''
-          },
-          
-          // 三要素（AI深度分析）
-          threeElements: {
-            facts: aiResult.facts,
-            evidence: aiResult.evidence,
-            reasoning: aiResult.reasoning
-          },
-          
-          // 规则引擎补充
-          ruleBasedSupplement: {
-            disputes: ruleBasedResult.disputes,
-            basicEvidence: ruleBasedResult.evidence
-          },
-          
-          // 元数据
-          metadata: aiResult.metadata
-        },
-        confidence: aiResult.metadata.confidence
+        data: standardizedData,
+        confidence: aiResult.metadata?.confidence || 85
       });
       
     } catch (aiError) {
@@ -131,23 +186,62 @@ export async function POST(request: NextRequest) {
 
       // 确定错误类型，提供更具体的提示
       let warningMessage = 'AI分析暂时不可用，使用规则引擎结果';
-      if (aiError.message.includes('网络连接失败')) {
+      const errorMessage = aiError instanceof Error ? aiError.message : String(aiError);
+      if (errorMessage.includes('网络连接失败')) {
         warningMessage = 'AI服务网络连接失败，使用本地规则引擎结果';
-      } else if (aiError.message.includes('API Key')) {
+      } else if (errorMessage.includes('API Key')) {
         warningMessage = 'AI服务配置问题，使用本地规则引擎结果';
-      } else if (aiError.message.includes('超时')) {
+      } else if (errorMessage.includes('超时')) {
         warningMessage = 'AI服务响应超时，使用本地规则引擎结果';
       }
+
+      // 构建规则引擎的标准化数据结构
+      const fallbackData = {
+        basicInfo: {
+          caseNumber: ruleBasedResult.caseNumber || '',
+          court: ruleBasedResult.court || '',
+          date: ruleBasedResult.date || '',
+          parties: {
+            plaintiff: '',
+            defendant: ''
+          }
+        },
+        threeElements: {
+          facts: {
+            summary: '基于规则引擎提取的事实摘要',
+            timeline: [],
+            keyFacts: [],
+            disputedFacts: [],
+            undisputedFacts: []
+          },
+          evidence: {
+            summary: '基于规则引擎提取的证据概况',
+            items: ruleBasedResult.evidence || []
+          },
+          reasoning: {
+            summary: '基于规则引擎提取的推理摘要',
+            legalBasis: [],
+            logicChain: [],
+            keyArguments: [],
+            judgment: ''
+          }
+        },
+        metadata: {
+          confidence: 60,
+          processingTime: Date.now(),
+          aiModel: 'rule-based-engine'
+        }
+      };
 
       // 返回增强的规则引擎结果作为备选方案
       return NextResponse.json({
         success: true,
         method: 'rule-based-fallback',
-        data: ruleBasedResult,
+        data: fallbackData,
         confidence: 60,
         warning: warningMessage,
         errorDetails: {
-          aiError: aiError.message,
+          aiError: errorMessage,
           fallbackUsed: true,
           processingTime: Date.now() - (request as any).startTime || 0
         }

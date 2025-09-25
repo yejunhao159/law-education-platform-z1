@@ -65,7 +65,7 @@ interface ExtractedElements {
 // 转换函数：将提取的数据转换为LegalCase格式
 function convertToLegalCase(extracted: ExtractedElements): LegalCase {
   // 构建时间轴数据（从timeline或facts中提取）
-  let timeline = extracted.threeElements.facts.timeline?.map((item: any, index: number) => ({
+  let timeline = extracted.threeElements?.facts?.timeline?.map((item: any, index: number) => ({
     id: `event-${index + 1}`,
     date: item.date || new Date().toISOString().split('T')[0],
     event: item.event || item.title || '事件',
@@ -141,18 +141,18 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
     threeElements: {
       facts: {
         // 添加main字段用于时间轴AI分析
-        main: extracted.threeElements.facts.summary || '这是一起典型的买卖合同纠纷案件。双方就货物交付时间和质量标准存在争议。',
+        main: extracted.threeElements?.facts?.summary || '这是一起典型的买卖合同纠纷案件。双方就货物交付时间和质量标准存在争议。',
         // 添加disputed字段
-        disputed: extracted.threeElements.facts.disputedFacts || ['逾期交付是否构成根本违约', '损害赔偿范围的确定'],
+        disputed: extracted.threeElements?.facts?.disputedFacts || ['逾期交付是否构成根本违约', '损害赔偿范围的确定'],
         // 保留原有字段以保持兼容性
-        summary: extracted.threeElements.facts.summary || '这是一起典型的买卖合同纠纷案件。双方就货物交付时间和质量标准存在争议。',
+        summary: extracted.threeElements?.facts?.summary || '这是一起典型的买卖合同纠纷案件。双方就货物交付时间和质量标准存在争议。',
         timeline: timeline,
-        keyFacts: extracted.threeElements.facts.keyFacts || [],
-        disputedFacts: extracted.threeElements.facts.disputedFacts || []
+        keyFacts: extracted.threeElements?.facts?.keyFacts || [],
+        disputedFacts: extracted.threeElements?.facts?.disputedFacts || []
       },
       evidence: {
-        summary: extracted.threeElements.evidence.summary || '本案主要证据包括买卖合同、发票、交付凭证、催告函等书面材料，以及相关证人证言。',
-        items: extracted.threeElements.evidence.items?.map(item => ({
+        summary: extracted.threeElements?.evidence?.summary || '本案主要证据包括买卖合同、发票、交付凭证、催告函等书面材料，以及相关证人证言。',
+        items: extracted.threeElements?.evidence?.items?.map(item => ({
           id: item.name,
           name: item.name,
           type: item.type,
@@ -185,20 +185,20 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
         ]
       },
       reasoning: {
-        summary: extracted.threeElements.reasoning.summary || '本院认为，买卖双方成立有效的合同关系。被告未按约交付，构成违约，应承担相应责任。',
-        legalBasis: extracted.threeElements.reasoning.legalBasis || [
+        summary: extracted.threeElements?.reasoning?.summary || '本院认为，买卖双方成立有效的合同关系。被告未按约交付，构成违约，应承担相应责任。',
+        legalBasis: extracted.threeElements?.reasoning?.legalBasis || [
           {
             law: '《民法典》',
             article: '第577条',
             application: '违约责任的一般规定'
           }
         ],
-        keyArguments: extracted.threeElements.reasoning.keyArguments || [
+        keyArguments: extracted.threeElements?.reasoning?.keyArguments || [
           '合同成立且有效',
           '被告构成违约',
           '违约损害赔偿成立'
         ],
-        judgment: extracted.threeElements.reasoning.judgment || '判决被告支付违约金并承担诉讼费用。'
+        judgment: extracted.threeElements?.reasoning?.judgment || '判决被告支付违约金并承担诉讼费用。'
       }
     },
     metadata: {
@@ -424,7 +424,7 @@ export function ThreeElementsExtractor() {
   const lastConvertedRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (extractedData) {
+    if (extractedData && extractedData.threeElements) {
       const dataString = JSON.stringify(extractedData)
       if (lastConvertedRef.current !== dataString) {
         lastConvertedRef.current = dataString
@@ -568,6 +568,7 @@ export function ThreeElementsExtractor() {
           )}
 
           {/* 三要素卡片 */}
+          {extractedData.threeElements && (
           <div className="grid md:grid-cols-3 gap-4">
             {/* 事实认定 */}
             <Card>
@@ -580,13 +581,13 @@ export function ThreeElementsExtractor() {
               <CardContent className="space-y-3">
                 <InlineEditor
                   label="事实摘要"
-                  value={extractedData.threeElements.facts.summary || ''}
+                  value={extractedData.threeElements?.facts?.summary || ''}
                   onSave={(value) => updateThreeElements('facts', 'summary', value)}
                   placeholder="请输入事实摘要..."
                   multiline={true}
                 />
                 
-                {extractedData.threeElements.facts.keyFacts && extractedData.threeElements.facts.keyFacts.length > 0 && (
+                {extractedData.threeElements?.facts?.keyFacts && extractedData.threeElements.facts.keyFacts.length > 0 && (
                   <div>
                     <h4 className="font-medium mb-1">关键事实</h4>
                     <ul className="text-sm space-y-1">
@@ -600,7 +601,7 @@ export function ThreeElementsExtractor() {
                   </div>
                 )}
 
-                {extractedData.threeElements.facts.timeline && extractedData.threeElements.facts.timeline.length > 0 && (
+                {extractedData.threeElements?.facts?.timeline && extractedData.threeElements.facts.timeline.length > 0 && (
                   <div>
                     <h4 className="font-medium mb-1">时间线</h4>
                     <div className="space-y-2">
@@ -627,13 +628,13 @@ export function ThreeElementsExtractor() {
               <CardContent className="space-y-3">
                 <InlineEditor
                   label="证据概况"
-                  value={extractedData.threeElements.evidence.summary || ''}
+                  value={extractedData.threeElements?.evidence?.summary || ''}
                   onSave={(value) => updateThreeElements('evidence', 'summary', value)}
                   placeholder="请输入证据概况..."
                   multiline={true}
                 />
 
-                {extractedData.threeElements.evidence.items && extractedData.threeElements.evidence.items.length > 0 && (
+                {extractedData.threeElements?.evidence?.items && extractedData.threeElements.evidence.items.length > 0 && (
                   <div>
                     <h4 className="font-medium mb-1">主要证据</h4>
                     <div className="space-y-2">
@@ -672,13 +673,13 @@ export function ThreeElementsExtractor() {
               <CardContent className="space-y-3">
                 <InlineEditor
                   label="裁判理由"
-                  value={extractedData.threeElements.reasoning.summary || ''}
+                  value={extractedData.threeElements?.reasoning?.summary || ''}
                   onSave={(value) => updateThreeElements('reasoning', 'summary', value)}
                   placeholder="请输入裁判理由..."
                   multiline={true}
                 />
 
-                {extractedData.threeElements.reasoning.legalBasis && extractedData.threeElements.reasoning.legalBasis.length > 0 && (
+                {extractedData.threeElements?.reasoning?.legalBasis && extractedData.threeElements.reasoning.legalBasis.length > 0 && (
                   <div>
                     <h4 className="font-medium mb-1">法律依据</h4>
                     <div className="space-y-1">
@@ -692,7 +693,7 @@ export function ThreeElementsExtractor() {
                   </div>
                 )}
 
-                {extractedData.threeElements.reasoning.judgment && (
+                {extractedData.threeElements?.reasoning?.judgment && (
                   <div>
                     <h4 className="font-medium mb-1">判决结果</h4>
                     <p className="text-sm text-muted-foreground">
@@ -703,6 +704,7 @@ export function ThreeElementsExtractor() {
               </CardContent>
             </Card>
           </div>
+          )}
 
           {/* 元数据和操作按钮 */}
           <Card>

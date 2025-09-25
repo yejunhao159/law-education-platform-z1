@@ -5,7 +5,7 @@
  */
 
 import { DeeChatAIClient, createDeeChatConfig, type DeeChatConfig } from './DeeChatAIClient';
-import { UnifiedPromptBuilder, buildAPICompatiblePrompt } from '../prompts/builders/UnifiedPromptBuilder';
+import { buildAPICompatiblePrompt } from '../prompts/builders/UnifiedPromptBuilder';
 import { ContextFormatter } from '../utils/LocalContextFormatter';
 import {
   SocraticRequest,
@@ -51,7 +51,7 @@ export class EnhancedSocraticService {
       temperature: this.config.temperature,
       maxContextTokens: 8000,
       reserveTokens: 200,
-      costThreshold: 0.02,
+      costThreshold: 0.10,
       enableCostOptimization: true
     });
 
@@ -70,7 +70,7 @@ export class EnhancedSocraticService {
       const userPrompt = this.buildUserPrompt(request);
 
       // 第3步：使用修改后的DeeChatAIClient进行双提示词调用
-      const aiResponse = await this.callAIWithDualPrompts(systemPrompt, userPrompt, request);
+      const aiResponse = await this.callAIWithDualPrompts(systemPrompt, userPrompt);
 
       return {
         success: true,
@@ -104,7 +104,7 @@ export class EnhancedSocraticService {
   }
 
   /**
-   * 构建System Prompt - 使用UnifiedPromptBuilder的模块化提示词
+   * 构建System Prompt - 使用简化的API兼容提示词构建器
    */
   private buildSystemPrompt(request: SocraticRequest): string {
     if (!this.config.enableModularPrompts) {
@@ -113,38 +113,17 @@ export class EnhancedSocraticService {
 每次只问一个问题，提供3-5个思考选项，保持开放性探索。`;
     }
 
-    // 使用完整的模块化提示词系统
+    // 使用API兼容的简化提示词构建器
     const difficulty = this.mapToModernDifficultyLevel(request.level || SocraticDifficultyLevel.INTERMEDIATE);
-    const mode = this.mapToModernTeachingMode(request.mode || SocraticMode.EXPLORATION);
 
-    const builder = new UnifiedPromptBuilder({
-      identity: {
-        level: difficulty,
-        focus: 'mixed'
-      },
-      teaching: {
-        mode: mode,
-        difficulty: difficulty,
-        apiMode: 'response'
-      },
-      protocols: {
-        includeISSUE: true,
-        includeQualityControl: mode === 'evaluation',
-        currentISSUEPhase: 'socratic'
-      },
-      output: {
-        verbosity: 'standard',
-        maxLength: this.config.maxTokens,
-        includeDiagnostics: false,
-        includeExamples: true
-      },
-      context: {
+    return buildAPICompatiblePrompt(
+      difficulty,
+      'response', // 固定使用response模式，适合对话生成
+      {
         topic: request.currentTopic,
         caseInfo: request.caseContext
       }
-    });
-
-    return builder.build();
+    );
   }
 
   /**
@@ -172,8 +151,7 @@ export class EnhancedSocraticService {
    */
   private async callAIWithDualPrompts(
     systemPrompt: string,
-    userPrompt: string,
-    request: SocraticRequest
+    userPrompt: string
   ) {
     // 构造双提示词消息数组
     const messages = [
@@ -241,7 +219,9 @@ export class EnhancedSocraticService {
 
     if (request.messages && request.messages.length > 0) {
       const lastMessage = request.messages[request.messages.length - 1];
-      context += `学生说：${lastMessage.content}\n`;
+      if (lastMessage) {
+        context += `学生说：${lastMessage.content}\n`;
+      }
     }
 
     context += '\n请基于以上信息，提出一个引导性的苏格拉底问题。';
@@ -264,23 +244,7 @@ export class EnhancedSocraticService {
     }
   }
 
-  /**
-   * 映射教学模式
-   */
-  private mapToModernTeachingMode(mode: SocraticMode): 'exploration' | 'analysis' | 'synthesis' | 'evaluation' {
-    switch (mode) {
-      case SocraticMode.EXPLORATION:
-        return 'exploration';
-      case SocraticMode.ANALYSIS:
-        return 'analysis';
-      case SocraticMode.SYNTHESIS:
-        return 'synthesis';
-      case SocraticMode.EVALUATION:
-        return 'evaluation';
-      default:
-        return 'exploration';
-    }
-  }
+// mapToModernTeachingMode function removed - no longer needed with buildAPICompatiblePrompt
 
   /**
    * 获取服务配置

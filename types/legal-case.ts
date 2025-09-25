@@ -6,6 +6,16 @@
 
 import { z } from 'zod'
 
+// ========== 法条引用 ==========
+export const LawReferenceSchema = z.object({
+  lawName: z.string(), // 法律名称，如"民法典"
+  article: z.string(), // 条文编号，如"第123条"
+  content: z.string().optional(), // 条文内容
+  relevance: z.enum(['direct', 'indirect', 'reference']).optional(), // 关联度
+})
+
+export type LawReference = z.infer<typeof LawReferenceSchema>
+
 // ========== 基础信息 ==========
 export const PartySchema = z.object({
   name: z.string(),

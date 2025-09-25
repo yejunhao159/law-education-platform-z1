@@ -246,8 +246,17 @@ ${depth === 'comprehensive' ? '进行全面深入的案情分析，包含法律�
    */
   private parseAIResponse(aiResponse: string, caseData: any): StoryChapter[] {
     try {
+      // 处理markdown包装的JSON响应
+      let jsonContent = aiResponse;
+      if (aiResponse.includes('```json')) {
+        const match = aiResponse.match(/```json\n([\s\S]*?)\n```/);
+        if (match && match[1]) {
+          jsonContent = match[1];
+        }
+      }
+
       // 尝试解析JSON响应
-      const parsed = JSON.parse(aiResponse);
+      const parsed = JSON.parse(jsonContent);
 
       if (parsed.chapters && Array.isArray(parsed.chapters)) {
         return parsed.chapters.map((chapter: any, index: number) => ({

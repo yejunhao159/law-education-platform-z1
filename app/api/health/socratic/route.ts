@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { EnvironmentConfig } from '@/lib/config/environment';
 import { createLogger } from '@/lib/logging';
 import { redis } from '@/lib/redis';
-import { checkRateLimit } from '@/lib/middleware/rate-limiter';
+// Rate limiter import removed - not used in health checks
 import { CacheManager } from '@/src/domains/shared/infrastructure/cache/CacheManager';
 import { defaultPerformanceMonitor } from '@/src/domains/socratic-dialogue/monitoring/PerformanceMonitor';
 import { WebSocketManager } from '@/lib/services/websocket/manager';
@@ -16,11 +16,7 @@ const logger = createLogger('health-check');
 const config = EnvironmentConfig.getInstance();
 const cacheManager = CacheManager.getInstance();
 
-interface HealthStatus {
-  status: 'healthy' | 'degraded' | 'unhealthy';
-  message?: string;
-  details?: Record<string, any>;
-}
+// HealthStatus interface removed - not used in this file
 
 interface ComponentHealth {
   name: string;

@@ -326,7 +326,17 @@ export class EvidenceIntelligenceService {
 
     try {
       const response = await this.callAIService(prompt);
-      return JSON.parse(response);
+
+      // 处理markdown包装的JSON响应
+      let jsonContent = response;
+      if (response.includes('```json')) {
+        const match = response.match(/```json\n([\s\S]*?)\n```/);
+        if (match && match[1]) {
+          jsonContent = match[1];
+        }
+      }
+
+      return JSON.parse(jsonContent);
     } catch (error) {
       logger.warn('AI证据评估解析失败，使用默认值', error);
       return {
@@ -379,7 +389,17 @@ JSON格式返回：
 
     try {
       const response = await this.callAIService(prompt);
-      return JSON.parse(response);
+
+      // 处理markdown包装的JSON响应
+      let jsonContent = response;
+      if (response.includes('```json')) {
+        const match = response.match(/```json\n([\s\S]*?)\n```/);
+        if (match && match[1]) {
+          jsonContent = match[1];
+        }
+      }
+
+      return JSON.parse(jsonContent);
     } catch (error) {
       return {
         logicalConsistency: 0.7,
@@ -453,7 +473,16 @@ ${claimElements.map((e, i) => `${i+1}. ${e.name}：${e.description}`).join('\n')
    */
   private parseLearningQuestions(aiResponse: string, evidence: Evidence[], config: EvidenceLearningConfig): EvidenceLearningQuestion[] {
     try {
-      const parsed = JSON.parse(aiResponse);
+      // 处理markdown包装的JSON响应
+      let jsonContent = aiResponse;
+      if (aiResponse.includes('```json')) {
+        const match = aiResponse.match(/```json\n([\s\S]*?)\n```/);
+        if (match && match[1]) {
+          jsonContent = match[1];
+        }
+      }
+
+      const parsed = JSON.parse(jsonContent);
 
       if (parsed.questions && Array.isArray(parsed.questions)) {
         return parsed.questions.map((q: any, index: number) => ({

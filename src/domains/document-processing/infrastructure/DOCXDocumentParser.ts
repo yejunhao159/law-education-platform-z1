@@ -22,6 +22,9 @@ export class DOCXDocumentParser {
     });
 
     try {
+      // 验证文件基本信息
+      await this.validateFile(file);
+
       // 动态导入mammoth库
       const mammoth = await import('mammoth');
 
@@ -32,6 +35,9 @@ export class DOCXDocumentParser {
       });
 
       const arrayBuffer = await file.arrayBuffer();
+
+      // 验证文件内容
+      await this.validateArrayBuffer(arrayBuffer);
 
       onProgress?.({
         stage: 'parsing',
@@ -88,6 +94,9 @@ export class DOCXDocumentParser {
     });
 
     try {
+      // 验证文件基本信息
+      await this.validateFile(file);
+
       const mammoth = await import('mammoth');
 
       onProgress?.({
@@ -97,6 +106,9 @@ export class DOCXDocumentParser {
       });
 
       const arrayBuffer = await file.arrayBuffer();
+
+      // 验证文件内容
+      await this.validateArrayBuffer(arrayBuffer);
 
       onProgress?.({
         stage: 'parsing',
@@ -149,8 +161,14 @@ export class DOCXDocumentParser {
     hasTables: boolean;
   }> {
     try {
+      // 验证文件基本信息
+      await this.validateFile(file);
+
       const mammoth = await import('mammoth');
       const arrayBuffer = await file.arrayBuffer();
+
+      // 验证文件内容
+      await this.validateArrayBuffer(arrayBuffer);
 
       const result = await mammoth.convertToHtml({
         arrayBuffer
@@ -175,6 +193,85 @@ export class DOCXDocumentParser {
   }
 
   // ========== 私有方法 ==========
+
+  /**
+   * 验证文件基本信息
+   */
+  private async validateFile(file: File): Promise<void> {
+    // 检查文件大小
+    if (file.size === 0) {
+      throw new DocumentParseError(
+        DocumentParseErrorType.INVALID_FORMAT,
+        '❌ 文件为空\n\n💡 请确保选择了有效的DOCX文件'
+      );
+    }
+
+    // 检查文件大小限制（100MB）
+    const MAX_FILE_SIZE = 100 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) {
+      throw new DocumentParseError(
+        DocumentParseErrorType.INVALID_FORMAT,
+        `❌ 文件过大：${(file.size / 1024 / 1024).toFixed(1)}MB\n\n💡 文件大小不能超过100MB\n🔧 建议压缩文件或分割文档`
+      );
+    }
+
+    // 检查文件扩展名
+    const fileName = file.name.toLowerCase();
+    if (!fileName.endsWith('.docx')) {
+      console.warn('文件扩展名不是.docx:', fileName);
+    }
+  }
+
+  /**
+   * 验证ArrayBuffer是否为有效的ZIP格式
+   */
+  private async validateArrayBuffer(arrayBuffer: ArrayBuffer): Promise<void> {
+    if (arrayBuffer.byteLength < 22) {
+      throw new DocumentParseError(
+        DocumentParseErrorType.INVALID_FORMAT,
+        '❌ 文件太小，不是有效的DOCX文件\n\n💡 DOCX文件至少需要22字节\n🔧 请检查文件是否完整下载'
+      );
+    }
+
+    const uint8Array = new Uint8Array(arrayBuffer);
+
+    // 检查ZIP文件头（前4个字节应该是 'PK\x03\x04' 或 'PK\x05\x06' 或 'PK\x07\x08'）
+    const signature = uint8Array.slice(0, 4);
+    const isValidZip =
+      (signature[0] === 0x50 && signature[1] === 0x4B) && // 'PK'
+      (
+        (signature[2] === 0x03 && signature[3] === 0x04) || // 本地文件头
+        (signature[2] === 0x05 && signature[3] === 0x06) || // 中央目录结束记录
+        (signature[2] === 0x07 && signature[3] === 0x08)    // 跨档案头
+      );
+
+    if (!isValidZip) {
+      throw new DocumentParseError(
+        DocumentParseErrorType.INVALID_FORMAT,
+        `❌ 文件不是有效的ZIP格式\n\n💡 DOCX文件本质上是ZIP压缩包\n🔧 解决方案：\n1. 确认文件未损坏\n2. 尝试重新下载文件\n3. 用Word重新保存文档\n\n📊 文件签名: ${Array.from(signature, b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`
+      );
+    }
+
+    // 检查是否能找到ZIP中央目录结束标记
+    const buffer = arrayBuffer;
+    const view = new DataView(buffer);
+    let foundEndOfCentralDir = false;
+
+    // 从文件末尾向前搜索中央目录结束标记 (0x06054b50)
+    for (let i = buffer.byteLength - 22; i >= Math.max(0, buffer.byteLength - 65557); i--) {
+      if (view.getUint32(i, true) === 0x06054b50) {
+        foundEndOfCentralDir = true;
+        break;
+      }
+    }
+
+    if (!foundEndOfCentralDir) {
+      throw new DocumentParseError(
+        DocumentParseErrorType.INVALID_FORMAT,
+        `❌ ZIP文件结构损坏：找不到中央目录\n\n💡 这通常表示：\n• 文件下载不完整\n• 文件传输过程中损坏\n• 文件不是标准的DOCX格式\n\n🔧 解决方案：\n1. 重新下载或获取文件\n2. 用Word打开并重新保存\n3. 尝试文档修复工具\n4. 转换为其他格式（如TXT）`
+      );
+    }
+  }
 
   /**
    * 处理解析警告信息

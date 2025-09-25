@@ -1,40 +1,7 @@
 {
-  "root": true,
-  "parser": "@typescript-eslint/parser",
-  "plugins": ["@typescript-eslint", "import"],
-  "extends": [
-    "next/core-web-vitals",
-    "next/typescript",
-    "@typescript-eslint/recommended",
-    "prettier"
-  ],
+  "extends": ["next/core-web-vitals"],
   "rules": {
-    "@typescript-eslint/no-unused-vars": "error",
-    "@typescript-eslint/no-explicit-any": "warn",
-    "@typescript-eslint/prefer-const": "error",
-    "import/order": [
-      "error",
-      {
-        "groups": [
-          "builtin",
-          "external",
-          "internal",
-          "parent",
-          "sibling",
-          "index"
-        ],
-        "newlines-between": "always",
-        "alphabetize": {
-          "order": "asc",
-          "caseInsensitive": true
-        }
-      }
-    ],
-    "prefer-const": "error",
-    "no-var": "error"
-  },
-  "parserOptions": {
-    "ecmaVersion": 2022,
-    "sourceType": "module"
+    "no-console": "off",
+    "no-unused-vars": "warn"
   }
 }

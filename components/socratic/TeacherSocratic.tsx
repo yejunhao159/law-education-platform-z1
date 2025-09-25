@@ -94,14 +94,32 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
     };
     setArgumentNodes(prev => [...prev, newNode]);
 
-    // 调用真实的DeepSeek API
+    // 调用统一的苏格拉底API
     try {
-      const response = await fetch('/api/socratic/generate', {
+      const response = await fetch('/api/socratic', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          messages: [
+            ...messages.slice(-5).map(m => ({
+              role: m.role === 'ai' ? 'assistant' : 'user',
+              content: m.content,
+              timestamp: new Date().toISOString()
+            })),
+            {
+              role: 'user',
+              content: content,
+              timestamp: new Date().toISOString()
+            }
+          ],
+          caseContext: `案件：${caseData.title}\n争议：${caseData.dispute}\n事实：${caseData.facts.join('；')}\n法条：${caseData.laws.join('；')}`,
+          currentTopic: content,
+          level: 'INTERMEDIATE',
+          mode: 'EXPLORATION',
+          sessionId: `teacher-session-${Date.now()}`,
+          // 保持向后兼容的字段
           question: content,
           context: {
             caseTitle: caseData.title,
@@ -122,7 +140,7 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
         const aiMessage = {
           id: `msg-${Date.now() + 1}`,
           role: 'ai' as const,
-          content: result.data.answer,
+          content: result.data.content || result.data.question || result.data.answer,
           timestamp: new Date().toLocaleTimeString(),
           suggestions: result.data.followUpQuestions || []
         };
@@ -133,7 +151,7 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
         const aiNode: ArgumentNode = {
           id: `node-${Date.now() + 1}`,
           type: 'reason',
-          content: result.data.answer,
+          content: result.data.content || result.data.question || result.data.answer,
           speaker: 'ai',
           parentId: newNode.id,
           evaluation: {
@@ -206,12 +224,23 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
 
       // 获取AI建议的初始问题
       try {
-        const response = await fetch('/api/socratic/generate', {
+        const response = await fetch('/api/socratic', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
+            messages: [{
+              role: 'user',
+              content: '请为这个案件生成初始的引导性问题',
+              timestamp: new Date().toISOString()
+            }],
+            caseContext: `案件：${caseData.title}\n争议：${caseData.dispute}\n事实：${caseData.facts.join('；')}\n法条：${caseData.laws.join('；')}`,
+            currentTopic: '初始引导问题生成',
+            level: 'INTERMEDIATE',
+            mode: 'EXPLORATION',
+            sessionId: `teacher-init-${Date.now()}`,
+            // 保持向后兼容的字段
             question: '请为这个案件生成初始的引导性问题',
             context: {
               caseTitle: caseData.title,
