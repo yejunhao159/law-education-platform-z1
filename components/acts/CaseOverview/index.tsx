@@ -20,7 +20,6 @@ import { StoryView } from './StoryView'
 import { useCurrentCase, useStoryMode } from '@/src/domains/stores'
 import { useTeachingStore } from '@/src/domains/teaching-acts/stores/useTeachingStore'
 import { BookOpen, FileText, ToggleLeft, ToggleRight, Clock, Sparkles, Loader2 } from 'lucide-react'
-import { caseNarrativeService, type StoryChapter } from '@/src/domains/legal-analysis/services/CaseNarrativeService'
 import { createLogger } from '@/lib/logging'
 
 const logger = createLogger('CaseOverview');
@@ -53,16 +52,39 @@ export function CaseOverview() {
         timelineLength: caseData.threeElements?.facts?.timeline?.length || 0
       });
 
-      // 🎯 调用真实的AI智能叙事服务
-      const intelligentChapters = await caseNarrativeService.generateStoryChapters(caseData);
+      // 🎯 通过API调用智能叙事服务
+      const response = await fetch('/api/legal-analysis/intelligent-narrative', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          caseData,
+          narrativeStyle: 'story',
+          depth: 'detailed',
+          focusAreas: ['timeline', 'parties', 'disputes']
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || `API调用失败: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || '智能叙事生成失败');
+      }
 
       logger.info('AI故事生成成功', {
-        chaptersCount: intelligentChapters.length,
-        titles: intelligentChapters.map(ch => ch.title)
+        chaptersCount: result.chapters.length,
+        confidence: result.metadata?.confidence,
+        titles: result.chapters.map((ch: any) => ch.title)
       });
 
       // 转换为store期望的格式
-      const formattedChapters = intelligentChapters.map(chapter => ({
+      const formattedChapters = result.chapters.map((chapter: any) => ({
         id: chapter.id,
         title: chapter.title,
         content: chapter.content,
