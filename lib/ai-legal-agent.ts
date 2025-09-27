@@ -24,7 +24,15 @@ export interface AIExtractedElements {
 // 导出通用的AI分析函数
 export async function analyzeClaimsWithAI(prompt: string): Promise<string> {
   const agent = new DeepSeekLegalAgent()
-  return agent.callDeepSeekAPI(prompt)
+  const result = await agent.callDeepSeekAPI(prompt)
+
+  // 如果返回的是对象，转换为JSON字符串
+  if (typeof result === 'object' && result !== null) {
+    return JSON.stringify(result)
+  }
+
+  // 如果返回的是字符串，直接返回
+  return result || ''
 }
 
 export class DeepSeekLegalAgent {

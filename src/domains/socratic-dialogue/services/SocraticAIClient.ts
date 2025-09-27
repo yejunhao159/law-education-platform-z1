@@ -2,6 +2,7 @@
  * 苏格拉底对话AI客户端
  * 负责与外部AI服务的交互
  * DeepPractice Standards Compliant
+ * 已迁移至统一AI调用代理模式 - Issue #21
  */
 
 import {
@@ -10,13 +11,14 @@ import {
   SocraticConfig,
   SocraticErrorCode
 } from '@/lib/types/socratic';
+import { interceptDeepSeekCall } from '../../../infrastructure/ai/AICallProxy';
 
 export class SocraticAIClient {
   private config: SocraticConfig;
 
   constructor(config?: Partial<SocraticConfig>) {
     this.config = {
-      apiUrl: process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions',
+      apiUrl: process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1',
       apiKey: process.env.DEEPSEEK_API_KEY || '',
       model: 'deepseek-chat',
       temperature: 0.7,
@@ -37,6 +39,7 @@ export class SocraticAIClient {
 
   /**
    * 生成苏格拉底式问题
+   * 迁移说明：从直连DeepSeek API改为使用AICallProxy统一调用
    */
   async generateQuestion(request: AIRequest): Promise<AIResponse> {
     if (!this.isAvailable()) {
@@ -44,7 +47,7 @@ export class SocraticAIClient {
     }
 
     try {
-      const response = await fetch(this.config.apiUrl, {
+      const response = await interceptDeepSeekCall(this.config.apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -93,9 +96,10 @@ export class SocraticAIClient {
 
   /**
    * 创建流式响应
+   * 迁移说明：从直连DeepSeek API改为使用AICallProxy统一调用
    */
   async createStreamResponse(request: AIRequest): Promise<ReadableStream> {
-    const response = await fetch(this.config.apiUrl, {
+    const response = await interceptDeepSeekCall(this.config.apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

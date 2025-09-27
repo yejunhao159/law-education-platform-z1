@@ -2,14 +2,16 @@
  * 证据智能分析服务
  * 基于AI和规则引擎的证据质量评估、关联分析和学习建议生成
  * 整合现有EvidenceMappingService的基础功能，提供AI增强能力
+ * 已迁移至统一AI调用代理模式 - Issue #21
  */
 
 import { createLogger } from '@/lib/logging';
-import { EvidenceMappingService, type Evidence, type EvidenceMapping } from '@/lib/evidence-mapping-service';
+import { EvidenceMappingService, type EvidenceMapping } from '@/lib/evidence-mapping-service';
+import type { Evidence } from '@/types/evidence';
+import { normalizeEvidenceList } from '@/utils/evidence-adapter';
+// import { callUnifiedAI } from '../../../infrastructure/ai/AICallProxy'; // 已改为直接调用DeepSeek API
 import type {
-  TimelineEvent,
-  ClaimElement,
-  DisputeFocus
+  ClaimElement
 } from '@/types/dispute-evidence';
 
 const logger = createLogger('EvidenceIntelligenceService');
@@ -90,7 +92,7 @@ export class EvidenceIntelligenceService {
   constructor() {
     this.mappingService = new EvidenceMappingService();
     this.aiConfig = {
-      apiUrl: process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions',
+      apiUrl: process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1',
       apiKey: process.env.DEEPSEEK_API_KEY || '',
       model: 'deepseek-chat',
       temperature: 0.3, // 较低温度保证分析的一致性
@@ -109,9 +111,17 @@ export class EvidenceIntelligenceService {
         caseType: caseContext.basicInfo?.caseType
       });
 
+      // 规范化证据数据，确保类型一致性
+      const normalizedEvidence = normalizeEvidenceList(evidence);
+
+      logger.info('证据数据规范化完成', {
+        originalCount: evidence.length,
+        normalizedCount: normalizedEvidence.length
+      });
+
       const assessments: EvidenceQualityAssessment[] = [];
 
-      for (const evidenceItem of evidence) {
+      for (const evidenceItem of normalizedEvidence) {
         // 基础规则评估
         const baseAssessment = this.performRuleBasedAssessment(evidenceItem, caseContext);
 
@@ -162,11 +172,19 @@ export class EvidenceIntelligenceService {
     try {
       logger.info('开始证据链智能分析');
 
+      // 规范化证据数据，确保类型一致性
+      const normalizedEvidence = normalizeEvidenceList(evidence);
+
+      logger.info('证据链分析数据规范化完成', {
+        originalCount: evidence.length,
+        normalizedCount: normalizedEvidence.length
+      });
+
       const chains: EvidenceChainAnalysis[] = [];
 
       for (const element of claimElements) {
         // 找到与该请求权要素相关的证据
-        const relevantEvidence = evidence.filter(e => {
+        const relevantEvidence = normalizedEvidence.filter(e => {
           const relevance = this.mappingService.calculateRelevance(e, element);
           return relevance > 0.3;
         });
@@ -227,14 +245,22 @@ export class EvidenceIntelligenceService {
         maxQuestions: config.maxQuestions
       });
 
+      // 规范化证据数据，确保类型一致性
+      const normalizedEvidence = normalizeEvidenceList(evidence);
+
+      logger.info('学习问题生成数据规范化完成', {
+        originalCount: evidence.length,
+        normalizedCount: normalizedEvidence.length
+      });
+
       // 构建AI提示词
-      const prompt = this.buildLearningQuestionPrompt(evidence, claimElements, caseContext, config);
+      const prompt = this.buildLearningQuestionPrompt(normalizedEvidence, claimElements, caseContext, config);
 
       // 调用AI生成问题
       const aiResponse = await this.callAIService(prompt);
 
       // 解析AI响应
-      const questions = this.parseLearningQuestions(aiResponse, evidence, config);
+      const questions = this.parseLearningQuestions(aiResponse, normalizedEvidence, config);
 
       logger.info('证据学习问题生成完成', {
         generatedCount: questions.length,
@@ -245,7 +271,9 @@ export class EvidenceIntelligenceService {
 
     } catch (error) {
       logger.error('证据学习问题生成失败', error);
-      return this.generateFallbackQuestions(evidence, config);
+      // 使用规范化后的证据生成备选问题
+      const normalizedEvidenceForFallback = normalizeEvidenceList(evidence);
+      return this.generateFallbackQuestions(normalizedEvidenceForFallback, config);
     }
   }
 
@@ -261,18 +289,37 @@ export class EvidenceIntelligenceService {
       probativeValue: 0.6
     };
 
-    // 根据证据类型调整分数
+    // 根据证据类型调整分数（使用新的标准证据类型）
     switch (evidence.type) {
-      case 'contract':
-      case 'document':
+      case 'documentary':  // 书证（原contract/document）
         baseScores.authenticity = 0.9;
         baseScores.admissibility = 0.9;
         break;
-      case 'testimony':
+      case 'testimonial':  // 证人证言（原testimony）
         baseScores.authenticity = 0.6;
         baseScores.probativeValue = 0.7;
         break;
-      case 'physical':
+      case 'physical':     // 物证
+        baseScores.authenticity = 0.8;
+        baseScores.probativeValue = 0.8;
+        break;
+      case 'expert':       // 鉴定意见
+        baseScores.authenticity = 0.9;
+        baseScores.probativeValue = 0.9;
+        break;
+      case 'audio_visual': // 视听资料
+        baseScores.authenticity = 0.7;
+        baseScores.probativeValue = 0.8;
+        break;
+      case 'electronic':   // 电子数据
+        baseScores.authenticity = 0.6;
+        baseScores.probativeValue = 0.7;
+        break;
+      case 'party_statement': // 当事人陈述
+        baseScores.authenticity = 0.5;
+        baseScores.probativeValue = 0.6;
+        break;
+      case 'inspection':   // 勘验笔录
         baseScores.authenticity = 0.8;
         baseScores.probativeValue = 0.8;
         break;
@@ -534,32 +581,60 @@ ${claimElements.map((e, i) => `${i+1}. ${e.name}：${e.description}`).join('\n')
 
   /**
    * 辅助方法：调用AI服务
+   * 修复：直接使用DeepSeek API调用，绕过DeeChatAIClient的兼容性问题
    */
   private async callAIService(prompt: string): Promise<string> {
     if (!this.aiConfig.apiKey) {
       throw new Error('AI API密钥未配置');
     }
 
-    const response = await fetch(this.aiConfig.apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.aiConfig.apiKey}`
-      },
-      body: JSON.stringify({
-        model: this.aiConfig.model,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: this.aiConfig.temperature,
-        max_tokens: this.aiConfig.maxTokens
-      })
-    });
+    try {
+      // 直接调用DeepSeek API，绕过DeeChatAIClient兼容性问题
+      const response = await fetch(this.aiConfig.apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.aiConfig.apiKey}`
+        },
+        body: JSON.stringify({
+          model: this.aiConfig.model,
+          messages: [
+            {
+              role: 'system',
+              content: '你是一位专业的法律证据分析专家，精通证据法和司法实践。'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: this.aiConfig.temperature,
+          max_tokens: this.aiConfig.maxTokens
+        })
+      });
 
-    if (!response.ok) {
-      throw new Error(`AI API调用失败: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`DeepSeek API请求失败: ${response.status} ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      const content = result.choices?.[0]?.message?.content;
+
+      if (!content) {
+        throw new Error('AI API返回空内容');
+      }
+
+      logger.info('AI服务调用成功', {
+        promptLength: prompt.length,
+        responseLength: content.length,
+        model: this.aiConfig.model
+      });
+
+      return content;
+    } catch (error) {
+      logger.error('AI调用失败:', error);
+      throw new Error(`AI API调用失败: ${error instanceof Error ? error.message : '未知错误'}`);
     }
-
-    const result = await response.json();
-    return result.choices?.[0]?.message?.content || '';
   }
 
   /**
@@ -604,11 +679,24 @@ ${claimElements.map((e, i) => `${i+1}. ${e.name}：${e.description}`).join('\n')
   private identifyRuleBasedStrengths(evidence: Evidence): string[] {
     const strengths: string[] = [];
 
-    if (evidence.type === 'contract' || evidence.type === 'document') {
-      strengths.push('书面证据，证明力相对较强');
+    // 根据新的标准证据类型识别优势
+    if (evidence.type === 'documentary') {
+      strengths.push('书证证据，证明力相对较强');
+    }
+    if (evidence.type === 'expert') {
+      strengths.push('专业鉴定意见，权威性较高');
+    }
+    if (evidence.type === 'physical') {
+      strengths.push('物证直观性强，不易篡改');
+    }
+    if (evidence.type === 'inspection') {
+      strengths.push('勘验笔录具有现场性，证明力强');
     }
     if (evidence.content.length > 100) {
       strengths.push('内容详细，信息丰富');
+    }
+    if (evidence.relatedEvents && evidence.relatedEvents.length > 0) {
+      strengths.push(`关联了${evidence.relatedEvents.length}个时间轴事件，逻辑完整`);
     }
 
     return strengths;
@@ -620,11 +708,21 @@ ${claimElements.map((e, i) => `${i+1}. ${e.name}：${e.description}`).join('\n')
   private identifyRuleBasedWeaknesses(evidence: Evidence): string[] {
     const weaknesses: string[] = [];
 
-    if (evidence.type === 'testimony') {
-      weaknesses.push('证人证言，需要核实真实性');
+    // 根据新的标准证据类型识别劣势
+    if (evidence.type === 'testimonial') {
+      weaknesses.push('证人证言主观性较强，需要核实真实性');
+    }
+    if (evidence.type === 'party_statement') {
+      weaknesses.push('当事人陈述存在利益倾向，证明力有限');
+    }
+    if (evidence.type === 'electronic') {
+      weaknesses.push('电子数据易于修改，需要技术验证');
     }
     if (evidence.content.length < 50) {
-      weaknesses.push('内容较为简略');
+      weaknesses.push('内容较为简略，信息不够充分');
+    }
+    if (!evidence.relatedEvents || evidence.relatedEvents.length === 0) {
+      weaknesses.push('缺少与时间轴事件的关联，逻辑链条不完整');
     }
 
     return weaknesses;
@@ -637,8 +735,22 @@ ${claimElements.map((e, i) => `${i+1}. ${e.name}：${e.description}`).join('\n')
     const suggestions: string[] = [];
 
     suggestions.push('建议结合其他证据相互印证');
-    if (evidence.type === 'testimony') {
-      suggestions.push('建议补充书面证据支持');
+
+    // 根据新的标准证据类型提供针对性建议
+    if (evidence.type === 'testimonial') {
+      suggestions.push('建议补充书证或物证支持证人证言');
+    }
+    if (evidence.type === 'party_statement') {
+      suggestions.push('建议获取第三方证据验证当事人陈述');
+    }
+    if (evidence.type === 'electronic') {
+      suggestions.push('建议进行技术鉴定确保电子数据完整性');
+    }
+    if (!evidence.relatedEvents || evidence.relatedEvents.length === 0) {
+      suggestions.push('建议明确该证据与具体争议事实的关联关系');
+    }
+    if (evidence.type === 'audio_visual') {
+      suggestions.push('建议核实视听资料的来源和制作过程');
     }
 
     return suggestions;

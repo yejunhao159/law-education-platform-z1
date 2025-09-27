@@ -132,7 +132,7 @@ export class AIServiceConfigManager {
         model: 'deepseek-chat',
         priority: 1,
         maxContextTokens: 8000,
-        costThreshold: 0.01,
+        costThreshold: 0.25, // 增加到25美分，确保法律分析功能正常
         rateLimit: {
           requestsPerMinute: 60,
           tokensPerMinute: 100000

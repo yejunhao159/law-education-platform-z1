@@ -16,7 +16,6 @@ import {
   AlertTriangle,
   AlertCircle,
   Circle,
-  Users,
   Star,
   TrendingUp,
   FileText,
@@ -31,12 +30,41 @@ import { EvidenceQuizSection } from '@/components/evidence/EvidenceQuizSection'
 
 // 导入类型
 import type {
-  TimelineAnalysisResponse,
-  TimelineAnalysis,
-  TurningPoint,
-  LegalRisk,
-  EvidenceChainAnalysis
+  TimelineAnalysis
 } from '../../src/domains/legal-analysis/services/types/TimelineTypes'
+
+// 扩展证据类型定义以支持对象格式
+interface EvidenceItem {
+  id?: string;
+  content?: string;
+  description?: string;
+  title?: string;
+  type?: string;
+  [key: string]: any;
+}
+
+// 扩展时间轴事件类型以支持对象数组evidence和兼容实际数据结构
+interface EnhancedTimelineEvent {
+  id?: string;
+  date: string;
+  title?: string;  // 可选，因为实际数据可能有event字段
+  event?: string;  // 兼容实际数据结构
+  description?: string;
+  detail?: string; // 兼容实际数据结构
+  type?: string;
+  importance?: 'critical' | 'important' | 'normal' | 'high' | 'medium' | 'low';
+  evidence?: EvidenceItem[];
+  actors?: string[];
+  location?: string;
+  relatedEvidence?: string[];
+  isKeyEvent?: boolean;
+  party?: string;
+  [key: string]: any;
+}
+
+// 导入数据适配器
+import { adaptCaseData, validateCaseData } from '@/src/utils/case-data-adapter'
+
 
 interface DeepAnalysisProps {
   onComplete?: () => void
@@ -49,11 +77,42 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
   const [analysisResult, setAnalysisResult] = useState<TimelineAnalysis | null>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
 
+  // 类型安全的证据计数函数 - 兼容多种数据结构
+  const getEvidenceCount = (event: EnhancedTimelineEvent): number => {
+    // 检查 evidence 字段（原有格式）
+    if (event.evidence && Array.isArray(event.evidence)) {
+      return event.evidence.length;
+    }
+
+    // 检查 evidenceInfo 字段（TimelineEvent标准格式）
+    if ((event as any).evidenceInfo) {
+      return 1; // evidenceInfo表示有证据信息
+    }
+
+    // 检查是否有相关证据字段
+    if ((event as any).relatedEvidence && Array.isArray((event as any).relatedEvidence)) {
+      return (event as any).relatedEvidence.length;
+    }
+
+    return 0;
+  }
+
+  // 安全获取事件标题（兼容不同字段名）
+  const getEventTitle = (event: EnhancedTimelineEvent): string => {
+    return event.title || event.event || '未命名事件';
+  }
+
+  // 安全获取事件描述（兼容不同字段名）
+  const getEventDescription = (event: EnhancedTimelineEvent): string => {
+    return event.description || event.detail || event.event || '';
+  }
+
   // 新增：四大分析功能的状态管理
   const [disputeAnalysis, setDisputeAnalysis] = useState<any>(null)
   const [claimAnalysis, setClaimAnalysis] = useState<any>(null)
   const [evidenceAnalysis, setEvidenceAnalysis] = useState<any>(null)
   const [analysisProgress, setAnalysisProgress] = useState<string>('准备开始分析...')
+
 
   // 自动开始AI分析
   useEffect(() => {
@@ -72,11 +131,25 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
     try {
       console.log('🚀 开始四大分析功能并行处理...')
 
-      // 准备请求数据
-      const timelineEvents = caseData.threeElements.facts.timeline
+      // 使用数据适配器处理数据，确保证据正确映射到时间轴
+      const adaptedCaseData = adaptCaseData(caseData as any)
+      const validationResult = validateCaseData(adaptedCaseData)
+
+      if (!validationResult.valid) {
+        console.warn('⚠️ 数据适配验证警告:', validationResult.issues)
+      }
+
+      // 从适配后的数据中提取时间轴事件（已包含映射的证据）
+      const timelineEvents = adaptedCaseData.threeElements?.facts?.timeline as EnhancedTimelineEvent[] || []
       const documentText = timelineEvents.map(e =>
-        `${e.date}：${e.title}。${e.description || ''}`
+        `${e.date}：${getEventTitle(e)}。${getEventDescription(e)}`
       ).join('\n')
+
+      console.log('📊 数据适配完成:', {
+        原始证据数: caseData.threeElements?.evidence?.items?.length || 0,
+        时间轴事件数: timelineEvents.length,
+        包含证据的事件数: timelineEvents.filter(e => getEvidenceCount(e) > 0).length
+      })
 
       // 并行调用四个API
       setAnalysisProgress('🔄 并行调用四大分析API...')
@@ -135,11 +208,65 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            evidence: timelineEvents.filter(e => e.evidence && e.evidence.length > 0).map(e => ({
-              id: e.id || e.date,
-              content: e.description || e.title,
-              type: e.type || 'document'
-            })),
+            // 使用适配后的证据数据 - 兼容多种数据结构
+            evidence: adaptedCaseData.evidence || timelineEvents
+              .filter(e => getEvidenceCount(e) > 0)
+              .flatMap(e => {
+                const evidenceList = [];
+
+                // 处理原有的 evidence 字段
+                if (e.evidence && Array.isArray(e.evidence)) {
+                  evidenceList.push(...e.evidence.map((ev, index) => ({
+                    id: ev?.id || `${e.date}-evidence-${index}`,
+                    content: ev?.content || ev?.description || ev?.title || e.description || e.title,
+                    type: ev?.type || 'documentary',
+                    relatedEvent: e.date,
+                    source: 'timeline-evidence'
+                  })));
+                }
+
+                // 处理 evidenceInfo 字段（TimelineEvent标准格式）
+                if ((e as any).evidenceInfo) {
+                  const evidenceInfo = (e as any).evidenceInfo;
+                  evidenceList.push({
+                    id: `${e.date}-evidenceInfo`,
+                    content: e.description || e.title || '事件证据',
+                    type: evidenceInfo.evidenceType || 'documentary',
+                    relatedEvent: e.date,
+                    source: 'timeline-evidenceInfo',
+                    metadata: {
+                      strength: evidenceInfo.strength,
+                      admissibility: evidenceInfo.admissibility,
+                      authenticity: evidenceInfo.authenticity,
+                      relevance: evidenceInfo.relevance
+                    }
+                  });
+                }
+
+                // 处理 relatedEvidence 字段
+                if ((e as any).relatedEvidence && Array.isArray((e as any).relatedEvidence)) {
+                  evidenceList.push(...(e as any).relatedEvidence.map((evidenceId: string, index: number) => ({
+                    id: evidenceId || `${e.date}-related-${index}`,
+                    content: `${e.description || e.title} 相关证据`,
+                    type: 'documentary',
+                    relatedEvent: e.date,
+                    source: 'timeline-relatedEvidence'
+                  })));
+                }
+
+                // 如果没有明确的证据字段，但有证据相关内容，创建一个基础证据条目
+                if (evidenceList.length === 0 && (e.description?.includes('证据') || e.title?.includes('证据'))) {
+                  evidenceList.push({
+                    id: `${e.date}-inferred`,
+                    content: e.description || e.title,
+                    type: 'documentary',
+                    relatedEvent: e.date,
+                    source: 'timeline-inferred'
+                  });
+                }
+
+                return evidenceList;
+              }),
             claimElements: timelineEvents.map(e => ({
               id: e.id || e.date,
               name: e.title,
@@ -149,11 +276,11 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
             mode: 'comprehensive', // 使用AI增强的综合分析模式
             caseContext: {
               basicInfo: {
-                caseNumber: caseData.basicInfo?.caseNumber,
-                caseType: caseData.basicInfo?.caseType || 'civil',
-                court: caseData.basicInfo?.court
+                caseNumber: adaptedCaseData.basicInfo?.caseNumber,
+                caseType: adaptedCaseData.basicInfo?.caseType || 'civil',
+                court: adaptedCaseData.basicInfo?.court
               },
-              disputes: caseData.threeElements?.disputes || [],
+              disputes: (adaptedCaseData as any).disputes || [],
               timeline: timelineEvents
             }
           })
@@ -310,8 +437,8 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
               案件发展脉络
             </h4>
             <div className="space-y-4">
-              {caseData?.threeElements?.facts?.timeline?.map((event, index) => (
-                <div key={event.id || index} className="relative">
+              {(caseData?.threeElements?.facts?.timeline as EnhancedTimelineEvent[] || []).map((event, index) => (
+                <div key={event.id || `event-${index}`} className="relative">
                   {/* 时间轴线 */}
                   <div className="absolute left-6 top-8 bottom-0 w-0.5 bg-gray-200 -z-10" />
 
@@ -329,9 +456,9 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1">
                           <div className="text-sm text-gray-500 mb-1">{event.date}</div>
-                          <h5 className="font-medium text-gray-900">{event.title}</h5>
-                          {event.description && (
-                            <p className="text-sm text-gray-600 mt-1">{event.description}</p>
+                          <h5 className="font-medium text-gray-900">{getEventTitle(event)}</h5>
+                          {getEventDescription(event) && (
+                            <p className="text-sm text-gray-600 mt-1">{getEventDescription(event)}</p>
                           )}
                         </div>
 
@@ -352,7 +479,7 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
                         <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
                           {/* 检查是否为转折点 */}
                           {analysisResult?.keyTurningPoints.some(tp =>
-                            tp.date === event.date || tp.description.includes(event.title)
+                            tp.date === event.date || tp.description.includes(getEventTitle(event))
                           ) && (
                             <div className="flex items-center gap-2 text-sm text-orange-600">
                               <TrendingUp className="w-4 h-4" />
@@ -360,23 +487,36 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
                             </div>
                           )}
 
-                          {/* 争议标记 */}
-                          {disputeAnalysis?.disputes?.some((dispute: any) =>
-                            dispute.relatedEvents?.includes(event.id || event.date) ||
-                            event.title.toLowerCase().includes('争议') ||
-                            event.description?.toLowerCase().includes('争议')
-                          ) && (
+                          {/* 争议标记 - 添加兜底处理 */}
+                          {disputeAnalysis?.disputes?.some((dispute: any) => {
+                            // 兜底处理：兼容旧字段名和缺失字段
+                            const safeDispute = {
+                              relatedEvents: dispute.relatedEvents || dispute.relatedEvidence || [],
+                              title: dispute.title || '未命名争议',
+                              description: dispute.description || '',
+                              category: dispute.category || 'unknown'
+                            };
+
+                            // 多重匹配策略：ID匹配、日期匹配、事件编号匹配、内容关键词匹配
+                            return safeDispute.relatedEvents.includes(event.id || event.date) ||
+                                   safeDispute.relatedEvents.includes(`E${index + 1}`) ||
+                                   getEventTitle(event).toLowerCase().includes('争议') ||
+                                   getEventDescription(event).toLowerCase().includes('争议');
+                          }) && (
                             <div className="flex items-center gap-2 text-sm text-blue-600">
                               <AlertCircle className="w-4 h-4" />
                               <span className="font-medium">争议焦点</span>
                             </div>
                           )}
 
-                          {/* 请求权标记 */}
-                          {claimAnalysis?.claims?.primary?.some((claim: any) =>
-                            claim.events?.includes(event.id || event.date) ||
-                            event.type === 'legal' || event.type === 'claim'
-                          ) && (
+                          {/* 请求权标记 - 添加兜底处理 */}
+                          {claimAnalysis?.claims?.primary?.some((claim: any) => {
+                            // 兜底处理：处理可能的undefined和字段缺失
+                            const events = claim?.events || claim?.relatedEvents || [];
+                            return events.includes(event.id || event.date) ||
+                                   events.includes(`E${index + 1}`) ||
+                                   event.type === 'legal' || event.type === 'claim';
+                          }) && (
                             <div className="flex items-center gap-2 text-sm text-purple-600">
                               <Gavel className="w-4 h-4" />
                               <span className="font-medium">请求权基础</span>
@@ -384,12 +524,12 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
                           )}
 
                           {/* 证据标记 */}
-                          {(event.evidence && event.evidence.length > 0) && evidenceAnalysis?.mappings?.some((mapping: any) =>
+                          {getEvidenceCount(event) > 0 && evidenceAnalysis?.mappings?.some((mapping: any) =>
                             mapping.evidenceId === (event.id || event.date)
                           ) && (
                             <div className="flex items-center gap-2 text-sm text-green-600">
                               <FileText className="w-4 h-4" />
-                              <span className="font-medium">关键证据</span>
+                              <span className="font-medium">关键证据({getEvidenceCount(event)})</span>
                             </div>
                           )}
 
@@ -523,7 +663,7 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
                     </div>
                   ))}
                   {/* 证据缺口 */}
-                  {analysisResult?.evidenceChain?.gaps?.length > 0 && (
+                  {analysisResult?.evidenceChain?.gaps && analysisResult.evidenceChain.gaps.length > 0 && (
                     <div className="mt-2 text-xs text-orange-600">
                       <span className="font-medium">证据缺口：</span>
                       {analysisResult.evidenceChain.gaps.join('、')}
@@ -554,14 +694,46 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
                     </div>
                   ))}
                   {/* 综合建议 */}
-                  {claimAnalysis?.strategy?.recommendations?.slice(0, 2).map((rec: any, index: number) => (
-                    <div key={`rec-${index}`} className="text-sm">
-                      <div className="flex items-center gap-2">
-                        <Star className="w-3 h-3 text-green-600" />
-                        <div className="text-green-700">{rec}</div>
+                  {claimAnalysis?.strategy?.recommendations?.slice(0, 2).map((rec: any, index: number) => {
+                    // 处理不同格式的建议数据
+                    const renderRecommendation = () => {
+                      if (typeof rec === 'string') {
+                        return rec;
+                      }
+                      if (typeof rec === 'object' && rec !== null) {
+                        // 如果是对象，尝试渲染关键信息
+                        if (rec.action) {
+                          return (
+                            <div>
+                              <div className="font-medium">{rec.action}</div>
+                              {rec.rationale && (
+                                <div className="text-xs mt-1 text-gray-600">{rec.rationale}</div>
+                              )}
+                              {rec.priority && (
+                                <span className="text-xs text-amber-600 ml-2">
+                                  优先级: {rec.priority}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        }
+                        // 如果对象没有action字段，尝试显示其他内容
+                        return rec.description || rec.content || rec.text || '建议内容';
+                      }
+                      return '建议内容';
+                    };
+
+                    return (
+                      <div key={`rec-${index}`} className="text-sm">
+                        <div className="flex items-start gap-2">
+                          <Star className="w-3 h-3 text-green-600 mt-1" />
+                          <div className="text-green-700 flex-1">
+                            {renderRecommendation()}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {(!analysisResult?.predictions?.length && !claimAnalysis?.strategy?.recommendations?.length) && (
                     <div className="text-sm text-gray-500 italic">暂无预测或建议数据</div>
                   )}
@@ -585,17 +757,18 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
 
         {/* 证据学习问答组件 - 基于真实时间轴证据 */}
         <EvidenceQuizSection
-          evidences={caseData?.threeElements?.facts?.timeline
-            ?.filter(event => event.evidence && event.evidence.length > 0)
+          evidences={(caseData?.threeElements?.facts?.timeline as EnhancedTimelineEvent[] || [])
+            ?.filter(event => getEvidenceCount(event) > 0)
             ?.map(event => ({
               id: event.id || event.date,
-              title: event.title,
-              description: event.description || event.title,
-              type: event.type || 'document',
-              content: event.description || '',
+              title: getEventTitle(event),
+              description: getEventDescription(event) || getEventTitle(event),
+              type: 'documentary' as const,
+              content: getEventDescription(event) || '',
               relevance: 1.0, // 默认相关性，将由AI分析确定
               source: 'timeline-event',
-              date: event.date
+              date: event.date,
+              relatedEvents: [event.id || event.date] // 添加必需的relatedEvents属性
             })) || []
           }
           autoGenerate={true}
@@ -606,7 +779,7 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
               score: session.score,
               totalQuestions: session.quizzes.length,
               accuracy: session.score / session.totalPossibleScore,
-              aiGeneratedCount: session.quizzes.filter(q => q.metadata?.source === 'ai-generated').length
+              aiGeneratedCount: session.quizzes.filter(q => (q as any).metadata?.source === 'ai-generated').length
             });
           }}
           onAnswerSubmit={(quizId, answer) => {

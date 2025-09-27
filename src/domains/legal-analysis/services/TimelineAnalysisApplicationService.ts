@@ -2,12 +2,14 @@
  * 时间轴分析应用服务
  * 核心业务逻辑，从API层分离
  * DeepPractice Standards Compliant
+ * 已迁移至统一AI调用代理模式 - Issue #21
  */
 
 import { DocumentPreprocessor } from '../intelligence/preprocessor';
 import { RuleExtractor } from '../intelligence/rule-extractor';
 import { SmartMerger } from '../intelligence/smart-merger';
 import { ProvisionMapper } from '../intelligence/provision-mapper';
+import { callUnifiedAI } from '../../../infrastructure/ai/AICallProxy';
 
 import {
   TimelineAnalysisRequest,
@@ -32,7 +34,7 @@ export class TimelineAnalysisApplicationService {
 
   constructor() {
     this.apiKey = process.env.DEEPSEEK_API_KEY || '';
-    this.apiUrl = 'https://api.deepseek.com/v1/chat/completions';
+    this.apiUrl = 'https://api.deepseek.com/v1';
   }
 
   /**
@@ -274,40 +276,28 @@ export class TimelineAnalysisApplicationService {
 
   /**
    * AI服务调用
+   * 迁移说明：从直连DeepSeek API改为使用AICallProxy统一调用
    */
   private async callAIService(aiRequest: AITimelineRequest): Promise<AITimelineResponse> {
     const prompt = this.buildAIPrompt(aiRequest);
 
-    const response = await fetch(this.apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.3,
-        max_tokens: 2000
-      })
-    });
+    try {
+      const result = await callUnifiedAI(
+        '你是专业的法律时间轴分析专家，擅长从复杂的法律文档中提取和分析时间线索。',
+        prompt,
+        {
+          temperature: 0.3,
+          maxTokens: 5000  // 增加到5000以支持更详细的分析
+        }
+      );
 
-    if (!response.ok) {
-      throw new Error(`AI API错误: ${response.status}`);
+      return {
+        analysis: result.content || '分析失败',
+        confidence: 0.85
+      };
+    } catch (error) {
+      throw new Error(`AI API错误: ${error instanceof Error ? error.message : '未知错误'}`);
     }
-
-    const result = await response.json();
-    const content = result.choices?.[0]?.message?.content || '分析失败';
-
-    return {
-      analysis: content,
-      confidence: 0.85
-    };
   }
 
   /**

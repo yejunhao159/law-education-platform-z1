@@ -53,21 +53,39 @@ export async function POST(request: NextRequest) {
     // Step 2: 输入数据验证
     if (!body.events || !Array.isArray(body.events) || body.events.length === 0) {
       return NextResponse.json(
-        { error: '缺少事件数据' },
+        {
+          error: '缺少事件数据',
+          details: '请求体必须包含非空的events数组'
+        },
         { status: 400 }
       )
     }
 
-    // 验证事件数据结构
-    const hasValidEvents = body.events.every(event =>
-      event && typeof event === 'object' && event.date && event.title
-    )
+    // 验证事件数据结构和内容
+    const invalidEvents = body.events.filter((event, index) => {
+      if (!event || typeof event !== 'object') return true
+      if (!event.date || !event.title) return true
+      // 验证内容不是空的
+      if (event.title.trim().length === 0) return true
+      return false
+    })
 
-    if (!hasValidEvents) {
+    if (invalidEvents.length > 0) {
+      console.error('❌ 发现无效事件:', invalidEvents)
       return NextResponse.json(
-        { error: '事件数据格式不正确，每个事件必须包含date和title字段' },
+        {
+          error: '事件数据格式不正确',
+          details: `发现${invalidEvents.length}个无效事件，每个事件必须包含非空的date和title字段`,
+          invalidCount: invalidEvents.length
+        },
         { status: 400 }
       )
+    }
+
+    // 验证是否有证据数据（警告但不阻止）
+    const eventsWithEvidence = body.events.filter(e => e.evidence && e.evidence.length > 0)
+    if (eventsWithEvidence.length === 0) {
+      console.warn('⚠️ 警告：没有事件包含证据数据，分析质量可能受影响')
     }
 
     // Step 3: 设置分析参数和默认值
@@ -217,8 +235,9 @@ ${JSON.stringify(events, null, 2)}
     const jsonContent = extractJSONFromResponse(aiResponse)
     analysisResult = JSON.parse(jsonContent)
   } catch (parseError) {
-    console.warn('⚠️  Traditional analysis JSON parsing failed, using fallback')
-    analysisResult = createDefaultAnalysisResult(events, Date.now())
+    console.error('❌ Traditional analysis JSON parsing failed:', parseError)
+    // 不再降级到假数据，直接抛出错误让调用方知道真实问题
+    throw new Error(`AI响应解析失败: ${parseError instanceof Error ? parseError.message : '无法解析JSON'}`)
   }
 
   return validateAndCompleteResult(analysisResult)
@@ -240,9 +259,17 @@ async function performHybridAnalysis(request: ClaimAnalysisRequest): Promise<Cla
     const traditional = traditionalResult.status === 'fulfilled' ? traditionalResult.value : null
     const timeline = timelineResult.status === 'fulfilled' ? timelineResult.value : null
 
-    // 如果两种方法都失败，抛出错误
+    // 如果两种方法都失败，抛出详细错误
     if (!traditional && !timeline) {
-      throw new Error('所有分析方法都失败了')
+      const traditionalError = traditionalResult.status === 'rejected' ? traditionalResult.reason : null
+      const timelineError = timelineResult.status === 'rejected' ? timelineResult.reason : null
+
+      console.error('❌ 混合分析失败详情:', {
+        traditional: traditionalError?.message || '未知错误',
+        timeline: timelineError?.message || '未知错误'
+      })
+
+      throw new Error(`所有分析方法都失败: 传统分析(${traditionalError?.message || '未知'}), 时间轴分析(${timelineError?.message || '未知'})`)
     }
 
     // 优先使用时间轴分析结果，用传统分析结果补充

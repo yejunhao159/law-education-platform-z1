@@ -1,15 +1,19 @@
 /**
  * Evidence Mapping Service
  * Handles mapping between evidence and claim elements
+ *
+ * 类型迁移说明：
+ * - Evidence类型已迁移至 @/types/evidence 统一定义
+ * - 此处重新导出以保持向后兼容性
+ * - 建议所有新代码直接从 @/types/evidence 导入
  */
 
 import type { ClaimElement, DisputeFocus } from '@/types/dispute-evidence';
+import type { Evidence } from '@/types/evidence';
+import { normalizeEvidence, toSimpleEvidence, isCompleteEvidence } from '@/utils/evidence-adapter';
 
-export interface Evidence {
-  id: string;
-  content: string;
-  type: string;
-}
+// 重新导出统一的Evidence类型，保持向后兼容
+export type { Evidence };
 
 export interface EvidenceMapping {
   evidenceId: string;
@@ -63,14 +67,17 @@ export class EvidenceMappingService {
    * Automatically map evidence to claim elements
    */
   autoMapEvidence(evidence: Evidence, claimElements: ClaimElement[]): EvidenceMapping[] {
+    // 规范化证据数据，确保类型一致性
+    const normalizedEvidence = isCompleteEvidence(evidence) ? evidence : normalizeEvidence(evidence);
+
     const mappings: EvidenceMapping[] = [];
 
     for (const element of claimElements) {
-      const relevance = this.calculateRelevance(evidence, element);
+      const relevance = this.calculateRelevance(normalizedEvidence, element);
       
       if (relevance >= this.confidenceThreshold) {
         mappings.push({
-          evidenceId: evidence.id,
+          evidenceId: normalizedEvidence.id,
           elementId: element.id,
           confidence: relevance,
           isManual: false,
@@ -144,10 +151,29 @@ export class EvidenceMappingService {
    * Batch auto-map multiple evidence to multiple elements
    */
   batchAutoMap(evidenceList: Evidence[], elements: ClaimElement[]): EvidenceMapping[] {
+    // 批量规范化证据数据，提高性能
+    const normalizedEvidenceList = evidenceList.map(evidence =>
+      isCompleteEvidence(evidence) ? evidence : normalizeEvidence(evidence)
+    );
+
     const allMappings: EvidenceMapping[] = [];
 
-    for (const evidence of evidenceList) {
-      const mappings = this.autoMapEvidence(evidence, elements);
+    for (const evidence of normalizedEvidenceList) {
+      // 直接使用规范化后的证据，避免重复规范化
+      const mappings: EvidenceMapping[] = [];
+      for (const element of elements) {
+        const relevance = this.calculateRelevance(evidence, element);
+
+        if (relevance >= this.confidenceThreshold) {
+          mappings.push({
+            evidenceId: evidence.id,
+            elementId: element.id,
+            confidence: relevance,
+            isManual: false,
+            reason: `Auto-mapped based on content similarity (${Math.round(relevance * 100)}%)`
+          });
+        }
+      }
       allMappings.push(...mappings);
     }
 

@@ -4,6 +4,8 @@
  * @author DeepPractice Legal Intelligence System
  * @version 1.0.0
  *
+ * 已迁移至统一AI调用代理模式 - Issue #21
+ *
  * 核心功能：
  * - 法律事件智能摘要生成
  * - 法学要点自动提取
@@ -13,13 +15,20 @@
  * - 容错性强的JSON解析机制
  *
  * 技术特点：
- * - DeepSeek AI模型驱动的专业法律分析
+ * - DeepSeek AI模型驱动的专业法律分析（通过AICallProxy统一调用）
  * - 双重保障：AI分析 + 规则引擎备选
  * - 智能JSON提取和格式化
  * - 完整的错误处理和降级策略
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { interceptDeepSeekCall } from '@/src/infrastructure/ai/AICallProxy'
+import {
+  handleAPIError,
+  createErrorResponse,
+  ErrorType,
+  generateRequestId
+} from '@/src/utils/api-error-handler'
 
 // DeepSeek API配置
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || ''
@@ -191,9 +200,25 @@ function generateRuleBasedAnalysis(event: any): LegalAnalysisResponse {
  * - Step 6: 统一错误处理和降级策略
  */
 export async function POST(req: NextRequest) {
+  const requestId = generateRequestId();
+
   try {
     // Step 1: 解析请求数据并进行类型检查
     const { event, caseContext } = await req.json() as LegalAnalysisRequest
+
+    // 输入验证
+    if (!event || !event.title || !event.description) {
+      return NextResponse.json(
+        createErrorResponse(
+          ErrorType.VALIDATION,
+          new Error('缺少必填字段'),
+          '请求参数不完整，需要提供事件标题和描述',
+          undefined,
+          requestId
+        ),
+        { status: 400 }
+      );
+    }
 
     // Step 2: 构建专业的法学分析提示词模板
     const prompt = `你是一位专业的法学教授，请分析以下案件事件的法律意义。
@@ -220,8 +245,8 @@ export async function POST(req: NextRequest) {
 
 请用专业但易懂的语言回答，返回JSON格式。`
 
-    // Step 3: 调用DeepSeek AI进行专业法律分析
-    const response = await fetch(DEEPSEEK_API_URL, {
+    // Step 3: 调用统一AI服务进行专业法律分析（通过代理模式）
+    const response = await interceptDeepSeekCall(DEEPSEEK_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -247,24 +272,18 @@ export async function POST(req: NextRequest) {
 
     // Step 4: 检查API响应状态
     if (!response.ok) {
-      // API调用失败时的降级处理：返回基础分析结果
-      return NextResponse.json({
-        summary: event.title.substring(0, 30),
-        legalPoints: [
-          '该事件涉及民事法律关系',
-          '需要关注证据保全',
-          '注意诉讼时效问题'
-        ],
-        legalBasis: [
-          '《民法典》相关条款',
-          '《民事诉讼法》相关规定'
-        ],
-        analysis: {
-          legalRelation: '待分析',
-          burdenOfProof: '根据谁主张谁举证原则确定',
-          keyPoint: event.title
-        }
-      })
+      // API调用失败时的降级处理：提供友好错误信息和基础分析结果
+      const fallbackData = generateRuleBasedAnalysis(event);
+
+      return NextResponse.json(
+        handleAPIError(
+          new Error(`DeepSeek API失败: ${response.status} ${response.statusText}`),
+          '法律分析AI服务',
+          fallbackData,
+          requestId
+        ),
+        { status: 200 } // 返回200因为有fallback数据
+      );
     }
 
     const data = await response.json()
@@ -293,19 +312,22 @@ export async function POST(req: NextRequest) {
       
     } catch (parseError) {
       // Step 6: JSON解析失败时的错误处理和日志记录
-      console.error('Failed to parse AI response:', parseError)
-      console.log('Raw AI response:', data.choices[0]?.message?.content)
+      const fallbackData = generateRuleBasedAnalysis(event);
 
-      // 降级到规则引擎分析
-      return NextResponse.json(generateRuleBasedAnalysis(event))
+      return NextResponse.json(
+        handleAPIError(
+          parseError,
+          'AI分析结果解析',
+          fallbackData,
+          requestId
+        ),
+        { status: 200 } // 返回200因为有fallback数据
+      );
     }
 
   } catch (error) {
     // Step 7: 全局异常处理和错误日志记录
-    console.error('Legal analysis error:', error)
-
-    // 返回默认分析结果作为最终降级保障
-    return NextResponse.json({
+    const fallbackData = {
       summary: '事件概要',
       legalPoints: ['法律关系分析', '证据要求', '程序问题'],
       legalBasis: ['相关法律条文'],
@@ -314,6 +336,16 @@ export async function POST(req: NextRequest) {
         burdenOfProof: '待确定',
         keyPoint: '关键法律问题'
       }
-    })
+    };
+
+    return NextResponse.json(
+      handleAPIError(
+        error,
+        '法律分析服务',
+        fallbackData,
+        requestId
+      ),
+      { status: 500 }
+    );
   }
 }

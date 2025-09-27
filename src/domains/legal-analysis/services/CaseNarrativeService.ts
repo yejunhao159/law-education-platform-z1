@@ -2,9 +2,11 @@
  * 案情智能叙事服务
  * 基于案例三要素和时间轴生成专业法律叙事
  * 用于第二幕案情概括的AI增强
+ * 已迁移至统一AI调用代理模式 - Issue #21
  */
 
 import { createLogger } from '@/lib/logging';
+import { interceptDeepSeekCall } from '../../../infrastructure/ai/AICallProxy';
 import type {
   TimelineEvent,
   CaseInfo,
@@ -74,8 +76,15 @@ export class CaseNarrativeService {
   private readonly apiUrl: string;
 
   constructor() {
-    this.apiKey = process.env.DEEPSEEK_API_KEY || '';
-    this.apiUrl = 'https://api.deepseek.com/v1/chat/completions';
+    // 使用与AICallProxy一致的环境变量获取方式，包含fallback
+    this.apiKey = process.env.DEEPSEEK_API_KEY || 'sk-6b081a93258346379182141661293345';
+    this.apiUrl = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1';
+
+    console.log('📖 CaseNarrativeService初始化:', {
+      hasApiKey: !!this.apiKey,
+      apiUrl: this.apiUrl,
+      keyPrefix: this.apiKey.substring(0, 8) + '...'
+    });
   }
 
   /**
@@ -124,7 +133,8 @@ export class CaseNarrativeService {
 
     } catch (error) {
       logger.error('智能案情叙事生成失败', error);
-      return this.buildErrorResponse(error, startTime);
+      // 不再返回假成功，直接抛出错误让调用方知道真实问题
+      throw error;
     }
   }
 
@@ -133,13 +143,16 @@ export class CaseNarrativeService {
    */
   private buildNarrativePrompt(request: NarrativeGenerationRequest): string {
     const { caseData, narrativeStyle, depth } = request;
-    const timeline = caseData.threeElements.facts.timeline;
-    const parties = caseData.threeElements.facts.parties;
+    // 安全地访问嵌套属性，避免undefined错误
+    const timeline = caseData?.threeElements?.facts?.timeline || [];
+    const parties = caseData?.threeElements?.facts?.parties || [];
 
     // 构建时间轴摘要
-    const timelineSummary = timeline.map((event, index) =>
-      `${index + 1}. ${event.date} - ${event.title}: ${event.description}`
-    ).join('\n');
+    const timelineSummary = timeline.length > 0 ?
+      timeline.map((event, index) =>
+        `${index + 1}. ${event.date} - ${event.title}: ${event.description}`
+      ).join('\n') :
+      '暂无时间轴信息';
 
     // 构建当事人关系
     const partiesContext = parties.length > 0 ?
@@ -207,7 +220,8 @@ ${depth === 'comprehensive' ? '进行全面深入的案情分析，包含法律�
       throw new Error('AI API密钥未配置');
     }
 
-    const response = await fetch(this.apiUrl, {
+    // 使用代理模式调用AI服务
+    const response = await interceptDeepSeekCall(this.apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -222,7 +236,7 @@ ${depth === 'comprehensive' ? '进行全面深入的案情分析，包含法律�
           }
         ],
         temperature: 0.7, // 适度创造性，保持专业性
-        max_tokens: 3000, // 支持长文本生成
+        max_tokens: 5000, // 增加到5000支持更详细的故事生成
         top_p: 0.9
       })
     });
@@ -271,11 +285,13 @@ ${depth === 'comprehensive' ? '进行全面深入的案情分析，包含法律�
         }));
       }
     } catch (parseError) {
-      logger.warn('AI响应非标准JSON格式，使用文本解析', { error: parseError });
+      logger.error('AI响应解析失败', { error: parseError, response: aiResponse });
+      // 不再降级到文本解析，直接抛出错误暴露问题
+      throw new Error(`AI响应格式错误: ${parseError instanceof Error ? parseError.message : '无法解析JSON'}`);
     }
 
-    // 如果JSON解析失败，使用文本解析作为备选
-    return this.parseTextResponse(aiResponse, caseData);
+    // 如果没有chapters，说明响应格式不对
+    throw new Error('AI响应格式错误: 缺少chapters字段');
   }
 
   /**

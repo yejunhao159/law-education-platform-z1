@@ -1,0 +1,102 @@
+{
+  "timestamp": "2025-09-27T08:50:24.644Z",
+  "summary": {
+    "total": 9,
+    "success": 9,
+    "failed": 0,
+    "missed": 0
+  },
+  "services": [
+    {
+      "service": "DisputeAnalysisService",
+      "status": true,
+      "details": {
+        "hasImport": true,
+        "hasUsage": true,
+        "hasDirectFetch": null,
+        "hasMigrationComment": true
+      }
+    },
+    {
+      "service": "legal-analysis API",
+      "status": true,
+      "details": {
+        "hasImport": true,
+        "hasUsage": true,
+        "hasDirectFetch": null,
+        "hasMigrationComment": true
+      }
+    },
+    {
+      "service": "ClaimAnalysisService",
+      "status": true,
+      "details": {
+        "hasImport": true,
+        "hasUsage": true,
+        "hasDirectFetch": null,
+        "hasMigrationComment": true
+      }
+    },
+    {
+      "service": "AIExtractionClient",
+      "status": true,
+      "details": {
+        "hasImport": true,
+        "hasUsage": true,
+        "hasDirectFetch": null,
+        "hasMigrationComment": true
+      }
+    },
+    {
+      "service": "EvidenceIntelligenceService",
+      "status": true,
+      "details": {
+        "hasImport": true,
+        "hasUsage": true,
+        "hasDirectFetch": null,
+        "hasMigrationComment": true
+      }
+    },
+    {
+      "service": "CaseNarrativeService",
+      "status": true,
+      "details": {
+        "hasImport": true,
+        "hasUsage": true,
+        "hasDirectFetch": null,
+        "hasMigrationComment": true
+      }
+    },
+    {
+      "service": "TimelineAnalysisApplicationService",
+      "status": true,
+      "details": {
+        "hasImport": true,
+        "hasUsage": true,
+        "hasDirectFetch": null,
+        "hasMigrationComment": true
+      }
+    },
+    {
+      "service": "NodeClaimAnalyzer",
+      "status": true,
+      "details": {
+        "hasImport": true,
+        "hasUsage": true,
+        "hasDirectFetch": null,
+        "hasMigrationComment": true
+      }
+    },
+    {
+      "service": "SocraticAIClient",
+      "status": true,
+      "details": {
+        "hasImport": true,
+        "hasUsage": true,
+        "hasDirectFetch": null,
+        "hasMigrationComment": true
+      }
+    }
+  ],
+  "missedFiles": []
+}

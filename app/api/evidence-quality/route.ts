@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { evidenceIntelligenceService } from '@/src/domains/legal-analysis/services/EvidenceIntelligenceService';
 import { EvidenceMappingService } from '@/lib/evidence-mapping-service';
 import { createLogger } from '@/lib/logging';
+import { validateServiceResponse } from '@/src/utils/service-response-validator';
 
 const logger = createLogger('EvidenceQualityAPI');
 const mappingService = new EvidenceMappingService();
@@ -35,8 +36,22 @@ export async function POST(request: NextRequest) {
     // 确保evidence是数组格式
     const evidenceArray = Array.isArray(evidence) ? evidence : [evidence];
 
+    // 验证数据有效性
+    if (evidenceArray.length === 0) {
+      logger.warn('证据数组为空，无法进行分析');
+      return NextResponse.json(
+        {
+          success: false,
+          error: '证据数据为空',
+          details: '没有提供有效的证据数据进行分析',
+          timestamp: new Date().toISOString()
+        },
+        { status: 400 }
+      );
+    }
+
     let result: any = {
-      success: true,
+      success: false,  // 默认为 false，只有真正成功才设为 true
       processingTime: 0,
       timestamp: new Date().toISOString()
     };
@@ -52,8 +67,33 @@ export async function POST(request: NextRequest) {
           caseContext
         );
 
+        // 验证AI评估结果
+        const assessmentValidation = validateServiceResponse(
+          { assessments: qualityAssessments },
+          ['assessments'],
+          {
+            checkForHardcodedValues: true,
+            minContentLength: 20,
+            requireAIGenerated: true
+          }
+        );
+
+        if (!assessmentValidation.isValid || qualityAssessments.length === 0) {
+          logger.error('AI评估结果验证失败', {
+            errors: assessmentValidation.errors,
+            warnings: assessmentValidation.warnings
+          });
+          return NextResponse.json({
+            success: false,
+            error: '证据质量评估失败',
+            details: assessmentValidation.errors.join(', '),
+            warnings: assessmentValidation.warnings
+          }, { status: 500 });
+        }
+
         result = {
           ...result,
+          success: true,  // 只有真正成功才设为 true
           mode: 'ai-assessment',
           assessments: qualityAssessments,
           summary: {
@@ -78,6 +118,7 @@ export async function POST(request: NextRequest) {
 
         result = {
           ...result,
+          success: true,  // 只有真正成功才设为 true
           mode: 'chain-analysis',
           chains: chainAnalyses,
           summary: {
@@ -112,6 +153,7 @@ export async function POST(request: NextRequest) {
 
         result = {
           ...result,
+          success: true,  // 只有真正成功才设为 true
           mode: 'generate-questions',
           questions,
           config,
@@ -144,8 +186,20 @@ export async function POST(request: NextRequest) {
         const unmappedElements = mappingService.findUnmappedElements(claimElements);
         const conflicts = mappingService.findConflictingMappings(basicMappings);
 
+        // 验证综合分析结果
+        if (!qualityAssessments || qualityAssessments.length === 0) {
+          logger.warn('综合分析失败：质量评估为空');
+          return NextResponse.json({
+            success: false,
+            error: '证据质量评估失败',
+            details: '无法生成有效的证据质量评估',
+            timestamp: new Date().toISOString()
+          }, { status: 500 });
+        }
+
         result = {
           ...result,
+          success: true,  // 只有真正成功才设为 true
           mode: 'comprehensive',
           qualityAssessments,
           chainAnalyses,
@@ -201,6 +255,7 @@ export async function POST(request: NextRequest) {
 
         result = {
           ...result,
+          success: mappings && mappings.length > 0,  // 根据实际映射结果判断成功
           mode,
           mappings,
           analysis,

@@ -9,6 +9,7 @@ import { RuleExtractor } from '../intelligence/rule-extractor';
 import { SmartMerger } from '../intelligence/smart-merger';
 import { ProvisionMapper } from '../intelligence/provision-mapper';
 import { ExtractedData } from '../../../../types/legal-intelligence';
+import { ExtractionAdapter, type ThreeElementsFormat } from '@/src/adapters/extraction-adapter';
 
 import { AIExtractionClient } from './AIExtractionClient';
 import {
@@ -218,6 +219,59 @@ export class LegalExtractionApplicationService {
     }
 
     return suggestions;
+  }
+
+  /**
+   * 提取三要素格式（兼容旧版前端）
+   * 使用新版提取服务，但输出旧版格式
+   */
+  async extractThreeElements(text: string, options?: {
+    useAI?: boolean;
+    includeMetadata?: boolean;
+  }): Promise<{
+    success: boolean;
+    data?: ThreeElementsFormat;
+    error?: string;
+    method?: string;
+  }> {
+    try {
+      // 构建标准请求
+      const request: ExtractionRequest = {
+        text,
+        options: {
+          enableAI: options?.useAI !== false,
+          elementType: 'all',
+          enhanceWithProvisions: true,
+          cacheEnabled: true
+        }
+      };
+
+      // 调用标准提取方法
+      const result = await this.extractLegalElements(request);
+
+      if (!result.success || !result.data) {
+        return {
+          success: false,
+          error: result.error || '提取失败'
+        };
+      }
+
+      // 转换为三要素格式
+      const threeElementsData = ExtractionAdapter.toThreeElements(result.data);
+
+      return {
+        success: true,
+        data: threeElementsData,
+        method: result.metadata?.aiUsed ? 'ai-enhanced' : 'rule-based'
+      };
+
+    } catch (error) {
+      console.error('三要素提取失败:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '未知错误'
+      };
+    }
   }
 
   /**

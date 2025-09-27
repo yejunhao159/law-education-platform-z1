@@ -2,10 +2,12 @@
  * AI提取客户端
  * 封装DeepSeek API调用逻辑
  * DeepPractice Standards Compliant
+ * 已迁移至统一AI调用代理模式 - Issue #21
  */
 
 import { AIPromptOptimizer } from '../intelligence/prompt-optimizer';
 import { ExtractedData } from '../../../../types/legal-intelligence';
+import { interceptDeepSeekCall } from '../../../infrastructure/ai/AICallProxy';
 
 export class AIExtractionClient {
   private readonly apiKey: string;
@@ -13,7 +15,7 @@ export class AIExtractionClient {
 
   constructor(
     apiKey: string = process.env.DEEPSEEK_API_KEY || '',
-    apiUrl: string = 'https://api.deepseek.com/v1/chat/completions'
+    apiUrl: string = 'https://api.deepseek.com/v1'
   ) {
     this.apiKey = apiKey;
     this.apiUrl = apiUrl;
@@ -67,14 +69,15 @@ export class AIExtractionClient {
   }
 
   /**
-   * 调用DeepSeek API
+   * 调用统一AI服务（通过代理模式）
+   * 迁移说明：从直连DeepSeek API改为使用AICallProxy统一调用
    */
   private async callDeepSeekAPI(
     systemPrompt: string,
     userPrompt: string
   ): Promise<string | null> {
     try {
-      const response = await fetch(this.apiUrl, {
+      const response = await interceptDeepSeekCall(this.apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

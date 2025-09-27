@@ -357,6 +357,11 @@ export class DeeChatAIClient {
     const startTime = Date.now();
 
     try {
+      // 参数验证
+      if (!Array.isArray(messages)) {
+        throw new Error(`DeeChatAIClient.sendCustomMessage: messages参数必须是数组，实际类型: ${typeof messages}`);
+      }
+
       // 合并配置选项
       const finalOptions = {
         temperature: options?.temperature || this.config.temperature,
@@ -472,16 +477,28 @@ export class DeeChatAIClient {
 
 // 默认配置工厂函数
 export function createDeeChatConfig(overrides: Partial<DeeChatConfig> = {}): DeeChatConfig {
-  return {
-    provider: 'deepseek',
-    apiKey: process.env.DEEPSEEK_API_KEY || '',
-    model: 'deepseek-chat',
-    maxContextTokens: 8000,
-    reserveTokens: 100,
-    costThreshold: 0.10, // 10分钱，给AI对话更多预算空间
-    temperature: 0.7,
-    enableStreaming: true,
-    enableCostOptimization: true,
-    ...overrides
+  // 优先使用传入的配置，其次是环境变量，最后是默认值
+  const config = {
+    provider: overrides.provider || 'deepseek' as const,
+    apiKey: overrides.apiKey || process.env.DEEPSEEK_API_KEY || '',
+    apiUrl: overrides.apiUrl || process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1',
+    model: overrides.model || 'deepseek-chat',
+    maxContextTokens: overrides.maxContextTokens || 8000,
+    reserveTokens: overrides.reserveTokens || 100,
+    costThreshold: overrides.costThreshold ?? 0.50, // 增加到50美分，确保AI功能正常工作
+    temperature: overrides.temperature ?? 0.7,
+    enableStreaming: overrides.enableStreaming ?? true,
+    enableCostOptimization: overrides.enableCostOptimization ?? true,
   };
+
+  // 调试信息
+  console.log('🔧 DeeChatConfig创建:', {
+    provider: config.provider,
+    apiUrl: config.apiUrl,
+    model: config.model,
+    hasApiKey: !!config.apiKey,
+    costThreshold: config.costThreshold
+  });
+
+  return config;
 }
