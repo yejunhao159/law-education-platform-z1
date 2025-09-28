@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -27,6 +27,10 @@ import { CaseOverview } from './CaseOverview'
 
 // 导入证据学习组件
 import { EvidenceQuizSection } from '@/components/evidence/EvidenceQuizSection'
+// 导入请求权分析弹窗
+import { EventClaimAnalysisDialog } from '@/components/legal/EventClaimAnalysisDialog'
+// 导入类型定义
+import type { TurningPoint } from '@/src/domains/legal-analysis/services/types/TimelineTypes'
 
 // 导入类型
 import type {
@@ -72,10 +76,24 @@ interface DeepAnalysisProps {
 
 export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
   const caseData = useCurrentCase()
+  const adaptedCaseData = useMemo(() => {
+    if (!caseData) {
+      return null
+    }
+    try {
+      return adaptCaseData(caseData as any)
+    } catch (error) {
+      console.warn('案例数据适配失败，继续使用原始数据', error)
+      return caseData
+    }
+  }, [caseData])
+  const effectiveCaseData = adaptedCaseData || caseData
   const [analysisComplete, setAnalysisComplete] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<TimelineAnalysis | null>(null)
+  const [validTimelineEvents, setValidTimelineEvents] = useState<EnhancedTimelineEvent[]>([])
   const [analysisError, setAnalysisError] = useState<string | null>(null)
+  const [selectedEventForAnalysis, setSelectedEventForAnalysis] = useState<EnhancedTimelineEvent | null>(null)
 
   // 类型安全的证据计数函数 - 兼容多种数据结构
   const getEvidenceCount = (event: EnhancedTimelineEvent): number => {
@@ -107,6 +125,131 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
     return event.description || event.detail || event.event || '';
   }
 
+  const normalizeEvidenceType = (type?: string): 'documentary' | 'testimonial' | 'physical' | 'expert' => {
+    if (!type) return 'documentary'
+    const normalized = type.toLowerCase()
+
+    if (normalized.includes('test') || normalized.includes('证言') || normalized.includes('statement')) {
+      return 'testimonial'
+    }
+
+    if (normalized.includes('physical') || normalized.includes('物') || normalized.includes('实物')) {
+      return 'physical'
+    }
+
+    if (normalized.includes('expert') || normalized.includes('鉴定') || normalized.includes('report')) {
+      return 'expert'
+    }
+
+    return 'documentary'
+  }
+
+
+  type StandardEvidence = {
+    id: string
+    title: string
+    description: string
+    content: string
+    type: 'documentary' | 'testimonial' | 'physical' | 'expert'
+    relatedEvents: string[]
+    metadata: {
+      source: string
+      dateCreated: string
+      author?: string
+    }
+  }
+
+  const extractEvidenceFromCase = (caseData?: typeof effectiveCaseData): StandardEvidence[] => {
+    const timeline = (caseData?.threeElements?.facts?.timeline as EnhancedTimelineEvent[]) || []
+    const collected: StandardEvidence[] = []
+
+    timeline.forEach((event, eventIndex) => {
+      const baseRelated = event.id || event.date || `event-${eventIndex}`
+
+      if (Array.isArray(event.evidence) && event.evidence.length > 0) {
+        event.evidence.forEach((evidenceItem: any, idx: number) => {
+          const type = normalizeEvidenceType(evidenceItem?.type)
+          const title = evidenceItem?.title || evidenceItem?.name || getEventTitle(event)
+          const description = evidenceItem?.description || evidenceItem?.summary || evidenceItem?.content || getEventDescription(event) || title
+          const content = evidenceItem?.content || description
+          const metadata = evidenceItem?.metadata || {}
+          const relatedEvents = Array.isArray(evidenceItem?.relatedEvents) && evidenceItem.relatedEvents.length > 0
+            ? evidenceItem.relatedEvents
+            : [baseRelated]
+
+          collected.push({
+            id: evidenceItem?.id || evidenceItem?.evidenceId || `${baseRelated}-evidence-${idx}`,
+            title,
+            description,
+            content,
+            type,
+            relatedEvents,
+            metadata: {
+              source: metadata.source || evidenceItem?.source || 'timeline-event',
+              dateCreated: metadata.dateCreated || evidenceItem?.date || event.date || new Date().toISOString(),
+              author: metadata.author || evidenceItem?.author
+            }
+          })
+        })
+      }
+
+      if ((event as any).evidenceInfo) {
+        const info = (event as any).evidenceInfo
+        collected.push({
+          id: `${baseRelated}-evidence-info`,
+          title: getEventTitle(event),
+          description: getEventDescription(event) || getEventTitle(event),
+          content: getEventDescription(event) || getEventTitle(event),
+          type: normalizeEvidenceType(info?.evidenceType),
+          relatedEvents: [baseRelated],
+          metadata: {
+            source: 'timeline-evidenceInfo',
+            dateCreated: event.date || new Date().toISOString()
+          }
+        })
+      }
+
+      if (Array.isArray((event as any).relatedEvidence)) {
+        (event as any).relatedEvidence.forEach((relId: string, idx: number) => {
+          collected.push({
+            id: relId || `${baseRelated}-related-${idx}`,
+            title: getEventTitle(event),
+            description: getEventDescription(event) || getEventTitle(event),
+            content: `${getEventTitle(event)} 相关证据`,
+            type: 'documentary',
+            relatedEvents: [baseRelated],
+            metadata: {
+              source: 'timeline-related',
+              dateCreated: event.date || new Date().toISOString()
+            }
+          })
+        })
+      }
+
+      if (!event.evidence?.length && !(event as any).evidenceInfo && !(event as any).relatedEvidence) {
+        collected.push({
+          id: `${baseRelated}-fallback`,
+          title: getEventTitle(event),
+          description: getEventDescription(event) || getEventTitle(event),
+          content: getEventDescription(event) || '',
+          type: 'documentary',
+          relatedEvents: [baseRelated],
+          metadata: {
+            source: 'timeline-event',
+            dateCreated: event.date || new Date().toISOString()
+          }
+        })
+      }
+    })
+
+    return collected
+  }
+
+  const evidenceItemsForQuiz = useMemo(() => {
+    return extractEvidenceFromCase(effectiveCaseData)
+  }, [effectiveCaseData])
+
+
   // 新增：四大分析功能的状态管理
   const [disputeAnalysis, setDisputeAnalysis] = useState<any>(null)
   const [claimAnalysis, setClaimAnalysis] = useState<any>(null)
@@ -115,14 +258,37 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
 
 
   // 自动开始AI分析
-  useEffect(() => {
-    if (caseData?.threeElements?.facts?.timeline && caseData.threeElements.facts.timeline.length > 0 && !analysisResult && !isAnalyzing) {
-      performTimelineAnalysis()
-    }
-  }, [caseData?.threeElements?.facts?.timeline])
+  const latestCaseDataRef = useRef<typeof effectiveCaseData>(effectiveCaseData)
 
-  const performTimelineAnalysis = async () => {
-    if (!caseData?.threeElements?.facts?.timeline) return
+  useEffect(() => {
+    latestCaseDataRef.current = effectiveCaseData
+  }, [effectiveCaseData])
+
+  const timelineSignature = useMemo(() => {
+    const timeline = effectiveCaseData?.threeElements?.facts?.timeline as EnhancedTimelineEvent[] | undefined
+    if (!timeline || timeline.length === 0) {
+      return ''
+    }
+    return timeline
+      .map((event, index) => `${event.id || event.date || index}-${getEvidenceCount(event)}`)
+      .join('|')
+  }, [effectiveCaseData])
+
+  useEffect(() => {
+    if (!timelineSignature) {
+      return
+    }
+    const currentCaseData = latestCaseDataRef.current
+    if (!currentCaseData?.threeElements?.facts?.timeline?.length) {
+      return
+    }
+    if (!analysisResult && !isAnalyzing) {
+      void performTimelineAnalysis(currentCaseData)
+    }
+  }, [timelineSignature, analysisResult, isAnalyzing])
+
+  const performTimelineAnalysis = async (sourceCaseData: typeof effectiveCaseData) => {
+    if (!sourceCaseData?.threeElements?.facts?.timeline) return
 
     setIsAnalyzing(true)
     setAnalysisError(null)
@@ -132,24 +298,44 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
       console.log('🚀 开始四大分析功能并行处理...')
 
       // 使用数据适配器处理数据，确保证据正确映射到时间轴
-      const adaptedCaseData = adaptCaseData(caseData as any)
-      const validationResult = validateCaseData(adaptedCaseData)
+      const validationResult = validateCaseData(sourceCaseData as any)
 
       if (!validationResult.valid) {
         console.warn('⚠️ 数据适配验证警告:', validationResult.issues)
       }
 
       // 从适配后的数据中提取时间轴事件（已包含映射的证据）
-      const timelineEvents = adaptedCaseData.threeElements?.facts?.timeline as EnhancedTimelineEvent[] || []
-      const documentText = timelineEvents.map(e =>
-        `${e.date}：${getEventTitle(e)}。${getEventDescription(e)}`
+      const timelineEvents = sourceCaseData.threeElements?.facts?.timeline as EnhancedTimelineEvent[] || []
+
+      // 过滤并确保每个事件都有必需的字段
+      const validEvents = timelineEvents.filter(e => e && e.date).map(e => ({
+        ...e,
+        title: getEventTitle(e),
+        event: e.event || getEventTitle(e),
+        date: e.date
+      }))
+
+      // 保存到状态中以供渲染使用
+      setValidTimelineEvents(validEvents)
+
+      const documentText = validEvents.map(e =>
+        `${e.date}：${e.title}。${getEventDescription(e)}`
       ).join('\n')
 
       console.log('📊 数据适配完成:', {
-        原始证据数: caseData.threeElements?.evidence?.items?.length || 0,
-        时间轴事件数: timelineEvents.length,
-        包含证据的事件数: timelineEvents.filter(e => getEvidenceCount(e) > 0).length
+        原始证据数: sourceCaseData?.threeElements?.evidence?.items?.length || 0,
+        原始时间轴事件数: timelineEvents.length,
+        有效时间轴事件数: validEvents.length,
+        包含证据的事件数: validEvents.filter(e => getEvidenceCount(e) > 0).length
       })
+
+      if (validEvents.length === 0) {
+        console.warn('⚠️ 未找到有效的时间轴事件，跳过AI分析')
+        setAnalysisError('缺少可分析的时间轴事件，请先完善案件的时间轴信息。')
+        setAnalysisProgress('⚠️ 检测到空时间轴，已跳过AI分析')
+        setIsAnalyzing(false)
+        return
+      }
 
       // 并行调用四个API
       setAnalysisProgress('🔄 并行调用四大分析API...')
@@ -159,7 +345,7 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            events: timelineEvents,
+            events: validEvents,
             analysisType: 'comprehensive',
             includeAI: true,
             focusAreas: ['turning_points', 'behavior_patterns', 'evidence_chain', 'legal_risks'],
@@ -196,7 +382,7 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            events: timelineEvents,
+            events: validEvents,
             caseType: 'civil',
             focusAreas: ['claims', 'defenses', 'limitations', 'burden-of-proof'],
             depth: 'comprehensive'
@@ -208,66 +394,14 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            // 使用适配后的证据数据 - 兼容多种数据结构
-            evidence: adaptedCaseData.evidence || timelineEvents
-              .filter(e => getEvidenceCount(e) > 0)
-              .flatMap(e => {
-                const evidenceList = [];
-
-                // 处理原有的 evidence 字段
-                if (e.evidence && Array.isArray(e.evidence)) {
-                  evidenceList.push(...e.evidence.map((ev, index) => ({
-                    id: ev?.id || `${e.date}-evidence-${index}`,
-                    content: ev?.content || ev?.description || ev?.title || e.description || e.title,
-                    type: ev?.type || 'documentary',
-                    relatedEvent: e.date,
-                    source: 'timeline-evidence'
-                  })));
-                }
-
-                // 处理 evidenceInfo 字段（TimelineEvent标准格式）
-                if ((e as any).evidenceInfo) {
-                  const evidenceInfo = (e as any).evidenceInfo;
-                  evidenceList.push({
-                    id: `${e.date}-evidenceInfo`,
-                    content: e.description || e.title || '事件证据',
-                    type: evidenceInfo.evidenceType || 'documentary',
-                    relatedEvent: e.date,
-                    source: 'timeline-evidenceInfo',
-                    metadata: {
-                      strength: evidenceInfo.strength,
-                      admissibility: evidenceInfo.admissibility,
-                      authenticity: evidenceInfo.authenticity,
-                      relevance: evidenceInfo.relevance
-                    }
-                  });
-                }
-
-                // 处理 relatedEvidence 字段
-                if ((e as any).relatedEvidence && Array.isArray((e as any).relatedEvidence)) {
-                  evidenceList.push(...(e as any).relatedEvidence.map((evidenceId: string, index: number) => ({
-                    id: evidenceId || `${e.date}-related-${index}`,
-                    content: `${e.description || e.title} 相关证据`,
-                    type: 'documentary',
-                    relatedEvent: e.date,
-                    source: 'timeline-relatedEvidence'
-                  })));
-                }
-
-                // 如果没有明确的证据字段，但有证据相关内容，创建一个基础证据条目
-                if (evidenceList.length === 0 && (e.description?.includes('证据') || e.title?.includes('证据'))) {
-                  evidenceList.push({
-                    id: `${e.date}-inferred`,
-                    content: e.description || e.title,
-                    type: 'documentary',
-                    relatedEvent: e.date,
-                    source: 'timeline-inferred'
-                  });
-                }
-
-                return evidenceList;
-              }),
-            claimElements: timelineEvents.map(e => ({
+            evidence: evidenceItemsForQuiz.map(ev => ({
+              id: ev.id,
+              content: ev.content,
+              type: ev.type,
+              relatedEvents: ev.relatedEvents,
+              metadata: ev.metadata
+            })),
+            claimElements: validEvents.map(e => ({
               id: e.id || e.date,
               name: e.title,
               description: e.description || e.title,
@@ -276,11 +410,11 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
             mode: 'comprehensive', // 使用AI增强的综合分析模式
             caseContext: {
               basicInfo: {
-                caseNumber: adaptedCaseData.basicInfo?.caseNumber,
-                caseType: adaptedCaseData.basicInfo?.caseType || 'civil',
-                court: adaptedCaseData.basicInfo?.court
+                caseNumber: sourceCaseData?.basicInfo?.caseNumber,
+                caseType: sourceCaseData?.basicInfo?.caseType || 'civil',
+                court: sourceCaseData?.basicInfo?.court
               },
-              disputes: (adaptedCaseData as any).disputes || [],
+              disputes: (sourceCaseData as any)?.disputes || [],
               timeline: timelineEvents
             }
           })
@@ -289,30 +423,171 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
 
       setAnalysisProgress('📊 处理分析结果...')
 
+      type DiagnosticRow = {
+        模块: string
+        状态: '成功' | '失败'
+        触发条件: string
+        AI模式?: string
+        数据摘要?: string
+        提示?: string
+      }
+
+      const diagnostics: DiagnosticRow[] = []
+
+      const recordDiagnostic = (row: DiagnosticRow) => {
+        diagnostics.push(row)
+      }
+
       // 处理时间轴分析结果
       if (timelineResult.status === 'fulfilled' && timelineResult.value.success) {
         setAnalysisResult(timelineResult.value.data.analysis)
-        console.log('✅ 时间轴分析完成')
+        const metadata = timelineResult.value.metadata || {}
+        const analysisData = timelineResult.value.data?.analysis
+        const turningPoints = analysisData?.turningPoints?.length || 0
+        const aiMode = metadata.analysisMethod || 'unknown'
+        const aiWarnings = Array.isArray(metadata.aiWarnings)
+          ? metadata.aiWarnings.filter(Boolean)
+          : []
+        const fallbackHint = aiMode !== 'ai-enhanced'
+          ? '未使用AI增强，可能缺少DEEPSEEK_API_KEY'
+          : undefined
+        const emptyHint = turningPoints === 0
+          ? '未生成任何转折点，检查输入事件或AI响应'
+          : undefined
+
+        const degraded = Boolean(fallbackHint || emptyHint)
+
+        recordDiagnostic({
+          模块: '时间轴分析',
+          状态: degraded ? '失败' : '成功',
+          AI模式: aiMode,
+          数据摘要: `转折点 ${turningPoints} 个 / 事件 ${validEvents.length} 个`,
+          触发条件: 'HTTP 200 & success=true',
+          提示: fallbackHint || emptyHint || aiWarnings.join('；') || undefined
+        })
+
+        const logPayload = {
+          analysisMethod: aiMode,
+          turningPoints,
+          riskCount: analysisData?.risks?.length || 0,
+          evidenceChain: analysisData?.evidenceChain,
+          fallbackHint,
+          emptyHint,
+          warnings: aiWarnings
+        }
+
+        if (degraded) {
+          console.warn('⚠️ 时间轴分析降级:', logPayload)
+          const degradeMessage = fallbackHint || emptyHint || '时间轴分析返回空结果'
+          setAnalysisError(prev => prev ?? degradeMessage)
+        } else {
+          console.log('✅ 时间轴分析完成', logPayload)
+          if (aiWarnings.length > 0) {
+            console.info('ℹ️ 时间轴分析警告:', aiWarnings)
+          }
+        }
       } else {
         console.warn('⚠️ 时间轴分析失败:', timelineResult.status === 'rejected' ? timelineResult.reason.message : '未知错误')
+
+        const failureReason = timelineResult.status === 'rejected'
+          ? (timelineResult.reason?.message || timelineResult.reason?.toString?.() || '请求被拒绝')
+          : (timelineResult.value?.error?.message || '返回结构缺少success=true')
+
+        recordDiagnostic({
+          模块: '时间轴分析',
+          状态: '失败',
+          触发条件: timelineResult.status === 'rejected' ? 'Promise rejected' : 'success!==true',
+          提示: failureReason
+        })
       }
 
       // 处理争议分析结果
       if (disputeResult.status === 'fulfilled' && disputeResult.value.success) {
         setDisputeAnalysis(disputeResult.value)
-        console.log('✅ 争议分析完成')
+        const disputes = disputeResult.value.disputes || []
+        const claimBasisCount = disputeResult.value.claimBasisMappings?.length || 0
+        const emptyHint = disputes.length === 0
+          ? '争议列表为空，检查AI响应或输入文本'
+          : undefined
+
+        const degraded = Boolean(emptyHint)
+
+        recordDiagnostic({
+          模块: '争议分析',
+          状态: degraded ? '失败' : '成功',
+          AI模式: 'ai-enhanced',
+          数据摘要: `争议 ${disputes.length} 个 / 映射 ${claimBasisCount} 条`,
+          触发条件: 'HTTP 200 & success=true',
+          提示: emptyHint
+        })
+
+        const logPayload = {
+          disputes: disputes.length,
+          claimBasisMappings: claimBasisCount,
+          warnings: disputeResult.value.warnings || [],
+          emptyHint
+        }
+
+        if (degraded) {
+          console.warn('⚠️ 争议分析降级:', logPayload)
+          if (emptyHint) {
+            setAnalysisError(prev => prev ?? emptyHint)
+          }
+        } else {
+          console.log('✅ 争议分析完成', logPayload)
+        }
       } else {
         const errorMsg = disputeResult.status === 'rejected'
           ? (disputeResult.reason?.message || disputeResult.reason?.toString() || '争议分析服务异常')
           : (disputeResult.value?.error || '争议分析返回格式异常');
         console.warn('⚠️ 争议分析失败:', errorMsg)
         setAnalysisError(`争议分析失败: ${errorMsg}`)
+
+        recordDiagnostic({
+          模块: '争议分析',
+          状态: '失败',
+          触发条件: disputeResult.status === 'rejected' ? 'Promise rejected' : 'success!==true',
+          提示: errorMsg
+        })
       }
 
       // 处理请求权分析结果
       if (claimResult.status === 'fulfilled' && claimResult.value.id) {
         setClaimAnalysis(claimResult.value)
-        console.log('✅ 请求权分析完成')
+        const primaryClaims = claimResult.value.claims?.primary?.length || 0
+        const defenses = claimResult.value.claims?.defense?.length || 0
+        const aiConfidence = claimResult.value.metadata?.confidence
+        const emptyHint = primaryClaims === 0
+          ? '未生成任何主要请求权，可能是AI调用失败或降级数据'
+          : undefined
+
+        const degraded = Boolean(emptyHint)
+
+        recordDiagnostic({
+          模块: '请求权分析',
+          状态: degraded ? '失败' : '成功',
+          AI模式: claimResult.value.metadata?.model || 'unknown',
+          数据摘要: `主要请求权 ${primaryClaims} 项 / 抗辩 ${defenses} 项`,
+          触发条件: 'HTTP 200 & payload.id存在',
+          提示: emptyHint
+        })
+
+        const logPayload = {
+          primaryClaims,
+          defenses,
+          burdenOfProof: claimResult.value.burdenOfProof?.length || 0,
+          confidence: aiConfidence,
+          emptyHint
+        }
+
+        if (degraded) {
+          console.warn('⚠️ 请求权分析降级:', logPayload)
+          if (emptyHint) {
+            setAnalysisError(prev => prev ?? emptyHint)
+          }
+        } else {
+          console.log('✅ 请求权分析完成', logPayload)
+        }
       } else {
         const errorMsg = claimResult.status === 'rejected'
           ? (claimResult.reason?.message || claimResult.reason?.toString() || '请求权分析服务异常')
@@ -321,6 +596,13 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
         if (!analysisError) { // 避免覆盖之前的错误信息
           setAnalysisError(`请求权分析失败: ${errorMsg}`)
         }
+
+        recordDiagnostic({
+          模块: '请求权分析',
+          状态: '失败',
+          触发条件: claimResult.status === 'rejected' ? 'Promise rejected' : '缺少必要字段',
+          提示: errorMsg
+        })
       }
 
       // 处理证据分析结果 - 适配AI增强版响应结构
@@ -344,11 +626,41 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
         };
 
         setEvidenceAnalysis(adaptedEvidenceAnalysis);
-        console.log('✅ AI增强证据分析完成', {
-          mode: enhancedEvidence.mode,
-          qualityCount: enhancedEvidence.qualityAssessments?.length || 0,
-          chainCount: enhancedEvidence.chainAnalyses?.length || 0
-        });
+
+        const qualityCount = enhancedEvidence.qualityAssessments?.length || 0
+        const chainCount = enhancedEvidence.chainAnalyses?.length || 0
+        const emptyHint = qualityCount === 0 && chainCount === 0
+          ? 'AI未返回质量或证据链分析，可能使用了降级数据'
+          : undefined
+
+        const degraded = Boolean(emptyHint)
+
+        recordDiagnostic({
+          模块: '证据分析',
+          状态: degraded ? '失败' : '成功',
+          AI模式: enhancedEvidence.mode || 'unknown',
+          数据摘要: `质量评估 ${qualityCount} 条 / 证据链 ${chainCount} 条`,
+          触发条件: 'HTTP 200 & success=true',
+          提示: emptyHint
+        })
+
+        if (degraded) {
+          console.warn('⚠️ 证据分析降级:', {
+            mode: enhancedEvidence.mode,
+            qualityCount,
+            chainCount,
+            emptyHint
+          })
+          if (emptyHint) {
+            setAnalysisError(prev => prev ?? emptyHint)
+          }
+        } else {
+          console.log('✅ AI增强证据分析完成', {
+            mode: enhancedEvidence.mode,
+            qualityCount,
+            chainCount
+          })
+        }
       } else {
         const errorMsg = evidenceResult.status === 'rejected'
           ? (evidenceResult.reason?.message || evidenceResult.reason?.toString() || 'AI证据分析服务异常')
@@ -357,6 +669,24 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
         if (!analysisError) {
           setAnalysisError(`证据分析失败: ${errorMsg}`);
         }
+
+        recordDiagnostic({
+          模块: '证据分析',
+          状态: '失败',
+          触发条件: evidenceResult.status === 'rejected' ? 'Promise rejected' : 'success!==true',
+          提示: errorMsg
+        })
+      }
+
+      if (diagnostics.length > 0) {
+        console.groupCollapsed('🛰️ 四大分析诊断信息 (展开查看详细原因为何显示为成功或失败)')
+        console.table(diagnostics)
+        diagnostics
+          .filter(row => row.提示)
+          .forEach(row => {
+            console.info(`ℹ️ [${row.模块}]`, row.提示)
+          })
+        console.groupEnd()
       }
 
       setAnalysisProgress('✅ 综合智能分析完成!')
@@ -420,7 +750,7 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
             <Button
               variant="outline"
               size="sm"
-              onClick={performTimelineAnalysis}
+              onClick={() => performTimelineAnalysis(effectiveCaseData)}
               className="mt-2"
             >
               重新分析
@@ -437,7 +767,7 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
               案件发展脉络
             </h4>
             <div className="space-y-4">
-              {(caseData?.threeElements?.facts?.timeline as EnhancedTimelineEvent[] || []).map((event, index) => (
+              {validTimelineEvents.map((event, index) => (
                 <div key={event.id || `event-${index}`} className="relative">
                   {/* 时间轴线 */}
                   <div className="absolute left-6 top-8 bottom-0 w-0.5 bg-gray-200 -z-10" />
@@ -462,23 +792,37 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
                           )}
                         </div>
 
-                        {/* 重要性标记 */}
-                        {event.importance && (
-                          <Badge variant={
-                            event.importance === 'critical' ? 'destructive' :
-                            event.importance === 'high' ? 'default' : 'secondary'
-                          }>
-                            {event.importance === 'critical' ? '关键事件' :
-                             event.importance === 'high' ? '重要事件' : '一般事件'}
-                          </Badge>
-                        )}
+                        {/* 操作按钮和重要性标记 */}
+                        <div className="flex items-center gap-2">
+                          {/* 请求权分析按钮 */}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedEventForAnalysis(event)}
+                            className="text-xs"
+                          >
+                            <Gavel className="w-3 h-3 mr-1" />
+                            请求权分析
+                          </Button>
+
+                          {/* 重要性标记 */}
+                          {event.importance && (
+                            <Badge variant={
+                              event.importance === 'critical' ? 'destructive' :
+                              event.importance === 'high' ? 'default' : 'secondary'
+                            }>
+                              {event.importance === 'critical' ? '关键事件' :
+                               event.importance === 'high' ? '重要事件' : '一般事件'}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
 
                       {/* AI增强信息 */}
                       {(analysisResult || disputeAnalysis || claimAnalysis || evidenceAnalysis) && (
                         <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
-                          {/* 检查是否为转折点 */}
-                          {analysisResult?.keyTurningPoints.some(tp =>
+                          {/* 检查是否为转折点 - 兼容两种字段名 */}
+                          {(analysisResult?.keyTurningPoints || analysisResult?.turningPoints)?.some((tp: TurningPoint) =>
                             tp.date === event.date || tp.description.includes(getEventTitle(event))
                           ) && (
                             <div className="flex items-center gap-2 text-sm text-orange-600">
@@ -487,27 +831,38 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
                             </div>
                           )}
 
-                          {/* 争议标记 - 添加兜底处理 */}
-                          {disputeAnalysis?.disputes?.some((dispute: any) => {
-                            // 兜底处理：兼容旧字段名和缺失字段
-                            const safeDispute = {
-                              relatedEvents: dispute.relatedEvents || dispute.relatedEvidence || [],
-                              title: dispute.title || '未命名争议',
-                              description: dispute.description || '',
-                              category: dispute.category || 'unknown'
-                            };
+                          {/* 争议标记 - 优化显示逻辑 */}
+                          {(() => {
+                            const relatedDispute = disputeAnalysis?.disputes?.find((dispute: any) => {
+                              const safeDispute = {
+                                relatedEvents: dispute.relatedEvents || dispute.relatedEvidence || [],
+                                title: dispute.title || '未命名争议',
+                                description: dispute.description || '',
+                                category: dispute.category || 'unknown'
+                              };
+                              return safeDispute.relatedEvents.includes(event.id || event.date) ||
+                                     safeDispute.relatedEvents.includes(`E${index + 1}`) ||
+                                     getEventTitle(event).toLowerCase().includes('争议') ||
+                                     getEventDescription(event).toLowerCase().includes('争议');
+                            });
 
-                            // 多重匹配策略：ID匹配、日期匹配、事件编号匹配、内容关键词匹配
-                            return safeDispute.relatedEvents.includes(event.id || event.date) ||
-                                   safeDispute.relatedEvents.includes(`E${index + 1}`) ||
-                                   getEventTitle(event).toLowerCase().includes('争议') ||
-                                   getEventDescription(event).toLowerCase().includes('争议');
-                          }) && (
-                            <div className="flex items-center gap-2 text-sm text-blue-600">
-                              <AlertCircle className="w-4 h-4" />
-                              <span className="font-medium">争议焦点</span>
-                            </div>
-                          )}
+                            if (relatedDispute) {
+                              return (
+                                <div className="bg-blue-50 p-2 rounded border border-blue-200">
+                                  <div className="flex items-center gap-2 text-sm text-blue-600">
+                                    <AlertCircle className="w-4 h-4" />
+                                    <span className="font-medium">争议焦点：{relatedDispute.title}</span>
+                                  </div>
+                                  {relatedDispute.description && (
+                                    <div className="text-xs text-blue-500 mt-1 ml-6">
+                                      {relatedDispute.description.substring(0, 100)}...
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
 
                           {/* 请求权标记 - 添加兜底处理 */}
                           {claimAnalysis?.claims?.primary?.some((claim: any) => {
@@ -560,11 +915,11 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                 <h5 className="font-semibold flex items-center gap-2 mb-3">
                   <TrendingUp className="w-5 h-5 text-orange-600" />
-                  关键转折点与争议
+                  关键转折点与争议焦点
                 </h5>
                 <div className="space-y-2">
-                  {/* 时间轴转折点 */}
-                  {analysisResult?.keyTurningPoints?.slice(0, 2).map((point, index) => (
+                  {/* 时间轴转折点 - 修复字段名：keyTurningPoints改为turningPoints */}
+                  {(analysisResult?.keyTurningPoints || analysisResult?.turningPoints)?.slice(0, 3).map((point: TurningPoint, index: number) => (
                     <div key={`tp-${index}`} className="text-sm">
                       <div className="flex items-center gap-2">
                         <TrendingUp className="w-3 h-3 text-orange-600" />
@@ -583,7 +938,7 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
                       <div className="text-blue-700 ml-5">{dispute.description?.substring(0, 50) || '待分析'}...</div>
                     </div>
                   ))}
-                  {(!analysisResult?.keyTurningPoints?.length && !disputeAnalysis?.disputes?.length) && (
+                  {(!(analysisResult?.keyTurningPoints || analysisResult?.turningPoints)?.length && !disputeAnalysis?.disputes?.length) && (
                     <div className="text-sm text-gray-500 italic">暂无关键转折点或争议数据</div>
                   )}
                 </div>
@@ -629,11 +984,11 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
                 </div>
               </div>
 
-              {/* 证据体系 */}
+              {/* 证据体系 - 增强显示证据链关系 */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <h5 className="font-semibold flex items-center gap-2 mb-3">
                   <FileText className="w-5 h-5 text-blue-600" />
-                  证据体系
+                  证据链条分析
                 </h5>
                 <div className="space-y-2 text-sm">
                   {/* 证据链完整性 */}
@@ -651,6 +1006,17 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
                           {Math.round(analysisResult.evidenceChain.logicalConsistency * 100)}%
                         </span>
                       </div>
+                      {/* 证据优势 */}
+                      {analysisResult.evidenceChain.strengths?.length > 0 && (
+                        <div className="mt-2">
+                          <div className="font-medium text-green-700">证据优势：</div>
+                          <ul className="text-xs text-green-600 ml-2 mt-1">
+                            {analysisResult.evidenceChain.strengths.slice(0, 2).map((strength, idx) => (
+                              <li key={idx}>• {strength}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </>
                   )}
                   {/* 证据质量评估 */}
@@ -675,22 +1041,25 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
                 </div>
               </div>
 
-              {/* AI预测与建议 */}
+              {/* 行为模式分析 - 替换AI预测模块 */}
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <h5 className="font-semibold flex items-center gap-2 mb-3">
                   <Brain className="w-5 h-5 text-green-600" />
-                  AI预测与建议
+                  行为模式与策略建议
                 </h5>
                 <div className="space-y-2">
-                  {/* AI预测 */}
-                  {analysisResult?.predictions?.slice(0, 2).map((prediction, index) => (
-                    <div key={`prediction-${index}`} className="text-sm">
+                  {/* 行为模式分析 */}
+                  {analysisResult?.behaviorPatterns?.slice(0, 2).map((pattern, index) => (
+                    <div key={`pattern-${index}`} className="text-sm">
                       <div className="flex items-center gap-2 mb-1">
                         <Badge variant="secondary" className="text-xs">
-                          {Math.round(prediction.probability * 100)}% 概率
+                          {pattern.party}
                         </Badge>
+                        <span className="text-green-700 font-medium">{pattern.pattern}</span>
                       </div>
-                      <div className="text-green-700">{prediction.reasoning}</div>
+                      <div className="text-green-600 text-xs ml-2">
+                        动机：{pattern.motivation}
+                      </div>
                     </div>
                   ))}
                   {/* 综合建议 */}
@@ -734,8 +1103,8 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
                       </div>
                     );
                   })}
-                  {(!analysisResult?.predictions?.length && !claimAnalysis?.strategy?.recommendations?.length) && (
-                    <div className="text-sm text-gray-500 italic">暂无预测或建议数据</div>
+                  {(!analysisResult?.behaviorPatterns?.length && !claimAnalysis?.strategy?.recommendations?.length) && (
+                    <div className="text-sm text-gray-500 italic">暂无行为模式或建议数据</div>
                   )}
                 </div>
               </div>
@@ -757,20 +1126,7 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
 
         {/* 证据学习问答组件 - 基于真实时间轴证据 */}
         <EvidenceQuizSection
-          evidences={(caseData?.threeElements?.facts?.timeline as EnhancedTimelineEvent[] || [])
-            ?.filter(event => getEvidenceCount(event) > 0)
-            ?.map(event => ({
-              id: event.id || event.date,
-              title: getEventTitle(event),
-              description: getEventDescription(event) || getEventTitle(event),
-              type: 'documentary' as const,
-              content: getEventDescription(event) || '',
-              relevance: 1.0, // 默认相关性，将由AI分析确定
-              source: 'timeline-event',
-              date: event.date,
-              relatedEvents: [event.id || event.date] // 添加必需的relatedEvents属性
-            })) || []
-          }
+          evidences={evidenceItemsForQuiz}
           autoGenerate={true}
           maxQuizzes={5}
           onSessionComplete={(session) => {
@@ -829,6 +1185,13 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
           </div>
         )}
       </div>
+
+      {/* 事件请求权分析弹窗 */}
+      <EventClaimAnalysisDialog
+        event={selectedEventForAnalysis}
+        isOpen={!!selectedEventForAnalysis}
+        onClose={() => setSelectedEventForAnalysis(null)}
+      />
     </div>
   )
 }
