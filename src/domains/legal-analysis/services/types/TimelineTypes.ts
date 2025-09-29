@@ -9,22 +9,29 @@ export interface TimelineEvent {
   id?: string;
   date: string;
   title: string;
+  event?: string;  // 允许使用event代替title
+  detail?: string;  // 详细描述
   description?: string;
   type?: EventType;
   importance?: EventImportance;
   parties?: string[];
   evidence?: string[];
   legalRelevance?: string;
+  claims?: any;  // 请求权相关信息
+  legalRelation?: any;  // 法律关系
 }
 
 export interface TimelineAnalysis {
-  keyTurningPoints: TurningPoint[];
+  keyTurningPoints?: TurningPoint[];  // 兼容旧版本
+  turningPoints?: TurningPoint[];      // AI返回的新字段名
   behaviorPatterns: BehaviorPattern[];
   evidenceChain: EvidenceChainAnalysis;
   legalRisks: LegalRisk[];
   predictions: CasePrediction[];
   summary: string;
   confidence: number;
+  aiWarnings?: string[];
+  analysisSource?: 'ai' | 'rule';
 }
 
 export interface TurningPoint {
@@ -53,7 +60,7 @@ export interface EvidenceChainAnalysis {
 }
 
 export interface LegalRisk {
-  type: RiskType;
+  type: RiskType | RiskTypeLiteral | string;  // 兼容多种类型
   description: string;
   likelihood: 'high' | 'medium' | 'low';
   impact: 'high' | 'medium' | 'low';
@@ -92,6 +99,9 @@ export enum RiskType {
   REPUTATIONAL = 'reputational',
   OPERATIONAL = 'operational'
 }
+
+// 支持字符串字面量类型兼容
+export type RiskTypeLiteral = 'legal' | 'financial' | 'reputational' | 'operational';
 
 export enum AnalysisType {
   COMPREHENSIVE = 'comprehensive',
@@ -173,20 +183,24 @@ export interface TimelineMetadata {
   analysisMethod: 'rule-based' | 'ai-enhanced' | 'hybrid';
   confidence: number;
   version: string;
+  aiWarnings?: string[];
 }
 
 // ========== AI分析类型 ==========
 
 export interface AITimelineRequest {
   eventText: string;
+  events?: TimelineEvent[];
   analysisType: AnalysisType;
   focusAreas?: string[];
 }
 
 export interface AITimelineResponse {
-  analysis: string;
+  analysis: any;
   structuredData?: any;
+  rawContent?: string;
   confidence: number;
+  warnings?: string[];
 }
 
 // ========== 处理结果类型 ==========
@@ -194,6 +208,9 @@ export interface AITimelineResponse {
 export interface ProcessedDocument {
   originalText: string;
   cleanedText: string;
+  sentences?: string[];  // \u53e5\u5b50\u6570\u7ec4
+  paragraphs?: string[];  // \u6bb5\u843d\u6570\u7ec4
+  language?: string;  // \u8bed\u8a00\u7c7b\u578b
   metadata: {
     eventCount: number;
     dateRange: {
@@ -202,5 +219,6 @@ export interface ProcessedDocument {
     };
     mainParties: string[];
     documentType: string;
+    [key: string]: any;  // \u5141\u8bb8\u989d\u5916\u7684\u5143\u6570\u636e
   };
 }

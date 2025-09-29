@@ -614,14 +614,23 @@ export class SmartMerger {
    * 计算文本相似度（简单实现）
    */
   private static calculateTextSimilarity(text1: string, text2: string): number {
+    // 添加空值检查
+    if (!text1 || !text2 || typeof text1 !== 'string' || typeof text2 !== 'string') {
+      return 0;
+    }
+
     // 简单的基于共同字符的相似度计算
     const set1 = new Set(text1.split(''))
     const set2 = new Set(text2.split(''))
-    
+
+    if (set1.size === 0 || set2.size === 0) {
+      return 0;
+    }
+
     const intersection = new Set([...set1].filter(x => set2.has(x)))
     const union = new Set([...set1, ...set2])
-    
-    return intersection.size / union.size
+
+    return union.size > 0 ? intersection.size / union.size : 0
   }
   
   /**

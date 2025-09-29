@@ -17,25 +17,16 @@ import type {
 } from '@/types/timeline-claim-analysis';
 
 // 导入统一AI调用代理
-import { interceptDeepSeekCall } from '../../../infrastructure/ai/AICallProxy';
+import { callUnifiedAI } from '../../../infrastructure/ai/AICallProxy';
+import { getAIParams } from '@/src/config/ai-defaults';
 
 /**
  * 请求权分析应用服务
  */
 export class ClaimAnalysisService {
-  private readonly apiKey: string;
-  private readonly apiUrl: string;
-
   constructor() {
-    // 使用与AICallProxy一致的环境变量获取方式，包含fallback
-    this.apiKey = process.env.DEEPSEEK_API_KEY || 'sk-6b081a93258346379182141661293345';
-    this.apiUrl = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1';
-
-    console.log('🎯 ClaimAnalysisService初始化:', {
-      hasApiKey: !!this.apiKey,
-      apiUrl: this.apiUrl,
-      keyPrefix: this.apiKey.substring(0, 8) + '...'
-    });
+    // 不再需要在这里管理API Key，统一由AICallProxy处理
+    console.log('🎯 ClaimAnalysisService初始化: 使用统一AI调用代理');
   }
 
   /**
@@ -104,7 +95,7 @@ export class ClaimAnalysisService {
       return this.parseClaimsResponse(response);
     } catch (error) {
       console.error('请求权分析失败:', error);
-      return this.getDefaultClaimsStructure();
+      throw error;
     }
   }
 
@@ -223,59 +214,71 @@ ${depth === 'comprehensive' ?
   }
 
   /**
-   * 调用统一AI服务（通过代理模式）
-   * 迁移说明：从直连DeepSeek API改为使用AICallProxy统一调用
+   * 调用统一AI服务（使用callUnifiedAI确保API Key正确加载）
    */
   private async callDeepSeekAPI(prompt: string): Promise<any> {
-    if (!this.apiKey) {
-      throw new Error('AI服务API Key未配置');
-    }
-
-    const response = await interceptDeepSeekCall(this.apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.7,  // 提高温度以获得更多样化的法律分析
-        max_tokens: 2000
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`DeepSeek API错误: ${response.status}`);
-    }
-
-    const result = await response.json();
-    const content = result.choices?.[0]?.message?.content;
-
-    if (!content) {
-      throw new Error('AI响应为空');
-    }
-
-    // 尝试解析JSON响应，支持markdown包装格式
     try {
-      // 处理markdown包装的JSON响应
-      let jsonContent = content;
-      if (content.includes('```json')) {
-        const match = content.match(/```json\n([\s\S]*?)\n```/);
-        if (match && match[1]) {
-          jsonContent = match[1];
-        }
+      const systemPrompt = '你是专业的法律请求权分析专家，精通德国法学请求权分析法。请严格按照要求以JSON格式返回分析结果，不要包含任何markdown标记。';
+
+      const params = getAIParams('claim-analysis');
+      const result = await callUnifiedAI(systemPrompt, prompt, {
+        ...params,
+        temperature: 0.3,  // 低温度确保准确性
+        maxTokens: 3000,
+        responseFormat: 'json'
+      });
+
+      const content = result.content;
+      if (!content) {
+        throw new Error('AI响应为空');
       }
 
-      return JSON.parse(jsonContent);
-    } catch {
-      console.warn('AI响应不是有效JSON，返回原始文本');
-      return { raw: content };
+      console.log('🎯 请求权分析AI响应长度:', content.length);
+
+      // 尝试解析JSON响应
+      try {
+        // 处理可能的markdown包装
+        let jsonContent = content.trim();
+        if (jsonContent.includes('```json')) {
+          const match = jsonContent.match(/```json\s*([\s\S]*?)\s*```/);
+          if (match && match[1]) {
+            jsonContent = match[1];
+          }
+        } else if (jsonContent.includes('```')) {
+          const match = jsonContent.match(/```\s*([\s\S]*?)\s*```/);
+          if (match && match[1]) {
+            jsonContent = match[1];
+          }
+        }
+
+        return JSON.parse(jsonContent);
+      } catch (parseError) {
+        console.warn('AI响应解析失败，尝试修复JSON:', parseError);
+        // 尝试修复常见的JSON错误
+        let fixedContent = content
+          .replace(/,\s*}/g, '}')  // 移除尾随逗号
+          .replace(/,\s*]/g, ']')  // 移除数组尾随逗号
+          .replace(/'/g, '"');     // 单引号改双引号
+
+        try {
+          return JSON.parse(fixedContent);
+        } catch {
+          console.error('无法解析AI响应为JSON，返回空结构');
+          return {
+            primary: [],
+            alternative: [],
+            defense: []
+          };
+        }
+      }
+    } catch (error) {
+      console.error('请求权AI分析失败:', error);
+      // 返回基础结构而不是抛出错误
+      return {
+        primary: [],
+        alternative: [],
+        defense: []
+      };
     }
   }
 
@@ -322,27 +325,18 @@ ${events.map((e, i) => `${i + 1}. ${e.date}: ${e.title || e.description}`).join(
   ]
 }`;
 
-      const response = await interceptDeepSeekCall(this.apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'deepseek-chat',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.7,
-          max_tokens: 1500
-        })
+      // 使用统一的AI调用接口
+      const params = getAIParams('claim-analysis');
+      const systemPrompt = '你是专业的法律时间轴分析专家，精通诉讼时效和事件因果关系分析。请以JSON格式返回分析结果。';
+      const result = await callUnifiedAI(systemPrompt, prompt, {
+        ...params,
+        responseFormat: 'json'
       });
 
-      const result = await response.json();
-      const content = result.choices?.[0]?.message?.content || '';
-
-      // 处理markdown包装的JSON响应
-      let jsonContent = content;
-      if (content.includes('```json')) {
-        const match = content.match(/```json\n([\s\S]*?)\n```/);
+      // 解析AI返回的内容
+      let jsonContent = result.content;
+      if (jsonContent.includes('```json')) {
+        const match = jsonContent.match(/```json\n([\s\S]*?)\n```/);
         if (match && match[1]) {
           jsonContent = match[1];
         }
@@ -350,46 +344,9 @@ ${events.map((e, i) => `${i + 1}. ${e.date}: ${e.title || e.description}`).join(
 
       return JSON.parse(jsonContent);
     } catch (error) {
-      console.warn('时间轴AI分析失败，使用基础分析:', error);
-      // 降级到基础规则分析
-      return this.analyzeTimelineBasic(events);
+      console.warn('时间轴AI分析失败:', error);
+      throw error;
     }
-  }
-
-  // 基础规则分析作为AI失败时的降级方案
-  private analyzeTimelineBasic(events: TimelineEvent[]): any {
-    const keyPoints = events
-      .filter((e, i) => i % 2 === 0 || e.description?.includes('重要') || e.title?.includes('关键'))
-      .map(e => ({
-        date: e.date,
-        event: e.title || e.description,
-        significance: '需要进一步分析',
-        impact: '待评估'
-      }));
-
-    const limitations = [
-      {
-        type: '一般诉讼时效',
-        deadline: '3年',
-        description: '从知道或应当知道权利被侵害时起计算',
-        status: 'current'
-      }
-    ];
-
-    const sequence = [
-      {
-        phase: '事实发生阶段',
-        events: events.slice(0, Math.ceil(events.length / 2)).map(e => e.id || e.date),
-        legalEffects: '权利义务关系确立'
-      },
-      {
-        phase: '争议产生阶段',
-        events: events.slice(Math.ceil(events.length / 2)).map(e => e.id || e.date),
-        legalEffects: '争议事实需要司法确认'
-      }
-    ];
-
-    return { keyPoints, limitations, sequence };
   }
 
   private async analyzeBurdenOfProof(events: TimelineEvent[]): Promise<any[]> {
@@ -415,26 +372,18 @@ ${events.map((e, i) => `${i + 1}. ${e.date}: ${e.title || e.description}`).join(
   }
 ]`;
 
-      const response = await interceptDeepSeekCall(this.apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'deepseek-chat',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.7,
-          max_tokens: 1500
-        })
+      // 使用统一的AI调用接口
+      const params = getAIParams('claim-analysis');
+      const systemPrompt = '你是专业的法律举证责任分析专家，精通民事诉讼举证规则。请以JSON格式返回分析结果。';
+      const result = await callUnifiedAI(systemPrompt, prompt, {
+        ...params,
+        responseFormat: 'json'
       });
 
-      const result = await response.json();
-      const content = result.choices?.[0]?.message?.content || '';
-
-      let jsonContent = content;
-      if (content.includes('```json')) {
-        const match = content.match(/```json\n([\s\S]*?)\n```/);
+      // 解析AI返回的内容
+      let jsonContent = result.content;
+      if (jsonContent.includes('```json')) {
+        const match = jsonContent.match(/```json\n([\s\S]*?)\n```/);
         if (match && match[1]) {
           jsonContent = match[1];
         }
@@ -442,18 +391,8 @@ ${events.map((e, i) => `${i + 1}. ${e.date}: ${e.title || e.description}`).join(
 
       return JSON.parse(jsonContent);
     } catch (error) {
-      console.warn('举证责任AI分析失败，使用基础规则:', error);
-      // 降级到基础规则
-      return [
-        {
-          claim: '案件基本事实',
-          party: '原告',
-          evidence: '相关证据材料',
-          difficulty: 'medium',
-          deadline: '举证期限内',
-          consequences: '承担败诉风险'
-        }
-      ];
+      console.warn('举证责任AI分析失败:', error);
+      throw error;
     }
   }
 
@@ -482,26 +421,18 @@ ${events.map((e, i) => `${i + 1}. ${e.date}: ${e.title || e.description}`).join(
   }
 ]`;
 
-      const response = await interceptDeepSeekCall(this.apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'deepseek-chat',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.7,
-          max_tokens: 1500
-        })
+      // 使用统一的AI调用接口
+      const params = getAIParams('claim-analysis');
+      const systemPrompt = '你是专业的法律举证责任分析专家，精通民事诉讼举证规则。请以JSON格式返回分析结果。';
+      const result = await callUnifiedAI(systemPrompt, prompt, {
+        ...params,
+        responseFormat: 'json'
       });
 
-      const result = await response.json();
-      const content = result.choices?.[0]?.message?.content || '';
-
-      let jsonContent = content;
-      if (content.includes('```json')) {
-        const match = content.match(/```json\n([\s\S]*?)\n```/);
+      // 解析AI返回的内容
+      let jsonContent = result.content;
+      if (jsonContent.includes('```json')) {
+        const match = jsonContent.match(/```json\n([\s\S]*?)\n```/);
         if (match && match[1]) {
           jsonContent = match[1];
         }
@@ -509,26 +440,9 @@ ${events.map((e, i) => `${i + 1}. ${e.date}: ${e.title || e.description}`).join(
 
       return JSON.parse(jsonContent);
     } catch (error) {
-      console.warn('法律关系AI分析失败，使用基础规则:', error);
-      // 降级到基础分析
-      return this.analyzeLegalRelationsBasic(events);
+      console.warn('法律关系AI分析失败:', error);
+      throw error;
     }
-  }
-
-  // 基础法律关系分析作为AI失败时的降级方案
-  private analyzeLegalRelationsBasic(events: TimelineEvent[]): any[] {
-    return [
-      {
-        relationship: '合同关系',
-        parties: ['甲方', '乙方'],
-        legalBasis: '《民法典》合同编',
-        rights: '按约定享有权利',
-        obligations: '按约定履行义务',
-        status: 'disputed',
-        relatedEvents: events.slice(0, 2).map(e => e.id || e.date),
-        impact: '构成案件争议基础'
-      }
-    ];
   }
 
   private async generateStrategy(claims: any, timeline: any, burdenOfProof: any[]): Promise<any> {
@@ -583,26 +497,19 @@ ${events.map((e, i) => `${i + 1}. ${e.date}: ${e.title || e.description}`).join(
   }
 }`;
 
-      const response = await interceptDeepSeekCall(this.apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'deepseek-chat',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.7,
-          max_tokens: 2000
-        })
+      // 使用统一AI调用接口
+      const params = getAIParams('claim-analysis');
+      const systemPrompt = '你是专业的法律策略分析专家，请基于请求权分析结果制定诉讼策略。请以JSON格式返回分析结果。';
+      const result = await callUnifiedAI(systemPrompt, prompt, {
+        ...params,
+        responseFormat: 'json',
+        maxTokens: 2000
       });
 
-      const result = await response.json();
-      const content = result.choices?.[0]?.message?.content || '';
-
-      let jsonContent = content;
-      if (content.includes('```json')) {
-        const match = content.match(/```json\n([\s\S]*?)\n```/);
+      // 解析AI返回的内容
+      let jsonContent = result.content;
+      if (jsonContent.includes('```json')) {
+        const match = jsonContent.match(/```json\s*([\s\S]*?)\s*```/);
         if (match && match[1]) {
           jsonContent = match[1];
         }
@@ -610,53 +517,9 @@ ${events.map((e, i) => `${i + 1}. ${e.date}: ${e.title || e.description}`).join(
 
       return JSON.parse(jsonContent);
     } catch (error) {
-      console.warn('策略生成AI分析失败，使用基础建议:', error);
-      // 降级到基础策略
-      return this.generateStrategyBasic(claims, timeline, burdenOfProof);
+      console.warn('策略生成AI分析失败:', error);
+      throw error;
     }
-  }
-
-  // 基础策略生成作为AI失败时的降级方案
-  private generateStrategyBasic(claims: any, timeline: any, burdenOfProof: any[]): any {
-    const hasStrongClaims = claims.primary?.length > 0;
-    const hasTimeConstraints = timeline.limitations?.some((l: any) => l.status === 'approaching');
-    const hasComplexEvidence = burdenOfProof.length > 3;
-
-    return {
-      recommendations: [
-        {
-          priority: 'high',
-          action: hasStrongClaims ? '重点证明主要请求权' : '加强证据收集',
-          rationale: hasStrongClaims ? '存在成立可能性较高的请求权' : '现有证据可能不充分',
-          timeline: '立即执行'
-        },
-        {
-          priority: hasTimeConstraints ? 'high' : 'medium',
-          action: '关注诉讼时效',
-          rationale: hasTimeConstraints ? '存在时效风险' : '确保程序合规',
-          timeline: '持续监控'
-        }
-      ],
-      risks: [
-        {
-          level: hasComplexEvidence ? 'high' : 'medium',
-          description: hasComplexEvidence ? '举证责任复杂' : '证据可能不足',
-          mitigation: hasComplexEvidence ? '专业律师协助举证' : '补强证据材料'
-        }
-      ],
-      opportunities: [
-        {
-          type: '和解谈判',
-          description: '考虑庭外和解可能性',
-          exploitation: '在有利证据基础上主动谈判'
-        }
-      ],
-      timeline: {
-        immediate: ['评估证据强度', '核实法律依据'],
-        shortTerm: ['制定举证计划', '准备诉讼材料'],
-        longTerm: ['跟踪时效变化', '调整策略方向']
-      }
-    };
   }
 
   private parseClaimsResponse(response: any): {
@@ -665,7 +528,7 @@ ${events.map((e, i) => `${i + 1}. ${e.date}: ${e.title || e.description}`).join(
     defense: DefenseStructure[]
   } {
     if (!response || typeof response === 'string') {
-      return this.getDefaultClaimsStructure();
+      throw new Error('AI响应格式无效，无法解析请求权结构');
     }
 
     return {
@@ -686,17 +549,6 @@ ${events.map((e, i) => `${i + 1}. ${e.date}: ${e.title || e.description}`).join(
     return Math.min(confidence, 100);
   }
 
-  private getDefaultClaimsStructure(): {
-    primary: ClaimStructure[]
-    alternative: ClaimStructure[]
-    defense: DefenseStructure[]
-  } {
-    return {
-      primary: [],
-      alternative: [],
-      defense: []
-    };
-  }
 }
 
 /**

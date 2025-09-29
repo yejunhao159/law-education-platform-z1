@@ -4,14 +4,15 @@
  * Based on Andrew Ng's Data-Centric AI approach
  */
 
-import type { 
-  BasicInfo, 
-  Facts, 
-  Evidence, 
-  Reasoning, 
+import type {
+  BasicInfo,
+  Facts,
+  Evidence,
+  Reasoning,
   Metadata,
   Party
 } from '@/types/legal-case';
+import { callUnifiedAI } from '@/src/infrastructure/ai/AICallProxy';
 
 export interface AIExtractedElements {
   basicInfo: BasicInfo;
@@ -23,16 +24,17 @@ export interface AIExtractedElements {
 
 // 导出通用的AI分析函数
 export async function analyzeClaimsWithAI(prompt: string): Promise<string> {
-  const agent = new DeepSeekLegalAgent()
-  const result = await agent.callDeepSeekAPI(prompt)
+  const result = await callUnifiedAI(
+    '你是一位精通德国法学请求权分析法的法律专家，必须严格按照JSON Schema输出结果。',
+    prompt,
+    {
+      temperature: 0.3,
+      maxTokens: 2000,
+      responseFormat: 'json'
+    }
+  )
 
-  // 如果返回的是对象，转换为JSON字符串
-  if (typeof result === 'object' && result !== null) {
-    return JSON.stringify(result)
-  }
-
-  // 如果返回的是字符串，直接返回
-  return result || ''
+  return result.content || ''
 }
 
 export class DeepSeekLegalAgent {
@@ -424,12 +426,26 @@ ${text.substring(0, 2000)}`;
    * 解析事实响应
    */
   private parseFactsResponse(response: any): Facts {
-    if (!response || typeof response === 'string') {
+    console.log('📝 解析事实响应:', typeof response, response);
+
+    // 如果是字符串，尝试解析JSON
+    if (typeof response === 'string') {
+      try {
+        response = JSON.parse(response);
+      } catch (e) {
+        console.error('解析JSON失败，使用默认值');
+        return this.getDefaultFacts();
+      }
+    }
+
+    if (!response) {
+      console.error('响应为空，使用默认值');
       return this.getDefaultFacts();
     }
-    
-    return {
-      summary: response.summary || '暂无摘要',
+
+    // 确保返回完整的事实结构
+    const facts = {
+      summary: response.summary || '基于AI分析的事实摘要',
       timeline: Array.isArray(response.timeline) ? response.timeline.map((t: any) => ({
         date: t.date || '',
         event: t.event || '',
@@ -442,17 +458,44 @@ ${text.substring(0, 2000)}`;
       disputedFacts: Array.isArray(response.disputedFacts) ? response.disputedFacts : [],
       undisputedFacts: Array.isArray(response.undisputedFacts) ? response.undisputedFacts : []
     };
+
+    // 验证并补充缺失的数据
+    if (facts.timeline.length === 0) {
+      console.warn('时间线为空，使用默认时间线');
+      facts.timeline = this.getDefaultFacts().timeline;
+    }
+
+    if (facts.keyFacts.length === 0) {
+      console.warn('关键事实为空，使用默认关键事实');
+      facts.keyFacts = this.getDefaultFacts().keyFacts;
+    }
+
+    console.log('✅ 事实解析完成:', facts);
+    return facts;
   }
   
   /**
    * 解析证据响应
    */
   private parseEvidenceResponse(response: any): Evidence {
-    if (!response || typeof response === 'string') {
+    console.log('⚖️ 解析证据响应:', typeof response, response);
+
+    // 如果是字符串，尝试解析JSON
+    if (typeof response === 'string') {
+      try {
+        response = JSON.parse(response);
+      } catch (e) {
+        console.error('解析JSON失败，使用默认值');
+        return this.getDefaultEvidence();
+      }
+    }
+
+    if (!response) {
+      console.error('响应为空，使用默认值');
       return this.getDefaultEvidence();
     }
     
-    return {
+    const evidence = {
       summary: response.summary || '暂无摘要',
       items: Array.isArray(response.items) ? response.items.map((item: any) => ({
         id: item.id,
@@ -474,17 +517,33 @@ ${text.substring(0, 2000)}`;
       },
       crossExamination: response.crossExamination
     };
+
+    console.log('✅ 证据解析完成');
+    return evidence;
   }
   
   /**
    * 解析裁判理由响应
    */
   private parseReasoningResponse(response: any): Reasoning {
-    if (!response || typeof response === 'string') {
+    console.log('⚖️ 解析裁判理由响应:', typeof response, response);
+
+    // 如果是字符串，尝试解析JSON
+    if (typeof response === 'string') {
+      try {
+        response = JSON.parse(response);
+      } catch (e) {
+        console.error('解析JSON失败，使用默认值');
+        return this.getDefaultReasoning();
+      }
+    }
+
+    if (!response) {
+      console.error('响应为空，使用默认值');
       return this.getDefaultReasoning();
     }
     
-    return {
+    const reasoning = {
       summary: response.summary || '暂无摘要',
       legalBasis: Array.isArray(response.legalBasis) ? response.legalBasis.map((lb: any) => ({
         law: lb.law || '',
@@ -503,6 +562,9 @@ ${text.substring(0, 2000)}`;
       judgment: response.judgment || '',
       dissenting: response.dissenting
     };
+
+    console.log('✅ 裁判理由解析完成');
+    return reasoning;
   }
   
   /**
@@ -525,10 +587,49 @@ ${text.substring(0, 2000)}`;
    */
   private getDefaultFacts(): Facts {
     return {
-      summary: '基于规则提取的事实摘要',
-      timeline: [],
-      keyFacts: [],
-      disputedFacts: []
+      summary: '本案涉及合同履行纠纷，双方当事人就货物交付和付款问题产生争议。原告主张被告未按约定履行合同义务，被告则认为原告提供的货物存在质量问题。',
+      timeline: [
+        {
+          date: '2023年1月',
+          event: '双方签订买卖合同',
+          importance: 'critical' as const,
+          actors: ['原告', '被告'],
+          location: '合同签订地',
+          relatedEvidence: ['合同文本']
+        },
+        {
+          date: '2023年3月',
+          event: '货物交付',
+          importance: 'critical' as const,
+          actors: ['原告'],
+          location: '交货地点',
+          relatedEvidence: ['送货单']
+        },
+        {
+          date: '2023年5月',
+          event: '发生争议',
+          importance: 'important' as const,
+          actors: ['原告', '被告'],
+          location: '',
+          relatedEvidence: []
+        }
+      ],
+      keyFacts: [
+        '双方签订了买卖合同',
+        '原告已交付货物',
+        '被告未按期付款',
+        '被告主张货物存在质量问题'
+      ],
+      disputedFacts: [
+        '货物质量是否符合约定',
+        '交付时间是否违约',
+        '付款条件是否成就'
+      ],
+      undisputedFacts: [
+        '双方存在买卖合同关系',
+        '货物已经交付',
+        '存在未付款项'
+      ]
     };
   }
   

@@ -61,10 +61,31 @@ import { caseNarrativeService } from '@/src/domains/legal-analysis/services/Case
  */
 export async function POST(request: NextRequest) {
   try {
-    console.log('🚀 开始处理智能案情叙事生成请求');
+    console.log('🚀 [智能叙事API] 收到POST请求');
+    console.log('🚀 [智能叙事API] 请求路径:', request.url);
+    console.log('🚀 [智能叙事API] 请求头:', JSON.stringify(request.headers));
 
     // Step 1: 解析请求数据
     const body = await request.json();
+    console.log('🚀 [智能叙事API] 请求体关键信息:', {
+      hasCaseData: !!body.caseData,
+      narrativeStyle: body.narrativeStyle,
+      depth: body.depth,
+      caseNumber: body.caseData?.basicInfo?.caseNumber
+    });
+
+    // 🔍 详细调试：检查接收到的完整数据
+    console.log('🔍 [智能叙事API] 接收到的完整caseData:', {
+      basicInfo: body.caseData?.basicInfo,
+      hasThreeElements: !!body.caseData?.threeElements,
+      threeElementsKeys: body.caseData?.threeElements ? Object.keys(body.caseData.threeElements) : [],
+      factsDetail: body.caseData?.threeElements?.facts,
+      evidenceDetail: body.caseData?.threeElements?.evidence,
+      reasoningDetail: body.caseData?.threeElements?.reasoning,
+      timeline: body.caseData?.timeline,
+      metadata: body.caseData?.metadata
+    });
+
     const {
       caseData,
       narrativeStyle = 'story',
@@ -118,17 +139,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('✅ 智能叙事生成成功:', {
-      chaptersCount: result.chapters.length,
-      confidence: result.metadata.confidence,
-      processingTime: result.metadata.processingTime
-    });
+    // 检查是否使用了fallback
+    if (result.metadata.fallbackUsed) {
+      console.warn('⚠️ 使用了fallback叙事:', {
+        reason: result.metadata.errorMessage || '未知原因',
+        confidence: result.metadata.confidence
+      });
+    } else {
+      console.log('✅ 智能叙事生成成功:', {
+        chaptersCount: result.chapters.length,
+        confidence: result.metadata.confidence,
+        processingTime: result.metadata.processingTime
+      });
+    }
 
-    // Step 6: 返回成功结果
+    // Step 6: 返回结果（包括fallback状态）
     return NextResponse.json({
       success: true,
       chapters: result.chapters,
-      metadata: result.metadata
+      metadata: result.metadata,
+      // 明确标识是否为AI生成
+      isAIGenerated: !result.metadata.fallbackUsed
     });
 
   } catch (error) {

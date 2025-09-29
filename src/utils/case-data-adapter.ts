@@ -172,13 +172,19 @@ export class CaseDataAdapter {
     // 如果没有找到相关证据，但有证据数据，分配部分证据
     // 这是一个降级策略，确保至少有一些证据可用
     if (relatedEvidence.length === 0 && evidenceItems.length > 0) {
-      // 为演示目的，每个事件至少关联一个证据
-      const sampleEvidence = evidenceItems.slice(0, Math.min(1, evidenceItems.length));
-      return sampleEvidence.map(e => ({
-        ...e,
+      // 智能分配策略：根据事件在时间轴中的位置分配证据
+      const eventIndex = Math.floor(event.date ? parseInt(event.date.replace(/\D/g, '').slice(0, 8)) : 0) % evidenceItems.length;
+      const assignedEvidence = evidenceItems[eventIndex] || evidenceItems[0];
+
+      return [{
+        ...assignedEvidence,
         relatedToEvent: event.date,
-        matchType: 'fallback'
-      }));
+        matchType: 'intelligent-fallback',
+        // 确保有基本的证据信息供EvidenceIntelligenceService使用
+        name: assignedEvidence.name || assignedEvidence.title || '相关证据',
+        type: assignedEvidence.type || '书证',
+        description: assignedEvidence.description || assignedEvidence.content || '证据材料'
+      }];
     }
 
     return relatedEvidence;

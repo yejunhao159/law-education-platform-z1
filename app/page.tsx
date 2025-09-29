@@ -5,7 +5,12 @@
  */
 
 import { MainPageContainer } from '@/src/domains/shared/containers/MainPageContainer';
+import { CacheProvider } from '@/components/providers/CacheProvider';
 
 export default function FourActsLawTeachingSystem() {
-  return <MainPageContainer />;
+  return (
+    <CacheProvider>
+      <MainPageContainer />
+    </CacheProvider>
+  );
 }

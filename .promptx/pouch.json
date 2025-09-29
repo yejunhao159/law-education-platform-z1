@@ -1,0 +1,55 @@
+{
+  "currentState": "initial",
+  "stateHistory": [
+    {
+      "from": "initial",
+      "command": "action",
+      "timestamp": "2025-09-29T05:39:56.260Z",
+      "args": [
+        "sean"
+      ]
+    },
+    {
+      "from": "initial",
+      "command": "project",
+      "timestamp": "2025-09-29T05:40:14.916Z",
+      "args": [
+        {
+          "workingDirectory": "/home/yejh0725/law-education-platform-z1",
+          "ideType": "cursor"
+        }
+      ]
+    },
+    {
+      "from": "initial",
+      "command": "remember",
+      "timestamp": "2025-09-29T05:42:22.738Z",
+      "args": [
+        {
+          "role": "sean",
+          "engrams": [
+            {
+              "content": "法学教育平台项目存在5大核心矛盾：1.代码质量vs交付压力 2.AI成本vs功能完整性 3.类型安全vs快速迭代 4.组件复杂度vs功能需求 5.技术债务vs新功能开发",
+              "schema": "法学教育平台 核心矛盾 代码质量 AI成本 类型安全 技术债务",
+              "strength": 0.9,
+              "type": "PATTERN"
+            },
+            {
+              "content": "TypeScript类型错误89个，主要集中在组件props不匹配、API响应类型不一致、事件数据结构变化等方面，需要系统性重构",
+              "schema": "TypeScript 类型错误 组件 API 数据结构",
+              "strength": 0.8,
+              "type": "ATOMIC"
+            },
+            {
+              "content": "DeepSeek API Key硬编码在代码中，存在安全风险。AICallProxy单例模式实现有并发问题，需要重构为依赖注入",
+              "schema": "DeepSeek API安全 AICallProxy 单例模式 依赖注入",
+              "strength": 0.9,
+              "type": "LINK"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "lastUpdated": "2025-09-29T05:42:22.740Z"
+}

@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { StoryView } from './StoryView'
 import { useCurrentCase, useStoryMode } from '@/src/domains/stores'
 import { useTeachingStore } from '@/src/domains/teaching-acts/stores/useTeachingStore'
-import { BookOpen, FileText, ToggleLeft, ToggleRight, Clock, Sparkles, Loader2 } from 'lucide-react'
+import { BookOpen, FileText, ToggleLeft, ToggleRight, Clock, Sparkles, Loader2, RefreshCw } from 'lucide-react'
 import { createLogger } from '@/lib/logging'
 
 const logger = createLogger('CaseOverview');
@@ -28,6 +28,12 @@ export function CaseOverview() {
   // 直接使用领域 store，避免兼容性层
   const caseData = useCurrentCase()
   const storyMode = useStoryMode()
+
+  console.log('[CaseOverview] 组件渲染:', {
+    hasCaseData: !!caseData,
+    storyMode,
+    caseNumber: caseData?.basicInfo?.caseNumber
+  })
 
   // 使用精确的 selector 订阅
   const storyChapters = useTeachingStore((state) => state.storyChapters)
@@ -39,17 +45,65 @@ export function CaseOverview() {
   const [isGeneratingStory, setIsGeneratingStory] = useState(false)
   const [aiGenerationError, setAIGenerationError] = useState<string | null>(null)
 
+  // 手动强制重新生成故事
+  const forceRegenerateStory = useCallback(() => {
+    console.log('[forceRegenerateStory] 强制重新生成故事');
+
+    // 清空所有相关状态
+    useTeachingStore.getState().setStoryChapters([]);
+    setHasInitializedStory(false);
+    setIsGeneratingStory(false);
+    setAIGenerationError(null);
+
+    // 等待下一帧再触发生成
+    setTimeout(() => {
+      setHasInitializedStory(false); // 确保可以重新触发生成
+    }, 100);
+  }, []);
+
   // 🚀 真正的AI智能故事生成函数
   const generateStoryChapters = useCallback(async () => {
-    if (!caseData || isGeneratingStory) return
+    console.log('[generateStoryChapters] 函数被调用:', {
+      hasCaseData: !!caseData,
+      isGeneratingStory,
+      caseNumber: caseData?.basicInfo?.caseNumber,
+      timestamp: new Date().toISOString()
+    });
 
+    if (!caseData || isGeneratingStory) {
+      console.log('[generateStoryChapters] 终止执行:', {
+        reason: !caseData ? '无案例数据' : '正在生成中'
+      });
+      return
+    }
+
+    // 🔄 清空旧的故事章节，防止显示缓存数据
+    console.log('[generateStoryChapters] 清空旧故事章节...');
+    useTeachingStore.getState().setStoryChapters([]);
+
+    // 立即标记为正在生成，防止重复调用
     setIsGeneratingStory(true)
+    setHasInitializedStory(true)  // 立即标记已初始化，防止重复触发
     setAIGenerationError(null)
 
     try {
       logger.info('开始AI智能故事生成', {
         caseNumber: caseData.basicInfo?.caseNumber,
         timelineLength: caseData.threeElements?.facts?.timeline?.length || 0
+      });
+
+      console.log('[generateStoryChapters] 准备调用API...');
+
+      // 🔍 详细调试：检查发送给API的完整数据
+      console.log('[generateStoryChapters] 完整的caseData内容:', {
+        basicInfo: caseData.basicInfo,
+        hasThreeElements: !!caseData.threeElements,
+        threeElementsKeys: caseData.threeElements ? Object.keys(caseData.threeElements) : [],
+        factsContent: caseData.threeElements?.facts,
+        evidenceContent: caseData.threeElements?.evidence,
+        reasoningContent: caseData.threeElements?.reasoning,
+        timeline: caseData.timeline,
+        metadata: caseData.metadata
       });
 
       // 🎯 通过API调用智能叙事服务
@@ -99,6 +153,12 @@ export function CaseOverview() {
       // 存储到store
       useTeachingStore.getState().setStoryChapters(formattedChapters);
 
+      setAIGenerationError(
+        result.metadata?.fallbackUsed
+          ? (result.metadata?.errorMessage || 'AI服务暂不可用，已生成规则化叙事结果')
+          : null
+      );
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '未知错误';
       logger.error('AI故事生成失败', { error: errorMessage });
@@ -128,27 +188,84 @@ export function CaseOverview() {
     }
   }, [caseData, isGeneratingStory])
 
-  // 计算是否需要生成故事，使用更稳定的依赖
+  // 检查是否为AI生成的章节（不是fallback）
+  const hasAIGeneratedChapters = useMemo(() => {
+    // 检查是否有真正的AI生成内容（不是fallback）
+    return storyChapters.length > 0 &&
+           !storyChapters[0]?.id?.includes('fallback') &&
+           storyChapters[0]?.content?.length > 200; // AI内容通常较长
+  }, [storyChapters]);
+
+  // 计算是否需要生成故事
   const shouldGenerateStory = useMemo(() => {
-    return !!(caseData && storyMode && storyChapters.length === 0 && !hasInitializedStory && !isGeneratingStory)
-  }, [caseData, storyMode, storyChapters.length, hasInitializedStory, isGeneratingStory])
+    // 简化条件：有案例数据 + 故事模式 + 没有AI章节 + 没有在生成中
+    const should = !!(caseData && storyMode && !hasAIGeneratedChapters && !isGeneratingStory);
 
-  // 严格控制故事生成时机
-  useEffect(() => {
-    if (shouldGenerateStory) {
-      setHasInitializedStory(true)
-      // 使用 queueMicrotask 确保在下个微任务中执行
-      queueMicrotask(() => {
-        generateStoryChapters()
-      })
+    if (should !== false) {  // 只在可能生成时打印日志
+      console.log('[CaseOverview] 计算shouldGenerateStory:', {
+        caseData: !!caseData,
+        storyMode,
+        hasAIGeneratedChapters,
+        isGeneratingStory,
+        result: should
+      });
     }
-  }, [shouldGenerateStory, generateStoryChapters])
 
-  // 重置初始化状态（当切换到非故事模式时）
+    return should
+  }, [caseData, storyMode, hasAIGeneratedChapters, isGeneratingStory])
+
+  // 控制故事生成时机 - 当条件满足时触发一次
   useEffect(() => {
-    if (!storyMode) {
+    if (shouldGenerateStory && !hasInitializedStory) {
+      console.log('[CaseOverview] 触发故事生成...');
+      generateStoryChapters()
+    }
+  }, [shouldGenerateStory, hasInitializedStory, generateStoryChapters])
+
+  // 监听案例数据变化，清理旧的故事章节
+  const prevCaseNumberRef = React.useRef(caseData?.basicInfo?.caseNumber)
+  useEffect(() => {
+    const currentCaseNumber = caseData?.basicInfo?.caseNumber
+
+    // 当案例号改变时，清理故事相关状态
+    if (prevCaseNumberRef.current && prevCaseNumberRef.current !== currentCaseNumber) {
+      console.log('[CaseOverview] 检测到案例变更，清理故事缓存:', {
+        from: prevCaseNumberRef.current,
+        to: currentCaseNumber,
+        timestamp: new Date().toISOString()
+      });
+
+      // 清空故事章节
+      useTeachingStore.getState().setStoryChapters([])
+
+      // 重置生成状态
       setHasInitializedStory(false)
       setIsGeneratingStory(false)
+      setAIGenerationError(null)
+    }
+
+    prevCaseNumberRef.current = currentCaseNumber
+  }, [caseData?.basicInfo?.caseNumber])
+
+  // 重置初始化状态（仅当模式切换时）
+  // 使用 useRef 来跟踪上一个 storyMode 值，避免依赖数组问题
+  const prevStoryModeRef = React.useRef(storyMode)
+  useEffect(() => {
+    // 只在 storyMode 真正改变时执行
+    if (prevStoryModeRef.current !== storyMode) {
+      console.log('[CaseOverview] 模式切换:', {
+        from: prevStoryModeRef.current,
+        to: storyMode,
+        timestamp: new Date().toISOString()
+      });
+
+      if (!storyMode) {
+        // 关闭故事模式时，重置所有状态
+        setHasInitializedStory(false)
+        setIsGeneratingStory(false)
+      }
+
+      prevStoryModeRef.current = storyMode
     }
   }, [storyMode])
 
@@ -200,6 +317,19 @@ export function CaseOverview() {
                 </div>
               )}
 
+              {/* 刷新按钮 - 仅在故事模式显示 */}
+              {storyMode && !isGeneratingStory && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={forceRegenerateStory}
+                  className="mr-2"
+                  title="重新生成故事"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </Button>
+              )}
+
               <Button
                 variant="outline"
                 size="sm"
@@ -231,7 +361,7 @@ export function CaseOverview() {
                 <span className="text-sm font-medium">AI生成遇到问题</span>
               </div>
               <p className="text-xs text-amber-600 mt-1">
-                {aiGenerationError}，已切换到基础模式
+                {aiGenerationError}
               </p>
             </div>
           )}

@@ -18,21 +18,27 @@ export class DocumentPreprocessor {
    * 处理文档主入口
    */
   static processDocument(text: string, fileName?: string): ProcessedDocument {
+    // 添加空值检查
+    if (!text || typeof text !== 'string') {
+      console.warn('DocumentPreprocessor: 接收到无效文本，使用空字符串');
+      text = '';
+    }
+
     // 检测语言
     const language = this.detectLanguage(text)
-    
+
     // 清理文本
     const cleanedText = this.cleanText(text)
-    
+
     // 分句
     const sentences = this.splitIntoSentences(cleanedText)
-    
+
     // 分段
     const paragraphs = this.splitIntoParagraphs(cleanedText)
-    
+
     // 提取元数据
     const metadata = this.extractMetadata(text, fileName)
-    
+
     return {
       originalText: text,
       cleanedText,
@@ -48,6 +54,10 @@ export class DocumentPreprocessor {
    * 清理文本
    */
   private static cleanText(text: string): string {
+    // 添加空值检查
+    if (!text || typeof text !== 'string') {
+      return '';
+    }
     return text
       // 标准化空白字符
       .replace(/\r\n/g, '\n')
@@ -81,6 +91,10 @@ export class DocumentPreprocessor {
    * 分句
    */
   private static splitIntoSentences(text: string): string[] {
+    // 添加空值检查
+    if (!text || typeof text !== 'string') {
+      return [];
+    }
     // 中文句子分割
     const sentences = text
       .split(/[。！？；\n]/g)
@@ -110,6 +124,10 @@ export class DocumentPreprocessor {
    * 分段
    */
   private static splitIntoParagraphs(text: string): string[] {
+    // 添加空值检查
+    if (!text || typeof text !== 'string') {
+      return [];
+    }
     return text
       .split(/\n\n+/g)
       .map(p => p.trim())

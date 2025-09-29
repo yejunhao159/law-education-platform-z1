@@ -9,7 +9,7 @@ import { createLogger } from '@/lib/logging';
 import { EvidenceMappingService, type EvidenceMapping } from '@/lib/evidence-mapping-service';
 import type { Evidence } from '@/types/evidence';
 import { normalizeEvidenceList } from '@/utils/evidence-adapter';
-// import { callUnifiedAI } from '../../../infrastructure/ai/AICallProxy'; // 已改为直接调用DeepSeek API
+import { callUnifiedAI } from '../../../infrastructure/ai/AICallProxy';
 import type {
   ClaimElement
 } from '@/types/dispute-evidence';
@@ -581,61 +581,46 @@ ${claimElements.map((e, i) => `${i+1}. ${e.name}：${e.description}`).join('\n')
 
   /**
    * 辅助方法：调用AI服务
-   * 修复：直接使用DeepSeek API调用，绕过DeeChatAIClient的兼容性问题
+   * 使用统一的AICallProxy，确保与系统其他部分的一致性
    */
   private async callAIService(prompt: string): Promise<string> {
-    if (!this.aiConfig.apiKey) {
-      throw new Error('AI API密钥未配置');
-    }
-
     try {
-      // 直接调用DeepSeek API，绕过DeeChatAIClient兼容性问题
-      const response = await fetch(this.aiConfig.apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.aiConfig.apiKey}`
-        },
-        body: JSON.stringify({
-          model: this.aiConfig.model,
-          messages: [
-            {
-              role: 'system',
-              content: '你是一位专业的法律证据分析专家，精通证据法和司法实践。'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: this.aiConfig.temperature,
-          max_tokens: this.aiConfig.maxTokens
-        })
+      const systemPrompt = '你是一位专业的法律证据分析专家，精通证据法和司法实践。';
+
+      logger.info('调用统一AI服务', {
+        promptLength: prompt.length,
+        model: this.aiConfig.model
       });
 
-      if (!response.ok) {
-        throw new Error(`DeepSeek API请求失败: ${response.status} ${response.statusText}`);
-      }
+      const result = await callUnifiedAI(
+        systemPrompt,
+        prompt,
+        {
+          temperature: this.aiConfig.temperature,
+          maxTokens: this.aiConfig.maxTokens,
+          responseFormat: 'text'
+        }
+      );
 
-      const result = await response.json();
-      const content = result.choices?.[0]?.message?.content;
-
-      if (!content) {
+      if (!result.content) {
         throw new Error('AI API返回空内容');
       }
 
       logger.info('AI服务调用成功', {
         promptLength: prompt.length,
-        responseLength: content.length,
-        model: this.aiConfig.model
+        responseLength: result.content.length,
+        tokensUsed: result.tokensUsed,
+        cost: result.cost,
+        model: result.model
       });
 
-      return content;
+      return result.content;
     } catch (error) {
       logger.error('AI调用失败:', error);
       throw new Error(`AI API调用失败: ${error instanceof Error ? error.message : '未知错误'}`);
     }
   }
+
 
   /**
    * 辅助方法：计算综合分数

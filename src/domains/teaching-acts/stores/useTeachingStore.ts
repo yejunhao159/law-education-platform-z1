@@ -131,7 +131,7 @@ const initialState: TeachingState = {
     isGenerating: false,
   },
 
-  storyMode: false,
+  storyMode: true,  // 默认开启故事模式以自动生成AI叙事
   storyChapters: [],
   editingFields: new Set(),
   autoTransition: true,
@@ -351,7 +351,8 @@ export const useTeachingStore = create<TeachingStore>()(
         currentAct: state.currentAct,
         progress: state.progress,
         storyMode: state.storyMode,
-        storyChapters: state.storyChapters,
+        // 🚨 移除 storyChapters 的持久化，防止缓存问题
+        // storyChapters: state.storyChapters,  // 不再持久化故事章节
         autoTransition: state.autoTransition,
         socraticData: {
           ...state.socraticData,

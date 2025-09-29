@@ -11,6 +11,7 @@
  */
 
 import { DeeChatAIClient, createDeeChatConfig } from '../../domains/socratic-dialogue/services/DeeChatAIClient';
+import { AI_DEFAULTS } from '@/src/config/ai-defaults';
 
 interface AICallProxyConfig {
   provider: 'deepseek' | 'openai' | 'claude';
@@ -93,18 +94,14 @@ export class AICallProxy {
    */
   static getInstance(config?: AICallProxyConfig): AICallProxy {
     if (!AICallProxy.instance) {
-      // 在Next.js环境中安全地获取环境变量
-      const getEnvVar = (key: string, fallback: string = '') => {
-        return typeof process !== 'undefined' && process.env ? process.env[key] || fallback : fallback;
-      };
-
+      // 使用简化的默认配置
       const defaultConfig: AICallProxyConfig = {
         provider: 'deepseek',
-        apiKey: getEnvVar('DEEPSEEK_API_KEY', 'sk-6b081a93258346379182141661293345'), // 使用.env.local中的key作为fallback
-        apiUrl: getEnvVar('DEEPSEEK_API_URL', 'https://api.deepseek.com/v1'),
-        model: 'deepseek-chat',
-        maxRetries: 3,
-        timeout: 30000,
+        apiKey: AI_DEFAULTS.apiKey,
+        apiUrl: AI_DEFAULTS.apiUrl,
+        model: AI_DEFAULTS.model,
+        maxRetries: AI_DEFAULTS.maxRetries,
+        timeout: AI_DEFAULTS.timeout,
         enableCostTracking: true,
         enableErrorFallback: true
       };
@@ -114,7 +111,7 @@ export class AICallProxy {
         apiUrl: defaultConfig.apiUrl,
         model: defaultConfig.model,
         hasApiKey: !!defaultConfig.apiKey,
-        keyPrefix: defaultConfig.apiKey.substring(0, 8) + '...'
+        keyPrefix: defaultConfig.apiKey ? defaultConfig.apiKey.substring(0, 8) + '...' : 'N/A'
       });
 
       AICallProxy.instance = new AICallProxy(config || defaultConfig);
@@ -301,6 +298,12 @@ export class AICallProxy {
   }> {
     const startTime = Date.now();
 
+    // 检查API Key是否配置
+    if (!this.config.apiKey) {
+      console.error('❌ DEEPSEEK_API_KEY未配置');
+      throw new Error('API Key未配置，请在.env.local中设置DEEPSEEK_API_KEY');
+    }
+
     try {
       // 使用DeeChatAIClient的sendCustomMessage方法
       // 修复：第一个参数必须是messages数组，不是字符串
@@ -313,8 +316,8 @@ export class AICallProxy {
       const result = await this.aiClient.sendCustomMessage(
         messages, // 传递messages数组而不是字符串
         {
-          temperature: options.temperature || 0.7,
-          maxTokens: options.maxTokens || 1000,
+          temperature: options.temperature ?? AI_DEFAULTS.temperature,
+          maxTokens: options.maxTokens ?? AI_DEFAULTS.maxTokens,
           enableCostOptimization: options.enableCostOptimization ?? true
         }
       );
@@ -329,6 +332,10 @@ export class AICallProxy {
 
     } catch (error) {
       console.error('统一AI调用失败:', error);
+      // 如果是API Key错误，提供更友好的错误信息
+      if (error instanceof Error && error.message.includes('401')) {
+        throw new Error('API Key无效或已过期，请检查DEEPSEEK_API_KEY配置');
+      }
       throw error;
     }
   }
@@ -440,4 +447,65 @@ export async function callUnifiedAI(
 export function getAICallStats() {
   const proxy = AICallProxy.getInstance();
   return proxy.getCallStats();
+}
+
+/**
+ * 流式AI调用函数，供需要实时响应的API使用
+ */
+export async function callUnifiedAIStream(
+  systemPrompt: string,
+  userPrompt: string,
+  options?: {
+    temperature?: number;
+    maxTokens?: number;
+    onChunk?: (chunk: string) => void;
+  }
+) {
+  const proxy = AICallProxy.getInstance();
+
+  // 创建流式调用方法
+  const messages = [
+    { role: 'system' as const, content: systemPrompt },
+    { role: 'user' as const, content: userPrompt }
+  ];
+
+  try {
+    // 使用DeeChatAIClient的流式方法（如果存在）
+    const aiClient = (proxy as any).aiClient;
+    if (!aiClient || typeof aiClient.sendCustomMessageStream !== 'function') {
+      // 如果不支持流式，降级到普通调用
+      const result = await callUnifiedAI(systemPrompt, userPrompt, options);
+      // 模拟流式输出
+      return {
+        async *[Symbol.asyncIterator]() {
+          yield result.content;
+        }
+      };
+    }
+
+    const streamResponse = await aiClient.sendCustomMessageStream(
+      messages,
+      {
+        temperature: options?.temperature || 0.7,
+        maxTokens: options?.maxTokens || 1000,
+        enableStreaming: true
+      }
+    );
+
+    // 返回异步迭代器
+    return {
+      async *[Symbol.asyncIterator]() {
+        for await (const chunk of streamResponse.stream) {
+          const text = chunk.content || chunk.text || chunk;
+          if (text && options?.onChunk) {
+            options.onChunk(text);
+          }
+          yield text;
+        }
+      }
+    };
+  } catch (error) {
+    console.error('流式AI调用失败:', error);
+    throw error;
+  }
 }

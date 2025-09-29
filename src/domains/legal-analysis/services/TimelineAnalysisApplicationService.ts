@@ -12,6 +12,7 @@ import { ProvisionMapper } from '../intelligence/provision-mapper';
 import { callUnifiedAI } from '../../../infrastructure/ai/AICallProxy';
 
 import {
+  RiskType,
   TimelineAnalysisRequest,
   TimelineAnalysisResponse,
   TimelineAnalysis,
@@ -68,11 +69,13 @@ export class TimelineAnalysisApplicationService {
       const suggestions = this.generateSuggestions(timelineAnalysis, request.events);
 
       // Step 8: 构建响应
+      const usedAI = Boolean(aiAnalysis && aiAnalysis.analysis);
       const result = this.buildSuccessResponse(
         timelineAnalysis,
         request.events,
         suggestions,
-        startTime
+        startTime,
+        usedAI
       );
 
       console.log('✅ 时间轴智能分析完成');
@@ -99,9 +102,21 @@ export class TimelineAnalysisApplicationService {
     }
 
     // 验证每个事件的基本字段
-    for (const event of request.events) {
-      if (!event.date || !event.title) {
-        throw new Error('每个事件必须包含日期和标题');
+    for (let i = 0; i < request.events.length; i++) {
+      const event = request.events[i];
+      if (!event) {
+        throw new Error(`事件 ${i + 1} 是空值`);
+      }
+      if (!event.date) {
+        console.warn(`事件 ${i + 1} 缺少日期，使用默认值`);
+        event.date = '未知日期';
+      }
+      if (!event.title && !event.event) {
+        throw new Error(`事件 ${i + 1} 必须包含标题或事件描述`);
+      }
+      // 如果没有title，使用event字段
+      if (!event.title) {
+        event.title = event.event || '未知事件';
       }
     }
   }
@@ -110,24 +125,40 @@ export class TimelineAnalysisApplicationService {
    * Step 2: 预处理事件数据
    */
   private preprocessEvents(events: TimelineEvent[]): ProcessedDocument {
-    // 将事件转换为文本
-    const eventTexts = events.map(e =>
-      `${e.date}：${e.title}。${e.description || ''}`
-    ).join('\n');
+    // 安全地将事件转换为文本
+    const eventTexts = events
+      .filter(e => e && (e.date || e.title || e.event))  // 过滤掉无效事件
+      .map(e => {
+        // 确保所有字段都有值
+        const safeDate = e.date || '未知日期';
+        const safeTitle = e.title || e.event || '未知事件';
+        const safeDesc = e.description || '';
+        return `${safeDate}：${safeTitle}。${safeDesc}`;
+      })
+      .join('\n');
+
+    // 如果没有有效的事件文本，提供一个默认值
+    const textToProcess = eventTexts || '无有效事件数据';
 
     // 使用文档预处理器
-    const processedDoc = DocumentPreprocessor.processDocument(eventTexts);
+    const processedDoc = DocumentPreprocessor.processDocument(textToProcess);
 
-    // 增强元数据
-    const dates = events.map(e => e.date).filter(Boolean).sort();
-    const parties = events.flatMap(e => e.parties || []).filter((p, i, arr) => arr.indexOf(p) === i);
+    // 增强元数据，安全地处理dates数组
+    const dates = events
+      .map(e => e?.date)
+      .filter(Boolean)
+      .sort();
+
+    const parties = events
+      .flatMap(e => e?.parties || [])
+      .filter((p, i, arr) => p && arr.indexOf(p) === i);
 
     (processedDoc as any).metadata = {
       ...processedDoc.metadata,
       eventCount: events.length,
       dateRange: {
-        start: dates[0] || '',
-        end: dates[dates.length - 1] || ''
+        start: dates.length > 0 ? dates[0] : '',
+        end: dates.length > 0 ? dates[dates.length - 1] : ''
       },
       mainParties: parties,
       documentType: 'timeline'
@@ -151,8 +182,16 @@ export class TimelineAnalysisApplicationService {
     processedDoc: ProcessedDocument,
     request: TimelineAnalysisRequest
   ): Promise<AITimelineResponse | null> {
-    if (!request.includeAI || !this.isAIAvailable()) {
+    if (!request.includeAI) {
       return null;
+    }
+
+    if (!this.isAIAvailable()) {
+      return {
+        analysis: null,
+        confidence: 0,
+        warnings: ['未检测到有效的DEEPSEEK_API_KEY，已回退到规则分析。']
+      };
     }
 
     console.log('Step 4: AI增强分析...');
@@ -160,6 +199,7 @@ export class TimelineAnalysisApplicationService {
     try {
       const aiRequest: AITimelineRequest = {
         eventText: processedDoc.cleanedText,
+        events: request.events,
         analysisType: request.analysisType || AnalysisType.COMPREHENSIVE,
         focusAreas: request.focusAreas
       };
@@ -167,7 +207,13 @@ export class TimelineAnalysisApplicationService {
       return await this.callAIService(aiRequest);
     } catch (error) {
       console.error('AI分析失败:', error);
-      return null;
+      const message = error instanceof Error ? error.message : 'AI分析失败';
+      return {
+        analysis: null,
+        confidence: 0,
+        warnings: [message],
+        rawContent: undefined
+      };
     }
   }
 
@@ -177,8 +223,12 @@ export class TimelineAnalysisApplicationService {
   private combineAnalysisResults(ruleAnalysis: any, aiAnalysis: AITimelineResponse | null): any {
     console.log('Step 5: 合并分析结果...');
 
-    if (!aiAnalysis) {
-      return ruleAnalysis;
+    if (!aiAnalysis || !aiAnalysis.analysis) {
+      const ruleOnly = { ...ruleAnalysis };
+      if (aiAnalysis?.warnings?.length) {
+        (ruleOnly as any).aiWarnings = aiAnalysis.warnings;
+      }
+      return ruleOnly;
     }
 
     // 确保数据结构兼容 SmartMerger
@@ -190,26 +240,50 @@ export class TimelineAnalysisApplicationService {
       facts: ruleAnalysis?.facts || [],
       metadata: ruleAnalysis?.metadata || {},
       confidence: ruleAnalysis?.confidence || 0.8,
-      source: 'rule'
+      source: 'rule' as 'rule'
     };
 
+    const aiExtracted = aiAnalysis?.analysis || {};
+
     const formattedAiData = {
-      dates: aiAnalysis?.analysis?.dates || [],
-      parties: aiAnalysis?.analysis?.parties || [],
-      amounts: aiAnalysis?.analysis?.amounts || [],
-      legalClauses: aiAnalysis?.analysis?.legalClauses || [],
-      facts: aiAnalysis?.analysis?.facts || [],
-      metadata: aiAnalysis?.analysis?.metadata || {},
-      confidence: aiAnalysis?.confidence || 0.7,
-      source: 'ai'
+      dates: aiExtracted?.dates || [],
+      parties: aiExtracted?.parties || [],
+      amounts: aiExtracted?.amounts || [],
+      legalClauses: aiExtracted?.legalClauses || [],
+      facts: aiExtracted?.facts || [],
+      metadata: aiExtracted?.metadata || {},
+      confidence: aiAnalysis?.confidence || aiExtracted?.confidence || 0.7,
+      source: 'ai' as 'ai'
     };
 
     // 使用智能合并器
-    return SmartMerger.merge(formattedRuleData, formattedAiData, {
+    const merged = SmartMerger.merge(formattedRuleData, formattedAiData, {
       strategy: 'confidence-based',
       aiWeight: 0.6,
       ruleWeight: 0.4
     });
+
+    if (aiAnalysis?.analysis) {
+      (merged as any).aiInsights = aiAnalysis.analysis;
+
+      // 调试日志：检查AI返回的数据
+      console.log('📊 AI分析数据:', {
+        turningPointsCount: aiAnalysis.analysis?.turningPoints?.length || 0,
+        behaviorPatternsCount: aiAnalysis.analysis?.behaviorPatterns?.length || 0,
+        legalRisksCount: aiAnalysis.analysis?.legalRisks?.length || 0,
+        hasEvidenceChain: !!aiAnalysis.analysis?.evidenceChain,
+        hasSummary: !!aiAnalysis.analysis?.summary
+      });
+
+      if (aiAnalysis.rawContent) {
+        (merged as any).rawAIResponse = aiAnalysis.rawContent;
+      }
+    }
+    if (aiAnalysis?.warnings?.length) {
+      (merged as any).aiWarnings = aiAnalysis.warnings;
+    }
+
+    return merged;
   }
 
   /**
@@ -218,29 +292,37 @@ export class TimelineAnalysisApplicationService {
   private generateTimelineAnalysis(combinedAnalysis: any, events: TimelineEvent[]): TimelineAnalysis {
     console.log('Step 6: 生成时间轴分析...');
 
-    // 分析关键转折点
     const keyTurningPoints = this.identifyTurningPoints(events, combinedAnalysis);
-
-    // 分析行为模式
     const behaviorPatterns = this.analyzeBehaviorPatterns(events, combinedAnalysis);
-
-    // 分析证据链
     const evidenceChain = this.analyzeEvidenceChain(events, combinedAnalysis);
-
-    // 分析法律风险
     const legalRisks = this.analyzeLegalRisks(combinedAnalysis);
-
-    // 生成预测
     const predictions = this.generatePredictions(events, combinedAnalysis);
 
+    const aiWarnings = (combinedAnalysis as any).aiWarnings;
+    const analysisSource: 'ai' | 'rule' = (combinedAnalysis as any).aiInsights ? 'ai' : 'rule';
+
+    // 调试日志：检查生成的分析结果
+    console.log('🎯 生成的时间轴分析结果:', {
+      turningPointsCount: keyTurningPoints.length,
+      behaviorPatternsCount: behaviorPatterns.length,
+      legalRisksCount: legalRisks.length,
+      predictionsCount: predictions.length,
+      evidenceChainCompleteness: evidenceChain.completeness,
+      analysisSource,
+      hasAIInsights: !!(combinedAnalysis as any).aiInsights
+    });
+
     return {
-      keyTurningPoints,
+      keyTurningPoints,  // 保留旧字段名以向后兼容
+      turningPoints: keyTurningPoints,  // 添加新字段名以匹配AI响应
       behaviorPatterns,
       evidenceChain,
       legalRisks,
       predictions,
       summary: this.generateSummary(events, combinedAnalysis),
-      confidence: combinedAnalysis.confidence || 0.8
+      confidence: combinedAnalysis.confidence || 0.8,
+      aiWarnings,
+      analysisSource
     };
   }
 
@@ -287,13 +369,28 @@ export class TimelineAnalysisApplicationService {
         prompt,
         {
           temperature: 0.3,
-          maxTokens: 5000  // 增加到5000以支持更详细的分析
+          maxTokens: 5000
         }
       );
 
+      const rawContent = result.content?.trim();
+      if (!rawContent) {
+        throw new Error('AI返回内容为空');
+      }
+
+      if (/抱歉，AI分析服务暂时不可用/.test(rawContent)) {
+        throw new Error(rawContent);
+      }
+
+      const jsonPayload = this.extractJsonPayload(rawContent);
+      const parsed = JSON.parse(jsonPayload);
+
       return {
-        analysis: result.content || '分析失败',
-        confidence: 0.85
+        analysis: parsed,
+        structuredData: parsed,
+        rawContent,
+        confidence: parsed?.metadata?.confidence ?? parsed?.confidence ?? 0.85,
+        warnings: parsed?.warnings || []
       };
     } catch (error) {
       throw new Error(`AI API错误: ${error instanceof Error ? error.message : '未知错误'}`);
@@ -304,19 +401,120 @@ export class TimelineAnalysisApplicationService {
    * 构建AI提示词
    */
   private buildAIPrompt(aiRequest: AITimelineRequest): string {
-    return `分析以下法律案件时间轴，提供专业见解：
+    const focusAreas = aiRequest.focusAreas?.length
+      ? `分析重点：${aiRequest.focusAreas.join(', ')}`
+      : '';
 
-时间轴事件：
-${aiRequest.eventText}
+    const indexedEvents = (aiRequest.events || []).map((event, index) => {
+      const eventId = event.id || `E${index + 1}`;
+      const safeTitle = (event.title || event.event || '未命名事件').replace(/\n/g, ' ');
+      const safeDescription = (event.description || event.detail || event.event || '').replace(/\n/g, ' ');
+      const safeType = event.type || 'unknown';
+      return `  {
+    "id": "${eventId}",
+    "date": "${event.date}",
+    "title": "${safeTitle}",
+    "description": "${safeDescription}",
+    "type": "${safeType}"
+  }`;
+    }).join(',\n');
 
-请分析：
-1. 关键转折点和其法律意义
-2. 当事人行为模式和动机
-3. 证据链的完整性和逻辑性
-4. 可能的法律风险和机会
-5. 案件发展趋势预测
+    return `请根据以下案件时间轴事件进行法律分析。
 
-请提供结构化的专业分析，重点关注法律层面的意义。`;
+案件事件时间轴（JSON数组）：
+[
+${indexedEvents}
+]
+
+${focusAreas}
+
+分析要求：
+1. 识别关键转折点、当事人行为模式、证据链、法律风险和可能的案件走向；
+2. 引用上方事件ID（如E1、E2），不要编造不存在的事件；
+3. 所有评分应为0-1之间的小数，百分比请使用小数表示（例如0.75）；
+4. 输出必须是有效的JSON，禁止添加额外文本或反引号。
+
+输出格式：
+{
+  "dates": [...],
+  "parties": [...],
+  "amounts": [...],
+  "legalClauses": [...],
+  "facts": [...],
+  "turningPoints": [
+    {
+      "eventId": "E1",
+      "date": "2024-01-10",
+      "title": "关键事件",
+      "legalSignificance": "说明法律意义",
+      "impact": "high",
+      "consequences": ["后果1"]
+    }
+  ],
+  "behaviorPatterns": [
+    {
+      "party": "原告",
+      "pattern": "行为模式",
+      "motivation": "主要动机",
+      "consistency": 0.8,
+      "implications": ["影响1"]
+    }
+  ],
+  "evidenceChain": {
+    "completeness": 0.7,
+    "logicalConsistency": 0.8,
+    "gaps": ["缺口描述"],
+    "strengths": ["优势描述"],
+    "weaknesses": ["弱点描述"]
+  },
+  "legalRisks": [
+    {
+      "type": "legal",
+      "description": "风险说明",
+      "likelihood": "medium",
+      "impact": "high",
+      "mitigation": "应对策略"
+    }
+  ],
+  "predictions": [
+    {
+      "scenario": "预测场景",
+      "probability": 0.65,
+      "reasoning": "推理依据",
+      "factors": ["因素1"]
+    }
+  ],
+  "summary": "整体摘要",
+  "metadata": {
+    "confidence": 0.8,
+    "analysisType": "${aiRequest.analysisType}"
+  }
+}`;
+  }
+
+  private extractJsonPayload(rawContent: string): string {
+    const trimmed = rawContent.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      return trimmed;
+    }
+
+    const jsonMatch = trimmed.match(/```json\s*([\s\S]*?)```/i);
+    if (jsonMatch && jsonMatch[1]) {
+      return jsonMatch[1];
+    }
+
+    const genericMatch = trimmed.match(/```\s*([\s\S]*?)```/i);
+    if (genericMatch && genericMatch[1]?.trim().startsWith('{')) {
+      return genericMatch[1];
+    }
+
+    const firstBrace = trimmed.indexOf('{');
+    const lastBrace = trimmed.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      return trimmed.slice(firstBrace, lastBrace + 1);
+    }
+
+    throw new Error('AI未返回有效JSON结构');
   }
 
   /**
@@ -330,15 +528,29 @@ ${aiRequest.eventText}
    * 识别关键转折点
    */
   private identifyTurningPoints(events: TimelineEvent[], analysis: any): TurningPoint[] {
+    const insights = (analysis as any)?.aiInsights;
+
+    if (insights?.turningPoints?.length) {
+      return insights.turningPoints.map((tp: any) => ({
+        date: tp.date || '',
+        description: tp.title || tp.description || '关键事件',
+        legalSignificance: tp.legalSignificance || '需要进一步法律分析',
+        impact: this.normalizeImpact(tp.impact),
+        consequences: Array.isArray(tp.consequences) && tp.consequences.length > 0
+          ? tp.consequences
+          : Array.isArray(tp.effects) ? tp.effects : []
+      }));
+    }
+
     // 基于事件重要性和分析结果识别转折点
     return events
       .filter(event => event.importance === 'critical' || event.importance === 'high')
-      .slice(0, 5) // 最多5个转折点
+      .slice(0, 5)
       .map(event => ({
         date: event.date,
         description: event.title,
         legalSignificance: this.determineLegalSignificance(event),
-        impact: event.importance === 'critical' ? 'high' as const : 'medium' as const,
+        impact: event.importance === 'critical' ? 'high' : 'medium',
         consequences: [event.description || ''].filter(Boolean)
       }));
   }
@@ -347,7 +559,19 @@ ${aiRequest.eventText}
    * 分析行为模式
    */
   private analyzeBehaviorPatterns(events: TimelineEvent[], analysis: any): BehaviorPattern[] {
-    // 简化的行为模式分析
+    const insights = (analysis as any)?.aiInsights;
+    if (Array.isArray(insights?.behaviorPatterns) && insights.behaviorPatterns.length > 0) {
+      return insights.behaviorPatterns.map((pattern: any) => ({
+        party: pattern.party || '相关方',
+        pattern: pattern.pattern || '行为模式待分析',
+        motivation: pattern.motivation || '待确定',
+        consistency: typeof pattern.consistency === 'number' ? pattern.consistency : 0.7,
+        implications: Array.isArray(pattern.implications) && pattern.implications.length > 0
+          ? pattern.implications
+          : ['需要进一步评估']
+      }));
+    }
+
     const parties = events.flatMap(e => e.parties || []).filter((p, i, arr) => arr.indexOf(p) === i);
 
     return parties.slice(0, 3).map(party => ({
@@ -363,8 +587,23 @@ ${aiRequest.eventText}
    * 分析证据链
    */
   private analyzeEvidenceChain(events: TimelineEvent[], analysis: any): EvidenceChainAnalysis {
+    const insights = (analysis as any)?.aiInsights;
+    if (insights?.evidenceChain) {
+      return {
+        completeness: typeof insights.evidenceChain.completeness === 'number'
+          ? insights.evidenceChain.completeness
+          : 0.6,
+        logicalConsistency: typeof insights.evidenceChain.logicalConsistency === 'number'
+          ? insights.evidenceChain.logicalConsistency
+          : 0.7,
+        gaps: Array.isArray(insights.evidenceChain.gaps) ? insights.evidenceChain.gaps : [],
+        strengths: Array.isArray(insights.evidenceChain.strengths) ? insights.evidenceChain.strengths : [],
+        weaknesses: Array.isArray(insights.evidenceChain.weaknesses) ? insights.evidenceChain.weaknesses : []
+      };
+    }
+
     const evidenceCount = events.reduce((count, event) => count + (event.evidence?.length || 0), 0);
-    const completeness = Math.min(evidenceCount / events.length, 1.0);
+    const completeness = Math.min(evidenceCount / Math.max(events.length, 1), 1.0);
 
     return {
       completeness,
@@ -379,13 +618,23 @@ ${aiRequest.eventText}
    * 分析法律风险
    */
   private analyzeLegalRisks(analysis: any): LegalRisk[] {
-    // 基于分析结果生成风险评估
+    const insights = (analysis as any)?.aiInsights;
+    if (Array.isArray(insights?.legalRisks) && insights.legalRisks.length > 0) {
+      return insights.legalRisks.map((risk: any) => ({
+        type: risk.type || RiskType.LEGAL,
+        description: risk.description || '需要进一步法律审查',
+        likelihood: this.normalizeProbabilityLabel(risk.likelihood),
+        impact: this.normalizeProbabilityLabel(risk.impact),
+        mitigation: risk.mitigation || '制定风险应对策略'
+      }));
+    }
+
     return [
       {
-        type: 'legal' as const,
+        type: RiskType.LEGAL,
         description: '需要进一步法律审查',
-        likelihood: 'medium' as const,
-        impact: 'medium' as const,
+        likelihood: 'medium',
+        impact: 'medium',
         mitigation: '咨询专业律师'
       }
     ];
@@ -395,6 +644,16 @@ ${aiRequest.eventText}
    * 生成预测
    */
   private generatePredictions(events: TimelineEvent[], analysis: any): CasePrediction[] {
+    const insights = (analysis as any)?.aiInsights;
+    if (Array.isArray(insights?.predictions) && insights.predictions.length > 0) {
+      return insights.predictions.map((prediction: any) => ({
+        scenario: prediction.scenario || '案件走势预测',
+        probability: typeof prediction.probability === 'number' ? prediction.probability : 0.6,
+        reasoning: prediction.reasoning || '基于现有事实的评估',
+        factors: Array.isArray(prediction.factors) ? prediction.factors : []
+      }));
+    }
+
     return [
       {
         scenario: '基于当前时间轴的发展预测',
@@ -409,6 +668,11 @@ ${aiRequest.eventText}
    * 生成摘要
    */
   private generateSummary(events: TimelineEvent[], analysis: any): string {
+    const insights = (analysis as any)?.aiInsights;
+    if (typeof insights?.summary === 'string' && insights.summary.trim().length > 0) {
+      return insights.summary.trim();
+    }
+
     return `时间轴包含${events.length}个事件，跨越${this.calculateTimeSpan(events)}。分析发现关键转折点和潜在法律风险点，建议进一步深入调查。`;
   }
 
@@ -438,6 +702,33 @@ ${aiRequest.eventText}
     return '需要进一步法律分析';
   }
 
+  private normalizeImpact(value: any): 'high' | 'medium' | 'low' {
+    if (typeof value === 'number') {
+      if (value >= 0.66) return 'high';
+      if (value <= 0.33) return 'low';
+      return 'medium';
+    }
+
+    const normalized = String(value || '').toLowerCase();
+    if (normalized.includes('high') || normalized.includes('高')) return 'high';
+    if (normalized.includes('low') || normalized.includes('低')) return 'low';
+    return 'medium';
+  }
+
+  private normalizeProbabilityLabel(value: any): 'high' | 'medium' | 'low' {
+    if (typeof value === 'number') {
+      if (value >= 0.66) return 'high';
+      if (value <= 0.33) return 'low';
+      return 'medium';
+    }
+
+    const normalized = String(value || '').toLowerCase();
+    if (normalized.includes('high') || normalized.includes('高')) return 'high';
+    if (normalized.includes('low') || normalized.includes('低')) return 'low';
+    if (normalized.includes('medium') || normalized.includes('中')) return 'medium';
+    return 'medium';
+  }
+
   /**
    * 构建成功响应
    */
@@ -445,7 +736,8 @@ ${aiRequest.eventText}
     analysis: TimelineAnalysis,
     events: TimelineEvent[],
     suggestions: string[],
-    startTime: number
+    startTime: number,
+    usedAI: boolean
   ): TimelineAnalysisResponse {
     return {
       success: true,
@@ -457,9 +749,10 @@ ${aiRequest.eventText}
       metadata: {
         processingTime: Date.now() - startTime,
         eventCount: events.length,
-        analysisMethod: this.isAIAvailable() ? 'ai-enhanced' : 'rule-based',
+        analysisMethod: usedAI ? 'ai-enhanced' : 'rule-based',
         confidence: analysis.confidence,
-        version: '1.0.0'
+        version: '1.0.0',
+        aiWarnings: analysis.aiWarnings || []
       }
     };
   }

@@ -489,8 +489,8 @@ async function generateQuizzesFromEvidence(evidences: Evidence[], maxCount: numb
     const requestData = {
       evidence: evidences.map(e => ({
         id: e.id,
-        content: e.description || e.title,
-        type: e.type || 'document'
+        content: e.content || e.description || e.title,
+        type: e.type || 'documentary'
       })),
       claimElements: evidences.map(e => ({
         id: e.id,
