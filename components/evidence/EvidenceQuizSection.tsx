@@ -501,7 +501,21 @@ async function generateQuizzesFromEvidence(evidences: Evidence[], maxCount: numb
       mode: 'generate-questions',
       config: {
         targetLevel: 'intermediate',
-        focusAreas: ['relevance', 'admissibility', 'probative-value'],
+        // Phase B1: 扩展到多维度考察
+        focusAreas: [
+          // 证据维度 (保留)
+          'evidence-relevance',
+          'evidence-admissibility',
+          'evidence-probative',
+          // 法理维度 (新增)
+          'legal-theory',
+          'legal-basis',
+          'legal-reasoning',
+          // 争议维度 (新增)
+          'dispute-judgment',
+          'dispute-plaintiff-view',
+          'dispute-defendant-view'
+        ],
         questionTypes: ['single-choice', 'multiple-choice'],
         maxQuestions: maxCount,
         includeExplanations: true

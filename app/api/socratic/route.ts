@@ -1,18 +1,17 @@
 /**
  * 苏格拉底对话API - 统一入口
- * 职责：处理HTTP请求/响应，对接EnhancedSocraticService
+ * 职责：处理HTTP请求/响应，对接SocraticDialogueService
  * DeepPractice Standards Compliant
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { EnhancedSocraticService } from '../../../src/domains/socratic-dialogue/services/EnhancedSocraticService';
-import { SocraticErrorCode } from '@/lib/types/socratic/ai-service';
-
-// 创建增强版苏格拉底服务实例
-const socraticService = new EnhancedSocraticService();
+import { socraticService } from '../../../src/domains/socratic-dialogue/services';
+import { SocraticErrorCode } from '../../../src/domains/socratic-dialogue/types';
+import { markdownToPlainText } from '../../../src/domains/socratic-dialogue/services/DeeChatAIClient';
 
 /**
  * POST /api/socratic - 苏格拉底对话生成
+ * 支持流式(streaming=true)和非流式模式
  */
 export async function POST(req: NextRequest) {
   try {
@@ -22,16 +21,30 @@ export async function POST(req: NextRequest) {
     console.log('🎯 苏格拉底对话请求:', {
       currentTopic: requestData.currentTopic,
       caseContext: requestData.caseContext ? 'present' : 'absent',
-      messagesCount: requestData.messages?.length || 0
+      messagesCount: requestData.messages?.length || 0,
+      streaming: requestData.streaming || false
     });
 
-    // 执行业务逻辑 - 调用EnhancedSocraticService
-    const result = await socraticService.generateSocraticQuestion(requestData);
+    // 流式输出模式
+    if (requestData.streaming) {
+      return handleStreamingRequest(requestData);
+    }
+
+    // 非流式模式（原有逻辑）
+    const result = await socraticService.generateQuestion(requestData);
+
+    // Phase B: 转换Markdown为纯文本
+    if (result.success && 'data' in result && result.data?.content) {
+      result.data.content = markdownToPlainText(result.data.content);
+    }
+    if (result.success && 'data' in result && result.data?.question) {
+      result.data.question = markdownToPlainText(result.data.question);
+    }
 
     console.log('✅ 苏格拉底对话响应:', {
       success: result.success,
-      hasData: !!result.data,
-      error: result.error?.code
+      hasData: result.success && 'data' in result ? !!result.data : false,
+      error: !result.success && 'error' in result ? result.error?.code : undefined
     });
 
     // 返回响应
@@ -67,6 +80,104 @@ export async function OPTIONS() {
 }
 
 // ========== 私有辅助方法 ==========
+
+/**
+ * 处理流式请求 - Server-Sent Events (SSE)
+ */
+async function handleStreamingRequest(requestData: any): Promise<Response> {
+  try {
+    // 创建流式迭代器
+    const stream = await socraticService.generateQuestionStream(requestData);
+
+    // 创建ReadableStream用于SSE
+    const readableStream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        let isClosed = false;
+
+        // Phase B修复: 安全的enqueue包装函数
+        const safeEnqueue = (data: Uint8Array) => {
+          if (!isClosed) {
+            try {
+              controller.enqueue(data);
+            } catch (error) {
+              console.error('Enqueue失败(controller已关闭):', error);
+              isClosed = true;
+            }
+          }
+        };
+
+        // Phase B修复: 安全的close包装函数
+        const safeClose = () => {
+          if (!isClosed) {
+            try {
+              controller.close();
+              isClosed = true;
+            } catch (error) {
+              console.error('Close失败(controller已关闭):', error);
+              isClosed = true;
+            }
+          }
+        };
+
+        try {
+          // Phase B: 收集完整内容用于Markdown转换
+          let fullContent = '';
+          for await (const chunk of stream) {
+            fullContent += chunk;
+          }
+
+          // 转换Markdown为纯文本
+          const plainText = markdownToPlainText(fullContent);
+
+          // 分段流式输出纯文本 - 优化打字机效果
+          const chunkSize = 3; // 每次输出3个字符(中文友好)
+          for (let i = 0; i < plainText.length; i += chunkSize) {
+            const textChunk = plainText.slice(i, i + chunkSize);
+            const data = `data: ${JSON.stringify({ content: textChunk })}\n\n`;
+            safeEnqueue(encoder.encode(data));
+            // 延迟150ms,模拟真实打字速度
+            await new Promise(resolve => setTimeout(resolve, 150));
+          }
+
+          // 发送完成信号
+          safeEnqueue(encoder.encode('data: [DONE]\n\n'));
+          safeClose();
+        } catch (error) {
+          console.error('❌ 流式输出错误:', error);
+          const errorData = `data: ${JSON.stringify({
+            error: error instanceof Error ? error.message : '未知错误'
+          })}\n\n`;
+          safeEnqueue(encoder.encode(errorData));
+          safeClose();
+        }
+      }
+    });
+
+    return new Response(readableStream, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type'
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ 流式请求处理失败:', error);
+    return NextResponse.json({
+      success: false,
+      error: {
+        message: '流式输出初始化失败',
+        code: SocraticErrorCode.AI_SERVICE_ERROR,
+        timestamp: new Date().toISOString()
+      }
+    }, { status: 500 });
+  }
+}
 
 /**
  * 解析请求数据并验证格式
@@ -118,11 +229,9 @@ function getStatusCode(result: any): number {
     return 200;
   }
 
-  if (result.fallback) {
-    return 200; // 降级成功也返回200
-  }
-
-  switch (result.error?.code) {
+  // 检查error是否存在（类型守卫）
+  if (!result.success && result.error) {
+    switch (result.error.code) {
     case SocraticErrorCode.INVALID_INPUT:
     case SocraticErrorCode.INVALID_CONTENT:
       return 400;
@@ -130,7 +239,10 @@ function getStatusCode(result: any): number {
       return 503;
     default:
       return 500;
+    }
   }
+
+  return 500; // 默认返回500
 }
 
 /**

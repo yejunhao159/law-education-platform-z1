@@ -14,7 +14,7 @@ import {
   SocraticError,
   SESSION_EXPIRY_TIME,
   CLASSROOM_CODE_LENGTH
-} from '@/lib/types/socratic'
+} from '@/src/domains/socratic-dialogue/types'
 
 // ============== 会话管理接口 ==============
 

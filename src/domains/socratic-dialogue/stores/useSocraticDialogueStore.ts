@@ -6,8 +6,13 @@
 
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { DialogueLevel, Message, MessageRole } from '@/lib/types/socratic';
-import type { SocraticRequest, SocraticResponse } from '@/src/types';
+import type {
+  DialogueLevel,
+  Message,
+  MessageRole,
+  SocraticRequest,
+  SocraticResponse
+} from '@/src/domains/socratic-dialogue/types';
 
 // ========== 核心对话状态 ==========
 interface DialogueState {
@@ -60,7 +65,7 @@ type SocraticDialogueStore = DialogueState & DialogueActions;
 // ========== 初始状态 ==========
 const initialState: DialogueState = {
   messages: [],
-  currentLevel: DialogueLevel.OBSERVATION,
+  currentLevel: 'beginner' as DialogueLevel, // 修复: DialogueLevel是类型不是枚举
   isGenerating: false,
   isTyping: false,
   lastResponse: null,
@@ -111,12 +116,10 @@ export const useSocraticDialogueStore = create<SocraticDialogueStore>()(
 
     progressToNextLevel: () =>
       set((state) => {
-        const levels = [
-          DialogueLevel.OBSERVATION,
-          DialogueLevel.FACTS,
-          DialogueLevel.ANALYSIS,
-          DialogueLevel.APPLICATION,
-          DialogueLevel.VALUES
+        const levels: DialogueLevel[] = [
+          'beginner',
+          'intermediate',
+          'advanced'
         ];
 
         const currentIndex = levels.indexOf(state.currentLevel);
@@ -141,40 +144,78 @@ export const useSocraticDialogueStore = create<SocraticDialogueStore>()(
         state.lastResponse = response;
       }),
 
-    // AI响应生成（核心业务逻辑）
+    // AI响应生成（核心业务逻辑）- Phase B: 支持流式输出
     generateAIResponse: async (request) => {
-      const { setGenerating, setDialogueError, setLastResponse, addMessage } = get();
+      const { setGenerating, setDialogueError, setLastResponse, addMessage, updateMessage } = get();
 
       try {
         setGenerating(true);
         setDialogueError(null);
 
+        // Phase B: 启用流式输出
         const response = await fetch('/api/socratic', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(request),
+          body: JSON.stringify({
+            ...request,
+            streaming: true // 启用流式
+          }),
         });
 
         if (!response.ok) {
           throw new Error(`API请求失败: ${response.status}`);
         }
 
-        const result = await response.json();
+        // 流式接收SSE
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let fullContent = '';
 
-        if (!result.success) {
-          throw new Error(result.error?.message || 'AI响应生成失败');
+        // 先创建一个占位消息
+        const tempMessageId = crypto.randomUUID();
+        addMessage('', MessageRole.AGENT, request.level);
+        const messages = get().messages;
+        const messageIndex = messages.length - 1;
+
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') continue;
+
+                try {
+                  const parsed = JSON.parse(data);
+                  if (parsed.content) {
+                    fullContent += parsed.content;
+                    // 实时更新消息内容
+                    const currentMessages = get().messages;
+                    if (currentMessages[messageIndex]) {
+                      currentMessages[messageIndex].content = fullContent;
+                      set((state) => { state.messages = [...currentMessages]; });
+                    }
+                  }
+                } catch (e) {
+                  console.warn('解析SSE数据失败:', data);
+                }
+              }
+            }
+          }
         }
 
-        const aiResponse: SocraticResponse = result.data;
-
-        // 添加AI响应消息
-        addMessage(
-          aiResponse.content || aiResponse.question || '',
-          MessageRole.AGENT,
-          request.level
-        );
+        const aiResponse: SocraticResponse = {
+          content: fullContent,
+          question: fullContent,
+          level: request.level || 'beginner'
+        };
 
         setLastResponse(aiResponse);
         return aiResponse;

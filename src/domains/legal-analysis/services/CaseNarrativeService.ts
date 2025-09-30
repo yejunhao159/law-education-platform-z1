@@ -372,7 +372,7 @@ ${depth === 'comprehensive' ? '进行全面深入的案情分析，包含法律�
             }
           ],
           temperature: 0.7, // 适度创造性，保持专业性
-          max_tokens: 5000, // 增加到5000支持更详细的故事生成
+          max_tokens: 8000, // Phase B修复: 提升到8000支持更详细的故事生成
           top_p: 0.9
         })
       });
@@ -387,6 +387,16 @@ ${depth === 'comprehensive' ? '进行全面深入的案情分析，包含法律�
       const finishReason = result.choices?.[0]?.finish_reason;
       const proxyHeader = response.headers.get('X-AI-Proxy');
       const isProxyFallback = response.headers.get('X-Error') === 'true' || proxyHeader === 'DeeChatAI-Fallback';
+
+      // Phase B修复: 检测token限制导致的截断
+      if (finishReason === 'length') {
+        logger.warn('智能故事生成被max_tokens截断', {
+          finishReason,
+          maxTokens: 8000,
+          contentLength: content?.length
+        });
+        // 不抛出错误,允许使用截断的内容,但记录警告
+      }
 
       // 检测降级响应
       if (isProxyFallback || finishReason === 'error') {

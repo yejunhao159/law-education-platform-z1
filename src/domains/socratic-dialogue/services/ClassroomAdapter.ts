@@ -6,7 +6,7 @@
  */
 
 import { sessionCoordinator, type CoordinatedSessionInfo } from './SessionCoordinator';
-import type { ClassroomSession, StudentInfo, VoteData } from '@/lib/types/socratic';
+import type { ClassroomSession, StudentInfo, VoteData } from '@/src/domains/socratic-dialogue/types';
 import { createLogger } from '@/lib/logging';
 
 const logger = createLogger('ClassroomAdapter');

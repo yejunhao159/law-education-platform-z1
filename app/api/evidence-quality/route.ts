@@ -107,28 +107,16 @@ export async function POST(request: NextRequest) {
       }
 
       case 'chain-analysis': {
-        // 证据链智能分析
-        logger.info('执行证据链智能分析');
+        // 证据链智能分析 - 已废弃
+        logger.warn('证据链分析功能已废弃，根据课堂教学需求简化');
 
-        const chainAnalyses = await evidenceIntelligenceService.analyzeEvidenceChains(
-          evidenceArray,
-          claimElements,
-          caseContext
-        );
-
-        result = {
-          ...result,
-          success: true,  // 只有真正成功才设为 true
-          mode: 'chain-analysis',
-          chains: chainAnalyses,
-          summary: {
-            totalChains: chainAnalyses.length,
-            averageCompleteness: chainAnalyses.reduce((sum, c) => sum + c.completeness, 0) / chainAnalyses.length,
-            averageConsistency: chainAnalyses.reduce((sum, c) => sum + c.logicalConsistency, 0) / chainAnalyses.length,
-            criticalGapsCount: chainAnalyses.reduce((sum, c) => sum + c.criticalGaps.length, 0)
-          }
-        };
-        break;
+        return NextResponse.json({
+          success: false,
+          error: '证据链分析功能已废弃',
+          details: '根据课堂教学需求，证据链分析过于复杂，已从第二幕教学中移除',
+          recommendation: '请使用 comprehensive 或 ai-assessment 模式',
+          timestamp: new Date().toISOString()
+        }, { status: 410 }); // 410 Gone - 资源已永久移除
       }
 
       case 'generate-questions': {
@@ -173,12 +161,11 @@ export async function POST(request: NextRequest) {
       }
 
       case 'comprehensive': {
-        // 综合分析（AI评估 + 证据链分析 + 基础映射）
-        logger.info('执行综合证据分析');
+        // 综合分析（AI评估 + 基础映射） - 已移除证据链分析
+        logger.info('执行综合证据分析（简化版）');
 
-        const [qualityAssessments, chainAnalyses, basicMappings] = await Promise.all([
+        const [qualityAssessments, basicMappings] = await Promise.all([
           evidenceIntelligenceService.assessEvidenceQuality(evidenceArray, caseContext),
-          evidenceIntelligenceService.analyzeEvidenceChains(evidenceArray, claimElements, caseContext),
           Promise.resolve(mappingService.batchAutoMap(evidenceArray, claimElements))
         ]);
 
@@ -202,7 +189,6 @@ export async function POST(request: NextRequest) {
           success: true,  // 只有真正成功才设为 true
           mode: 'comprehensive',
           qualityAssessments,
-          chainAnalyses,
           basicMappings,
           analysis,
           unmappedElements,
@@ -210,8 +196,6 @@ export async function POST(request: NextRequest) {
           summary: {
             totalEvidence: evidenceArray.length,
             averageQuality: qualityAssessments.reduce((sum, a) => sum + a.overallScore, 0) / qualityAssessments.length,
-            totalChains: chainAnalyses.length,
-            averageCompleteness: chainAnalyses.reduce((sum, c) => sum + c.completeness, 0) / chainAnalyses.length,
             mappingQuality: analysis.averageConfidence,
             unmappedCount: unmappedElements.length,
             conflictCount: conflicts.length

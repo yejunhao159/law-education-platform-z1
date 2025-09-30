@@ -5,7 +5,7 @@
  * DeepPractice Standards Compliant
  */
 
-import { DialogueState, Performance, ControlMode, CaseInfo } from '@/lib/types/socratic';
+import { DialogueState, Performance, DialogueMode, CaseInfo } from '@/src/domains/socratic-dialogue/types';
 
 // ========== 会话管理接口 ==========
 export interface DialogueSession {
@@ -16,7 +16,7 @@ export interface DialogueSession {
   lastActivityAt: number;
   isEnded: boolean;
   participants: string[];
-  mode: ControlMode;
+  mode: DialogueMode;
   state: DialogueState;
   metadata: {
     totalMessages: number;
@@ -38,7 +38,7 @@ export interface SessionSummary {
 export interface CreateSessionOptions {
   title: string;
   caseInfo?: CaseInfo;
-  mode?: ControlMode;
+  mode?: DialogueMode;
   initialParticipants?: string[];
 }
 
@@ -67,14 +67,14 @@ export class DialogueSessionManager {
       lastActivityAt: Date.now(),
       isEnded: false,
       participants: options.initialParticipants || [],
-      mode: options.mode || ControlMode.AUTO,
+      mode: options.mode || 'auto',
       state: {
         sessionId,
         caseId: options.caseInfo?.id || '',
         currentLevel: 1, // DialogueLevel.OBSERVATION
         messages: [],
         participants: options.initialParticipants || [],
-        mode: options.mode || ControlMode.AUTO,
+        mode: options.mode || 'auto',
         performance: {
           questionCount: 0,
           correctRate: 0,

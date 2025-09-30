@@ -787,9 +787,7 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
                         <div className="flex-1">
                           <div className="text-sm text-gray-500 mb-1">{event.date}</div>
                           <h5 className="font-medium text-gray-900">{getEventTitle(event)}</h5>
-                          {getEventDescription(event) && (
-                            <p className="text-sm text-gray-600 mt-1">{getEventDescription(event)}</p>
-                          )}
+                          {/* UI优化: 删除冗余的description,保持卡片简洁 */}
                         </div>
 
                         {/* 操作按钮和重要性标记 */}

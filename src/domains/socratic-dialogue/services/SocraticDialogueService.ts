@@ -1,7 +1,13 @@
 /**
- * 增强版苏格拉底对话服务
+ * 苏格拉底对话服务 - 统一入口
  * 集成所有模块化组件：UnifiedPromptBuilder + XML结构化 + 双提示词模式
  * DeepPractice Standards Compliant
+ *
+ * @description
+ * 这是Socratic对话功能的唯一服务入口，整合了：
+ * - AI调用（DeeChatAIClient）
+ * - Prompt构建（UnifiedPromptBuilder）
+ * - 上下文格式化（LocalContextFormatter）
  */
 
 import { DeeChatAIClient, createDeeChatConfig, type DeeChatConfig } from './DeeChatAIClient';
@@ -10,13 +16,16 @@ import { ContextFormatter } from '../utils/LocalContextFormatter';
 import {
   SocraticRequest,
   SocraticResponse,
-  SocraticMessage,
-  SocraticDifficultyLevel,
-  SocraticMode,
+  Message,
+  DialogueLevel,
+  DialogueMode,
   SocraticErrorCode
-} from '@/lib/types/socratic/ai-service';
+} from '../types';
 
-interface EnhancedSocraticConfig {
+/**
+ * 苏格拉底对话服务配置
+ */
+export interface SocraticDialogueConfig {
   apiUrl: string;
   apiKey: string;
   model: string;
@@ -26,11 +35,24 @@ interface EnhancedSocraticConfig {
   enableModularPrompts: boolean;
 }
 
-export class EnhancedSocraticService {
-  private config: EnhancedSocraticConfig;
+/**
+ * 苏格拉底对话服务
+ *
+ * @example
+ * ```typescript
+ * const service = new SocraticDialogueService();
+ * const response = await service.generateQuestion({
+ *   currentTopic: "合同效力",
+ *   caseContext: "案例信息...",
+ *   level: "intermediate"
+ * });
+ * ```
+ */
+export class SocraticDialogueService {
+  private config: SocraticDialogueConfig;
   private aiClient: DeeChatAIClient;
 
-  constructor(config?: Partial<EnhancedSocraticConfig>) {
+  constructor(config?: Partial<SocraticDialogueConfig>) {
     this.config = {
       apiUrl: process.env.NEXT_PUBLIC_DEEPSEEK_API_URL || 'https://api.deepseek.com/v1',
       apiKey: process.env.DEEPSEEK_API_KEY || '',
@@ -59,9 +81,24 @@ export class EnhancedSocraticService {
   }
 
   /**
-   * 生成苏格拉底式问题 - 使用完整的模块化架构
+   * 生成苏格拉底式问题 - 主入口方法
+   *
+   * @param request - 对话请求，包含当前主题、案例上下文、教学层级等
+   * @returns 苏格拉底响应，包含生成的问题和元数据
+   *
+   * @example
+   * ```typescript
+   * const response = await service.generateQuestion({
+   *   currentTopic: "合同有效性分析",
+   *   level: "intermediate",
+   *   caseContext: "甲乙双方签订买卖合同..."
+   * });
+   * if (response.success) {
+   *   console.log(response.data.question);
+   * }
+   * ```
    */
-  async generateSocraticQuestion(request: SocraticRequest): Promise<SocraticResponse> {
+  async generateQuestion(request: SocraticRequest): Promise<SocraticResponse> {
     try {
       // 第1步：使用UnifiedPromptBuilder构建System Prompt
       const systemPrompt = this.buildSystemPrompt(request);
@@ -77,8 +114,8 @@ export class EnhancedSocraticService {
         data: {
           question: aiResponse.content,
           content: aiResponse.content,
-          level: request.level || SocraticDifficultyLevel.INTERMEDIATE,
-          mode: request.mode || SocraticMode.EXPLORATION,
+          level: request.level || 'intermediate' as DialogueLevel,
+          mode: request.mode || 'exploration' as DialogueMode,
           timestamp: new Date().toISOString(),
           sessionId: request.sessionId || 'enhanced-session',
           metadata: {
@@ -91,16 +128,66 @@ export class EnhancedSocraticService {
       };
 
     } catch (error) {
-      console.error('EnhancedSocraticService Error:', error);
+      console.error('SocraticDialogueService Error:', error);
       return {
         success: false,
         error: {
           code: SocraticErrorCode.AI_SERVICE_ERROR,
-          message: '增强苏格拉底对话生成失败: ' + (error instanceof Error ? error.message : '未知错误'),
+          message: '苏格拉底对话生成失败: ' + (error instanceof Error ? error.message : '未知错误'),
           timestamp: new Date().toISOString()
         }
       };
     }
+  }
+
+  /**
+   * 生成苏格拉底式问题 - 流式输出版本
+   *
+   * @param request - 对话请求
+   * @returns 异步流式迭代器，实时输出AI生成的内容
+   *
+   * @example
+   * ```typescript
+   * const stream = await service.generateQuestionStream(request);
+   * for await (const chunk of stream) {
+   *   console.log(chunk); // 实时输出每个token
+   * }
+   * ```
+   */
+  async generateQuestionStream(request: SocraticRequest): Promise<AsyncIterable<string>> {
+    try {
+      // 第1步：构建System Prompt
+      const systemPrompt = this.buildSystemPrompt(request);
+
+      // 第2步：构建XML结构化的User Prompt
+      const userPrompt = this.buildUserPrompt(request);
+
+      // 第3步：使用流式调用
+      const messages = [
+        { role: 'system' as const, content: systemPrompt },
+        { role: 'user' as const, content: userPrompt }
+      ];
+
+      const streamingResponse = await this.aiClient.sendCustomMessageStream(messages, {
+        temperature: this.config.temperature,
+        maxTokens: this.config.maxTokens,
+        enableCostOptimization: true
+      });
+
+      return streamingResponse.stream;
+
+    } catch (error) {
+      console.error('SocraticDialogueService Stream Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 向后兼容方法：generateSocraticQuestion
+   * @deprecated 请使用 generateQuestion 代替
+   */
+  async generateSocraticQuestion(request: SocraticRequest): Promise<SocraticResponse> {
+    return this.generateQuestion(request);
   }
 
   /**
@@ -114,7 +201,7 @@ export class EnhancedSocraticService {
     }
 
     // 使用API兼容的简化提示词构建器
-    const difficulty = this.mapToModernDifficultyLevel(request.level || SocraticDifficultyLevel.INTERMEDIATE);
+    const difficulty = this.mapToModernDifficultyLevel(request.level || 'intermediate');
 
     return buildAPICompatiblePrompt(
       difficulty,
@@ -135,15 +222,76 @@ export class EnhancedSocraticService {
       return this.buildSimpleContext(request);
     }
 
+    // 处理案例上下文：支持字符串和结构化对象
+    let caseContextText = '无特定案例';
+    if (request.caseContext) {
+      if (typeof request.caseContext === 'string') {
+        caseContextText = request.caseContext;
+      } else {
+        // 结构化案例上下文转换为富文本
+        caseContextText = this.formatStructuredCase(request.caseContext);
+      }
+    }
+
     // 使用XML结构化格式
     const contextData = {
       current: this.buildCurrentContext(request),
       conversation: this.buildConversationHistory(request.messages || []),
-      case: request.caseContext || '无特定案例',
+      case: caseContextText,
       topic: request.currentTopic || '法学基础讨论'
     };
 
     return ContextFormatter.format(contextData);
+  }
+
+  /**
+   * 格式化结构化案例上下文为可读文本
+   */
+  private formatStructuredCase(caseData: any): string {
+    const sections: string[] = [];
+
+    sections.push(`【案件名称】${caseData.title}`);
+
+    if (caseData.facts && Array.isArray(caseData.facts)) {
+      sections.push('\n【案件事实】');
+      caseData.facts.forEach((fact: any, index: number) => {
+        const factNum = index + 1;
+        let factText = `事实${factNum}: ${fact.content}`;
+        if (fact.date) factText += ` (时间: ${fact.date})`;
+        if (fact.evidence && fact.evidence.length > 0) {
+          factText += ` [证据: ${fact.evidence.join('、')}]`;
+        }
+        sections.push(factText);
+      });
+    }
+
+    if (caseData.laws && Array.isArray(caseData.laws)) {
+      sections.push('\n【相关法条】');
+      caseData.laws.forEach((law: any) => {
+        let lawText = `${law.article}: ${law.content}`;
+        if (law.relevance) lawText += ` (适用于: ${law.relevance})`;
+        sections.push(lawText);
+      });
+    }
+
+    if (caseData.disputes) {
+      sections.push('\n【争议焦点】');
+      if (Array.isArray(caseData.disputes)) {
+        if (typeof caseData.disputes[0] === 'string') {
+          caseData.disputes.forEach((d: string, i: number) => {
+            sections.push(`争议${i + 1}: ${d}`);
+          });
+        } else {
+          caseData.disputes.forEach((dispute: any, i: number) => {
+            sections.push(`争议${i + 1}: ${dispute.focus}`);
+            if (dispute.plaintiffView) sections.push(`  原告观点: ${dispute.plaintiffView}`);
+            if (dispute.defendantView) sections.push(`  被告观点: ${dispute.defendantView}`);
+          });
+        }
+      }
+    }
+
+    return sections.join('\n');
   }
 
   /**
@@ -170,13 +318,14 @@ export class EnhancedSocraticService {
   /**
    * 构建对话历史上下文
    */
-  private buildConversationHistory(messages: SocraticMessage[]): string[] {
+  private buildConversationHistory(messages: Message[]): string[] {
     if (messages.length === 0) {
       return ['这是对话的开始，还没有历史消息。'];
     }
 
-    return messages.slice(-6).map(msg => {
-      const role = msg.role === 'user' ? '学生' : '导师';
+    // 保留完整对话历史，让AI能记住所有讨论内容
+    return messages.map(msg => {
+      const role = msg.role === 'student' ? '学生' : '导师';
       return `${role}: ${msg.content}`;
     });
   }
@@ -231,13 +380,13 @@ export class EnhancedSocraticService {
   /**
    * 映射难度级别
    */
-  private mapToModernDifficultyLevel(level: SocraticDifficultyLevel): 'basic' | 'intermediate' | 'advanced' {
+  private mapToModernDifficultyLevel(level: DialogueLevel): 'basic' | 'intermediate' | 'advanced' {
     switch (level) {
-      case SocraticDifficultyLevel.BEGINNER:
+      case 'beginner':
         return 'basic';
-      case SocraticDifficultyLevel.INTERMEDIATE:
+      case 'intermediate':
         return 'intermediate';
-      case SocraticDifficultyLevel.ADVANCED:
+      case 'advanced':
         return 'advanced';
       default:
         return 'intermediate';

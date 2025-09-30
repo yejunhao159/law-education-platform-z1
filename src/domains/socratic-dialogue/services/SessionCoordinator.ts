@@ -7,7 +7,7 @@
 
 import { dialogueSessionManager, DialogueSessionManager, type DialogueSession } from './DialogueSessionManager';
 import { SessionManager as ClassroomSessionManager } from '@/lib/services/session/session-manager';
-import type { ClassroomSession, StudentInfo } from '@/lib/types/socratic';
+import type { ClassroomSession, StudentInfo } from '@/src/domains/socratic-dialogue/types';
 
 // ========== 协调器接口 ==========
 export interface SessionCoordination {

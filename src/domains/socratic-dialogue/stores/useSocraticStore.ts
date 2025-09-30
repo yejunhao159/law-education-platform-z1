@@ -8,8 +8,15 @@ import { useSocraticDialogueStore, useDialogueActions } from './useSocraticDialo
 import { useUIStore, useUIActions } from './useUIStore';
 import { dialogueSessionManager } from '../services/DialogueSessionManager';
 import { useCurrentCase } from '@/src/domains/case-management/stores/useCaseStore';
-import type { CaseInfo } from '@/lib/types/socratic';
-import type { DialogueContext, Message, TeachingLevel, SocraticRequest, SocraticResponse, TeachingAssessment } from '@/src/types';
+import type {
+  CaseInfo,
+  DialogueContext,
+  Message,
+  TeachingLevel,
+  SocraticRequest,
+  SocraticResponse,
+  TeachingAssessment
+} from '@/src/domains/socratic-dialogue/types';
 
 // ========== 兼容性接口 ==========
 interface LegacySocraticState {

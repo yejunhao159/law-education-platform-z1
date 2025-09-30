@@ -13,7 +13,7 @@ import {
   CaseInfo,
   ErrorCode,
   SocraticError
-} from '@/lib/types/socratic'
+} from '@/src/domains/socratic-dialogue/types'
 
 // ============== 数据处理接口 ==============
 

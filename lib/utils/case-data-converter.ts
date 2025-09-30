@@ -5,7 +5,7 @@
  */
 
 import type { LegalCase } from '@/types/legal-case'
-import type { CaseInfo } from '@/lib/types/socratic'
+import type { CaseInfo } from '@/src/domains/socratic-dialogue/types'
 
 /**
  * 将LegalCase转换为CaseInfo

@@ -5,16 +5,19 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 // 移除复杂的标签页系统
 import ArgumentTree, { ArgumentNode } from './ArgumentTree';
-import { 
-  Send, 
-  Bot, 
-  User, 
+import { ClassroomCode } from './ClassroomCode';
+import { ClassroomSession, DialogueLevel } from '@/lib/types/socratic';
+import {
+  Send,
+  Bot,
+  User,
   Sparkles,
   Play,
   Pause,
   RotateCcw,
   Download,
-  Settings
+  Settings,
+  QrCode
 } from 'lucide-react';
 
 /**
@@ -39,16 +42,24 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
     content: string;
     timestamp: string;
     suggestions?: string[];
+    choices?: Array<{ id: string; content: string }>;
   }>>([]);
 
   // 论证树节点
   const [argumentNodes, setArgumentNodes] = useState<ArgumentNode[]>([]);
-  
+
+  // 当前显示的选项（用于投票后继续对话）
+  const [currentChoices, setCurrentChoices] = useState<Array<{ id: string; content: string }>>([]);
+
   // 当前输入
   const [currentInput, setCurrentInput] = useState('');
-  
+
   // 简化后的会话状态 - 移除复杂的模式和难度选择
   const [isActive, setIsActive] = useState(false);
+
+  // 课堂二维码状态
+  const [showQRCode, setShowQRCode] = useState(false);
+  const [classroomSession, setClassroomSession] = useState<ClassroomSession | null>(null);
   
   // AI建议的问题
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([
@@ -102,8 +113,9 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          streaming: true, // Phase B优化: 启用流式输出
           messages: [
-            ...messages.slice(-5).map(m => ({
+            ...messages.map(m => ({
               role: m.role === 'ai' ? 'assistant' : 'user',
               content: m.content,
               timestamp: new Date().toISOString()
@@ -126,7 +138,7 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
             facts: caseData.facts,
             laws: caseData.laws,
             dispute: caseData.dispute,
-            previousMessages: messages.slice(-5).map(m => ({
+            previousMessages: messages.map(m => ({
               role: m.role,
               content: m.content
             }))
@@ -134,46 +146,74 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
         })
       });
 
-      const result = await response.json();
-      
-      if (result.success && result.data) {
-        const aiMessage = {
-          id: `msg-${Date.now() + 1}`,
-          role: 'ai' as const,
-          content: result.data.content || result.data.question || result.data.answer,
-          timestamp: new Date().toLocaleTimeString(),
-          suggestions: result.data.followUpQuestions || []
-        };
-        setMessages(prev => [...prev, aiMessage]);
-        setSuggestedQuestions(result.data.followUpQuestions || suggestedQuestions);
+      // Phase B优化: 流式SSE处理+实时更新
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullContent = '';
 
-        // 添加AI回答到论证树
-        const aiNode: ArgumentNode = {
-          id: `node-${Date.now() + 1}`,
-          type: 'reason',
-          content: result.data.content || result.data.question || result.data.answer,
-          speaker: 'ai',
-          parentId: newNode.id,
-          evaluation: {
-            strength: 'medium',
-            issues: result.data.analysis?.weaknesses || []
+      // 先创建占位消息
+      const aiMessageId = `msg-${Date.now() + 1}`;
+      setMessages(prev => [...prev, {
+        id: aiMessageId,
+        role: 'ai' as const,
+        content: '',
+        timestamp: new Date().toLocaleTimeString(),
+        suggestions: []
+      }]);
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.content) {
+                  fullContent += parsed.content;
+                  // 实时更新消息内容
+                  setMessages(prev => prev.map(msg =>
+                    msg.id === aiMessageId ? { ...msg, content: fullContent } : msg
+                  ));
+                }
+              } catch (e) {
+                console.warn('解析SSE失败:', data, e);
+              }
+            }
           }
-        };
-        setArgumentNodes(prev => [...prev, aiNode]);
-      } else {
-        // 如果API调用失败，使用备用响应
-        console.error('API调用失败:', result.error);
-        const fallbackResponse = generateAIResponse(content);
-        const aiMessage = {
-          id: `msg-${Date.now() + 1}`,
-          role: 'ai' as const,
-          content: fallbackResponse.answer,
-          timestamp: new Date().toLocaleTimeString(),
-          suggestions: fallbackResponse.followUpQuestions
-        };
-        setMessages(prev => [...prev, aiMessage]);
-        setSuggestedQuestions(fallbackResponse.followUpQuestions);
+        }
       }
+
+      // 解析AI响应中的ABCDE选项
+      const extractedChoices = extractChoices(fullContent);
+      if (extractedChoices.length > 0) {
+        setCurrentChoices(extractedChoices);
+        // 更新消息，添加choices字段
+        setMessages(prev => prev.map(msg =>
+          msg.id === aiMessageId ? { ...msg, choices: extractedChoices } : msg
+        ));
+      }
+
+      // 添加AI回答到论证树
+      const aiNode: ArgumentNode = {
+        id: `node-${Date.now() + 1}`,
+        type: 'reason',
+        content: fullContent,
+        speaker: 'ai',
+        parentId: newNode.id,
+        evaluation: {
+          strength: 'medium',
+          issues: []
+        }
+      };
+      setArgumentNodes(prev => [...prev, aiNode]);
     } catch (error) {
       console.error('调用API时出错:', error);
       // 使用备用响应
@@ -201,6 +241,44 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
         "学生的分析还需要补充哪些方面？"
       ]
     };
+  };
+
+  // 提取AI回答中的ABCDE选项
+  const extractChoices = (content: string): Array<{ id: string; content: string }> => {
+    const choices: Array<{ id: string; content: string }> = [];
+    // 匹配 A) xxx、B) xxx 格式
+    const regex = /([A-E])\)\s*([^\n]+)/g;
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+      choices.push({
+        id: match[1],
+        content: match[2].trim()
+      });
+    }
+    return choices;
+  };
+
+  // 点击选项继续对话
+  const handleChoiceClick = (choice: { id: string; content: string }) => {
+    const message = `基于选项${choice.id}（${choice.content}），我们继续深入探讨`;
+    sendMessage(message, false);
+    setCurrentChoices([]); // 清空当前选项
+  };
+
+  // 生成课堂二维码
+  const generateClassroomCode = () => {
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const now = Date.now();
+    const session: ClassroomSession = {
+      code,
+      createdAt: now,
+      expiresAt: now + 6 * 60 * 60 * 1000, // 6小时后过期
+      teacherId: '教师', // 可以从用户状态获取
+      students: new Map(), // 使用Map而不是数组
+      status: 'waiting'
+    };
+    setClassroomSession(session);
+    setShowQRCode(true);
   };
 
   // 使用建议问题
@@ -323,12 +401,17 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
             {isActive ? <Pause className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
             {isActive ? '暂停' : '开始'}
           </Button>
-          
+
           <Button onClick={resetSession} variant="outline">
             <RotateCcw className="w-4 h-4 mr-2" />
             重置
           </Button>
-          
+
+          <Button onClick={generateClassroomCode} variant="outline">
+            <QrCode className="w-4 h-4 mr-2" />
+            课堂二维码
+          </Button>
+
           <Button onClick={exportSession} variant="outline">
             <Download className="w-4 h-4 mr-2" />
             导出
@@ -364,6 +447,30 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
                       </div>
                       <div className="text-sm">{msg.content}</div>
                       
+                      {/* AI选项 - ISSUE方法论ABCDE选项 */}
+                      {msg.choices && msg.choices.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-blue-200">
+                          <div className="text-xs font-medium text-blue-700 mb-2 flex items-center">
+                            <Sparkles className="w-3 h-3 mr-1" />
+                            点击选项继续讨论：
+                          </div>
+                          <div className="grid grid-cols-1 gap-2">
+                            {msg.choices.map((choice) => (
+                              <button
+                                key={choice.id}
+                                onClick={() => handleChoiceClick(choice)}
+                                className="flex items-start text-left text-xs p-2 rounded-lg border border-blue-200 hover:bg-blue-50 hover:border-blue-400 transition-all"
+                              >
+                                <span className="inline-block w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center mr-2 flex-shrink-0 font-semibold">
+                                  {choice.id}
+                                </span>
+                                <span className="flex-1">{choice.content}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {/* AI建议 */}
                       {msg.suggestions && msg.suggestions.length > 0 && (
                         <div className="mt-2 pt-2 border-t">
@@ -445,6 +552,23 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
           showEvaluation={true}
         />
       </div>
+
+      {/* 课堂二维码弹窗 */}
+      {showQRCode && classroomSession && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowQRCode(false)}>
+          <div className="bg-white rounded-lg p-6 max-w-md" onClick={(e) => e.stopPropagation()}>
+            <ClassroomCode
+              session={classroomSession}
+              isTeacher={true}
+              config={{
+                showQRCode: true,
+                allowShare: true,
+                showStats: true
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* 底部：案件信息 */}
       <Card className="mt-6 p-4">

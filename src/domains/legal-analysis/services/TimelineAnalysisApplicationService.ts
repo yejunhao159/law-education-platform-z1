@@ -451,15 +451,6 @@ ${focusAreas}
       "consequences": ["后果1"]
     }
   ],
-  "behaviorPatterns": [
-    {
-      "party": "原告",
-      "pattern": "行为模式",
-      "motivation": "主要动机",
-      "consistency": 0.8,
-      "implications": ["影响1"]
-    }
-  ],
   "evidenceChain": {
     "completeness": 0.7,
     "logicalConsistency": 0.8,
@@ -474,14 +465,6 @@ ${focusAreas}
       "likelihood": "medium",
       "impact": "high",
       "mitigation": "应对策略"
-    }
-  ],
-  "predictions": [
-    {
-      "scenario": "预测场景",
-      "probability": 0.65,
-      "reasoning": "推理依据",
-      "factors": ["因素1"]
     }
   ],
   "summary": "整体摘要",
@@ -558,29 +541,14 @@ ${focusAreas}
   /**
    * 分析行为模式
    */
+  /**
+   * 分析行为模式 - 已废弃
+   * @deprecated 根据课堂教学需求简化，行为模式分析过度解读当事人意图，偏离法律教学核心
+   * 保留方法签名以兼容现有代码，但返回空数组
+   */
   private analyzeBehaviorPatterns(events: TimelineEvent[], analysis: any): BehaviorPattern[] {
-    const insights = (analysis as any)?.aiInsights;
-    if (Array.isArray(insights?.behaviorPatterns) && insights.behaviorPatterns.length > 0) {
-      return insights.behaviorPatterns.map((pattern: any) => ({
-        party: pattern.party || '相关方',
-        pattern: pattern.pattern || '行为模式待分析',
-        motivation: pattern.motivation || '待确定',
-        consistency: typeof pattern.consistency === 'number' ? pattern.consistency : 0.7,
-        implications: Array.isArray(pattern.implications) && pattern.implications.length > 0
-          ? pattern.implications
-          : ['需要进一步评估']
-      }));
-    }
-
-    const parties = events.flatMap(e => e.parties || []).filter((p, i, arr) => arr.indexOf(p) === i);
-
-    return parties.slice(0, 3).map(party => ({
-      party,
-      pattern: '需要进一步分析',
-      motivation: '待确定',
-      consistency: 0.7,
-      implications: ['需要详细调查']
-    }));
+    console.log('⚠️ 行为模式分析已废弃，返回空结果');
+    return [];
   }
 
   /**
@@ -641,27 +609,13 @@ ${focusAreas}
   }
 
   /**
-   * 生成预测
+   * 生成预测 - 已废弃
+   * @deprecated 根据课堂教学需求简化，法律判决不应该"预测"，这是误导性的
+   * 保留方法签名以兼容现有代码，但返回空数组
    */
   private generatePredictions(events: TimelineEvent[], analysis: any): CasePrediction[] {
-    const insights = (analysis as any)?.aiInsights;
-    if (Array.isArray(insights?.predictions) && insights.predictions.length > 0) {
-      return insights.predictions.map((prediction: any) => ({
-        scenario: prediction.scenario || '案件走势预测',
-        probability: typeof prediction.probability === 'number' ? prediction.probability : 0.6,
-        reasoning: prediction.reasoning || '基于现有事实的评估',
-        factors: Array.isArray(prediction.factors) ? prediction.factors : []
-      }));
-    }
-
-    return [
-      {
-        scenario: '基于当前时间轴的发展预测',
-        probability: 0.7,
-        reasoning: '根据事件发展模式分析',
-        factors: ['事件发展趋势', '当事人行为模式']
-      }
-    ];
+    console.log('⚠️ 案件预测功能已废弃，返回空结果');
+    return [];
   }
 
   /**

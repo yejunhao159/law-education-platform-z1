@@ -4,7 +4,7 @@
  */
 
 import { EnhancedSocraticService } from '../src/domains/socratic-dialogue/services/EnhancedSocraticService';
-import { SocraticDifficultyLevel, SocraticMode, SocraticDifficulty } from '@/lib/types/socratic';
+import { SocraticDifficultyLevel, SocraticMode, SocraticDifficulty } from '@/src/domains/socratic-dialogue/types';
 
 async function demonstrateEnhancedSocratic() {
   console.log('🎓 启动增强版苏格拉底对话服务演示...\n');
