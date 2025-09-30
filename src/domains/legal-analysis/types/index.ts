@@ -15,16 +15,19 @@ export type {
   TimelineEvent,
   TimelineAnalysis,
   TurningPoint,
-  BehaviorPattern,
-  EvidenceChainAnalysis,
+  EvidenceMapping,  // 替换EvidenceChainAnalysis
   LegalRisk,
-  CasePrediction,
   EventType,
   EventImportance,
   RiskType,
   RiskTypeLiteral,
   TimelineAnalysisRequest,
 } from '../services/types/TimelineTypes';
+
+// 注：以下类型已废弃（2025-09-30重构）
+// - BehaviorPattern: 行为模式分析已移除
+// - EvidenceChainAnalysis: 已简化为EvidenceMapping
+// - CasePrediction: 案件预测功能已移除
 
 export type {
   ExtractionRequest,
