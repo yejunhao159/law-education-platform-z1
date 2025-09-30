@@ -32,7 +32,8 @@ export interface EvidenceQualityAssessment {
   confidence: number;        // AI分析置信度
 }
 
-// 证据链分析结果
+// 证据链分析结果 - 已废弃，保留类型定义以兼容旧代码
+// @deprecated 根据教学需求简化，不再使用证据链分析功能
 export interface EvidenceChainAnalysis {
   chainId: string;
   claimElementId: string;
@@ -53,7 +54,21 @@ export interface EvidenceChainAnalysis {
 // 证据学习问题生成配置
 export interface EvidenceLearningConfig {
   targetLevel: 'beginner' | 'intermediate' | 'advanced';
-  focusAreas: ('relevance' | 'admissibility' | 'probative-value' | 'authentication' | 'chain-of-custody')[];
+  // Phase B1: 扩展focusAreas支持多维度考察
+  focusAreas: (
+    // 证据维度 (原有)
+    | 'relevance' | 'admissibility' | 'probative-value' | 'authentication' | 'chain-of-custody'
+    // 简写兼容 (原有)
+    | 'evidence-relevance' | 'evidence-admissibility' | 'evidence-probative'
+    // 法理维度 (新增)
+    | 'legal-theory' | 'legal-basis' | 'legal-reasoning'
+    // 争议维度 (新增)
+    | 'dispute-judgment' | 'dispute-plaintiff-view' | 'dispute-defendant-view'
+    // 事实维度 (新增)
+    | 'fact-identification' | 'fact-causation' | 'fact-timeline'
+    // 程序维度 (新增)
+    | 'procedure-jurisdiction' | 'procedure-time-limit' | 'procedure-burden'
+  )[];
   questionTypes: ('single-choice' | 'multiple-choice' | 'true-false' | 'case-analysis')[];
   maxQuestions: number;
   includeExplanations: boolean;
@@ -161,71 +176,17 @@ export class EvidenceIntelligenceService {
   }
 
   /**
-   * 证据链智能分析
-   * 分析证据之间的逻辑关系和证明链条
+   * 证据链智能分析 - 已废弃
+   * @deprecated 根据课堂教学需求简化，证据链分析过于复杂，不符合第二幕教学目标
+   * 保留方法签名以兼容旧代码，但返回空数组
    */
   async analyzeEvidenceChains(
     evidence: Evidence[],
     claimElements: ClaimElement[],
     caseContext: any
   ): Promise<EvidenceChainAnalysis[]> {
-    try {
-      logger.info('开始证据链智能分析');
-
-      // 规范化证据数据，确保类型一致性
-      const normalizedEvidence = normalizeEvidenceList(evidence);
-
-      logger.info('证据链分析数据规范化完成', {
-        originalCount: evidence.length,
-        normalizedCount: normalizedEvidence.length
-      });
-
-      const chains: EvidenceChainAnalysis[] = [];
-
-      for (const element of claimElements) {
-        // 找到与该请求权要素相关的证据
-        const relevantEvidence = normalizedEvidence.filter(e => {
-          const relevance = this.mappingService.calculateRelevance(e, element);
-          return relevance > 0.3;
-        });
-
-        if (relevantEvidence.length === 0) continue;
-
-        // 构建证据序列
-        const evidenceSequence = this.buildEvidenceSequence(relevantEvidence, element);
-
-        // AI分析证据链
-        const aiChainAnalysis = await this.performAIChainAnalysis(
-          relevantEvidence,
-          element,
-          caseContext
-        );
-
-        const chainAnalysis: EvidenceChainAnalysis = {
-          chainId: `chain-${element.id}`,
-          claimElementId: element.id,
-          evidenceSequence: evidenceSequence.map(e => e.id),
-          logicalConsistency: aiChainAnalysis.logicalConsistency,
-          completeness: aiChainAnalysis.completeness,
-          criticalGaps: aiChainAnalysis.criticalGaps,
-          redundancies: aiChainAnalysis.redundancies,
-          reinforcements: aiChainAnalysis.reinforcements,
-          aiAssessment: aiChainAnalysis.assessment
-        };
-
-        chains.push(chainAnalysis);
-      }
-
-      logger.info('证据链智能分析完成', {
-        chainsAnalyzed: chains.length
-      });
-
-      return chains;
-
-    } catch (error) {
-      logger.error('证据链智能分析失败', error);
-      throw new Error(`证据链分析失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    }
+    logger.info('证据链分析已废弃，返回空结果');
+    return [];
   }
 
   /**
@@ -400,63 +361,18 @@ export class EvidenceIntelligenceService {
   }
 
   /**
-   * AI证据链分析
+   * AI证据链分析 - 已废弃
+   * @deprecated 与 analyzeEvidenceChains 一同废弃
    */
   private async performAIChainAnalysis(evidence: Evidence[], element: ClaimElement, caseContext: any): Promise<any> {
-    const prompt = `作为证据法专家，请分析以下证据链的逻辑完整性：
-
-请求权要素：${element.name} - ${element.description}
-
-相关证据：
-${evidence.map((e, i) => `${i+1}. ${e.id}: ${e.content}`).join('\n')}
-
-请分析：
-1. 逻辑一致性(0-1): 证据之间是否存在逻辑矛盾
-2. 完整性(0-1): 证据链是否足以证明该要素
-3. 关键缺口: 缺少哪些关键证据
-4. 冗余证据: 哪些证据存在重复
-5. 相互佐证关系: 证据之间的相互支持关系
-
-JSON格式返回：
-{
-  "logicalConsistency": 0.8,
-  "completeness": 0.7,
-  "criticalGaps": ["缺口1", "缺口2"],
-  "redundancies": ["冗余证据1"],
-  "reinforcements": [
-    {
-      "evidenceId1": "证据1",
-      "evidenceId2": "证据2",
-      "reinforcementStrength": 0.8,
-      "reasoning": "相互佐证原因"
-    }
-  ],
-  "assessment": "综合评估意见"
-}`;
-
-    try {
-      const response = await this.callAIService(prompt);
-
-      // 处理markdown包装的JSON响应
-      let jsonContent = response;
-      if (response.includes('```json')) {
-        const match = response.match(/```json\n([\s\S]*?)\n```/);
-        if (match && match[1]) {
-          jsonContent = match[1];
-        }
-      }
-
-      return JSON.parse(jsonContent);
-    } catch (error) {
-      return {
-        logicalConsistency: 0.7,
-        completeness: 0.6,
-        criticalGaps: ['需要补充关键证据'],
-        redundancies: [],
-        reinforcements: [],
-        assessment: '证据链基本完整，建议进一步补强'
-      };
-    }
+    return {
+      logicalConsistency: 0,
+      completeness: 0,
+      criticalGaps: [],
+      redundancies: [],
+      reinforcements: [],
+      assessment: '证据链分析功能已移除'
+    };
   }
 
   /**
