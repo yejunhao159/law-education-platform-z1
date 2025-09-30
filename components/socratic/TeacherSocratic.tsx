@@ -246,8 +246,8 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
   // 提取AI回答中的ABCDE选项
   const extractChoices = (content: string): Array<{ id: string; content: string }> => {
     const choices: Array<{ id: string; content: string }> = [];
-    // 匹配 A) xxx、B) xxx 格式
-    const regex = /([A-E])\)\s*([^\n]+)/g;
+    // 匹配多种格式: A) xxx、A. xxx、A: xxx、A、xxx、A） xxx（全角）
+    const regex = /([A-E])[)）.、:：]\s*([^\n]+)/g;
     let match;
     while ((match = regex.exec(content)) !== null) {
       choices.push({
@@ -255,6 +255,22 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
         content: match[2].trim()
       });
     }
+
+    // 如果没有找到选项，尝试更宽松的匹配
+    if (choices.length === 0) {
+      // 匹配行首的 A xxx 格式
+      const looseRegex = /^([A-E])\s+([^\n]+)/gm;
+      while ((match = looseRegex.exec(content)) !== null) {
+        // 确保不是普通句子开头（如 A person...）
+        if (match[2] && !match[2].match(/^(person|man|woman|child|student|teacher)/i)) {
+          choices.push({
+            id: match[1],
+            content: match[2].trim()
+          });
+        }
+      }
+    }
+
     return choices;
   };
 
@@ -445,8 +461,8 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
                         </span>
                         <span className="text-xs text-gray-500 ml-2">{msg.timestamp}</span>
                       </div>
-                      <div className="text-sm">{msg.content}</div>
-                      
+                      <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
+
                       {/* AI选项 - ISSUE方法论ABCDE选项 */}
                       {msg.choices && msg.choices.length > 0 && (
                         <div className="mt-3 pt-3 border-t border-blue-200">

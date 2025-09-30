@@ -8,7 +8,6 @@
 import { DocumentPreprocessor } from '../intelligence/preprocessor';
 import { RuleExtractor } from '../intelligence/rule-extractor';
 import { SmartMerger } from '../intelligence/smart-merger';
-import { ProvisionMapper } from '../intelligence/provision-mapper';
 import { callUnifiedAI } from '../../../infrastructure/ai/AICallProxy';
 
 import {
@@ -18,16 +17,14 @@ import {
   TimelineAnalysis,
   TimelineEvent,
   TurningPoint,
-  BehaviorPattern,
-  EvidenceChainAnalysis,
+  EvidenceMapping,
   LegalRisk,
-  CasePrediction,
   AnalysisType,
   TimelineErrorCode,
-  ProcessedDocument,
   AITimelineRequest,
   AITimelineResponse
 } from './types/TimelineTypes';
+import { ProcessedDocument } from '@/types/legal-intelligence';
 
 export class TimelineAnalysisApplicationService {
   private apiKey: string;
@@ -293,10 +290,8 @@ export class TimelineAnalysisApplicationService {
     console.log('Step 6: 生成时间轴分析...');
 
     const keyTurningPoints = this.identifyTurningPoints(events, combinedAnalysis);
-    const behaviorPatterns = this.analyzeBehaviorPatterns(events, combinedAnalysis);
-    const evidenceChain = this.analyzeEvidenceChain(events, combinedAnalysis);
+    const evidenceMapping = this.generateEvidenceMapping(events, combinedAnalysis);
     const legalRisks = this.analyzeLegalRisks(combinedAnalysis);
-    const predictions = this.generatePredictions(events, combinedAnalysis);
 
     const aiWarnings = (combinedAnalysis as any).aiWarnings;
     const analysisSource: 'ai' | 'rule' = (combinedAnalysis as any).aiInsights ? 'ai' : 'rule';
@@ -304,10 +299,8 @@ export class TimelineAnalysisApplicationService {
     // 调试日志：检查生成的分析结果
     console.log('🎯 生成的时间轴分析结果:', {
       turningPointsCount: keyTurningPoints.length,
-      behaviorPatternsCount: behaviorPatterns.length,
       legalRisksCount: legalRisks.length,
-      predictionsCount: predictions.length,
-      evidenceChainCompleteness: evidenceChain.completeness,
+      evidenceMappingStrength: evidenceMapping?.strength || 0,
       analysisSource,
       hasAIInsights: !!(combinedAnalysis as any).aiInsights
     });
@@ -315,10 +308,8 @@ export class TimelineAnalysisApplicationService {
     return {
       keyTurningPoints,  // 保留旧字段名以向后兼容
       turningPoints: keyTurningPoints,  // 添加新字段名以匹配AI响应
-      behaviorPatterns,
-      evidenceChain,
+      evidenceMapping,
       legalRisks,
-      predictions,
       summary: this.generateSummary(events, combinedAnalysis),
       confidence: combinedAnalysis.confidence || 0.8,
       aiWarnings,
@@ -333,13 +324,14 @@ export class TimelineAnalysisApplicationService {
     const suggestions: string[] = [];
 
     // 基于转折点的建议
-    if (analysis.keyTurningPoints.length > 0) {
-      suggestions.push(`发现${analysis.keyTurningPoints.length}个关键转折点，建议重点关注这些时间节点`);
+    const turningPoints = analysis.keyTurningPoints || analysis.turningPoints || [];
+    if (turningPoints.length > 0) {
+      suggestions.push(`发现${turningPoints.length}个关键转折点，建议重点关注这些时间节点`);
     }
 
-    // 基于证据链的建议
-    if (analysis.evidenceChain.completeness < 0.7) {
-      suggestions.push('证据链存在明显缺口，建议补充相关证据材料');
+    // 基于证据映射的建议
+    if (analysis.evidenceMapping && analysis.evidenceMapping.strength < 0.7) {
+      suggestions.push('证据强度不足，建议补充相关证据材料');
     }
 
     // 基于风险的建议
@@ -542,44 +534,53 @@ ${focusAreas}
    * 分析行为模式
    */
   /**
-   * 分析行为模式 - 已废弃
-   * @deprecated 根据课堂教学需求简化，行为模式分析过度解读当事人意图，偏离法律教学核心
-   * 保留方法签名以兼容现有代码，但返回空数组
+   * 生成简化的证据映射
+   * 替代复杂的证据链分析
    */
-  private analyzeBehaviorPatterns(events: TimelineEvent[], analysis: any): BehaviorPattern[] {
-    console.log('⚠️ 行为模式分析已废弃，返回空结果');
-    return [];
-  }
+  private generateEvidenceMapping(events: TimelineEvent[], _analysis: any): EvidenceMapping | undefined {
+    try {
+      const evidenceToFacts = new Map<string, string[]>();
+      const factToEvidence = new Map<string, string[]>();
 
-  /**
-   * 分析证据链
-   */
-  private analyzeEvidenceChain(events: TimelineEvent[], analysis: any): EvidenceChainAnalysis {
-    const insights = (analysis as any)?.aiInsights;
-    if (insights?.evidenceChain) {
+      // 从事件中提取证据和事实的映射关系
+      events.forEach((event, index) => {
+        const factId = event.id || `fact-${index}`;
+        const evidence = event.evidence || [];
+
+        // 建立事实到证据的映射
+        if (evidence.length > 0) {
+          factToEvidence.set(factId, evidence);
+
+          // 建立证据到事实的反向映射
+          evidence.forEach(ev => {
+            const evId = typeof ev === 'string' ? ev : (ev as any).id || String(ev);
+            if (!evidenceToFacts.has(evId)) {
+              evidenceToFacts.set(evId, []);
+            }
+            evidenceToFacts.get(evId)!.push(factId);
+          });
+        }
+      });
+
+      // 计算整体强度
+      const strength = evidenceToFacts.size > 0 ?
+        Math.min(1, evidenceToFacts.size / (events.length * 0.7)) : 0;
+
+      // 识别证据缺口
+      const gaps = events
+        .filter(e => !e.evidence || e.evidence.length === 0)
+        .map(e => `缺少证据支持: ${e.title || e.description || e.date}`);
+
       return {
-        completeness: typeof insights.evidenceChain.completeness === 'number'
-          ? insights.evidenceChain.completeness
-          : 0.6,
-        logicalConsistency: typeof insights.evidenceChain.logicalConsistency === 'number'
-          ? insights.evidenceChain.logicalConsistency
-          : 0.7,
-        gaps: Array.isArray(insights.evidenceChain.gaps) ? insights.evidenceChain.gaps : [],
-        strengths: Array.isArray(insights.evidenceChain.strengths) ? insights.evidenceChain.strengths : [],
-        weaknesses: Array.isArray(insights.evidenceChain.weaknesses) ? insights.evidenceChain.weaknesses : []
+        evidenceToFacts,
+        factToEvidence,
+        strength,
+        gaps: gaps.length > 0 ? gaps : undefined
       };
+    } catch (error) {
+      console.warn('生成证据映射失败:', error);
+      return undefined;
     }
-
-    const evidenceCount = events.reduce((count, event) => count + (event.evidence?.length || 0), 0);
-    const completeness = Math.min(evidenceCount / Math.max(events.length, 1), 1.0);
-
-    return {
-      completeness,
-      logicalConsistency: 0.8,
-      gaps: evidenceCount < events.length ? ['部分事件缺少证据支撑'] : [],
-      strengths: ['时间顺序清晰'],
-      weaknesses: completeness < 0.5 ? ['证据材料不足'] : []
-    };
   }
 
   /**
@@ -606,16 +607,6 @@ ${focusAreas}
         mitigation: '咨询专业律师'
       }
     ];
-  }
-
-  /**
-   * 生成预测 - 已废弃
-   * @deprecated 根据课堂教学需求简化，法律判决不应该"预测"，这是误导性的
-   * 保留方法签名以兼容现有代码，但返回空数组
-   */
-  private generatePredictions(events: TimelineEvent[], analysis: any): CasePrediction[] {
-    console.log('⚠️ 案件预测功能已废弃，返回空结果');
-    return [];
   }
 
   /**

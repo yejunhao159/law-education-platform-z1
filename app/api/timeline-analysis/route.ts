@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     const enhancedRequestData = {
       ...requestData,
       includeAI: true,
-      analysisType: 'comprehensive' as const
+      analysisType: AnalysisType.COMPREHENSIVE
     };
 
     // 执行业务逻辑

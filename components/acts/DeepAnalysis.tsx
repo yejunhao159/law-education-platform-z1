@@ -252,8 +252,7 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
 
   // 新增：四大分析功能的状态管理
   const [disputeAnalysis, setDisputeAnalysis] = useState<any>(null)
-  const [claimAnalysis, setClaimAnalysis] = useState<any>(null)
-  const [evidenceAnalysis, setEvidenceAnalysis] = useState<any>(null)
+  // 批量请求权和证据分析已移除，改为按需加载
   const [analysisProgress, setAnalysisProgress] = useState<string>('准备开始分析...')
 
 
@@ -337,10 +336,10 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
         return
       }
 
-      // 并行调用四个API
-      setAnalysisProgress('🔄 并行调用四大分析API...')
-      const [timelineResult, disputeResult, claimResult, evidenceResult] = await Promise.allSettled([
-        // 1. 时间轴分析（已有）
+      // 优化后的并行调用：只保留2个核心API
+      setAnalysisProgress('🔄 执行核心智能分析...')
+      const [timelineResult, disputeResult] = await Promise.allSettled([
+        // 1. 时间轴分析（关键转折点和风险）
         fetch('/api/timeline-analysis', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -348,18 +347,17 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
             events: validEvents,
             analysisType: 'comprehensive',
             includeAI: true,
-            focusAreas: ['turning_points', 'behavior_patterns', 'evidence_chain', 'legal_risks'],
+            focusAreas: ['turning_points', 'legal_risks'],  // 删除废弃的behavior_patterns和evidence_chain
             options: {
               enableRiskAnalysis: true,
-              enablePredictions: true,
-              enableEvidenceChain: true,
+              enableEvidenceMapping: true,  // 使用简化的证据映射
               maxTurningPoints: 5,
               confidenceThreshold: 0.7
             }
           })
         }).then(res => res.ok ? res.json() : Promise.reject(new Error(`Timeline analysis failed: ${res.status}`))),
 
-        // 2. 争议点识别
+        // 2. 争议点识别（教学重点）
         fetch('/api/dispute-analysis', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -375,51 +373,11 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
               language: 'zh-CN'
             }
           })
-        }).then(res => res.ok ? res.json() : Promise.reject(new Error(`Dispute analysis failed: ${res.status}`))),
-
-        // 3. 请求权分析
-        fetch('/api/legal-analysis/claims', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            events: validEvents,
-            caseType: 'civil',
-            focusAreas: ['claims', 'defenses', 'limitations', 'burden-of-proof'],
-            depth: 'comprehensive'
-          })
-        }).then(res => res.ok ? res.json() : Promise.reject(new Error(`Claim analysis failed: ${res.status}`))),
-
-        // 4. 证据质量评估 - AI增强版
-        fetch('/api/evidence-quality', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            evidence: evidenceItemsForQuiz.map(ev => ({
-              id: ev.id,
-              content: ev.content,
-              type: ev.type,
-              relatedEvents: ev.relatedEvents,
-              metadata: ev.metadata
-            })),
-            claimElements: validEvents.map(e => ({
-              id: e.id || e.date,
-              name: e.title,
-              description: e.description || e.title,
-              type: e.type || 'fact'
-            })),
-            mode: 'comprehensive', // 使用AI增强的综合分析模式
-            caseContext: {
-              basicInfo: {
-                caseNumber: sourceCaseData?.basicInfo?.caseNumber,
-                caseType: sourceCaseData?.basicInfo?.caseType || 'civil',
-                court: sourceCaseData?.basicInfo?.court
-              },
-              disputes: (sourceCaseData as any)?.disputes || [],
-              timeline: timelineEvents
-            }
-          })
-        }).then(res => res.ok ? res.json() : Promise.reject(new Error(`Evidence analysis failed: ${res.status}`)))
+        }).then(res => res.ok ? res.json() : Promise.reject(new Error(`Dispute analysis failed: ${res.status}`)))
       ])
+
+      // 证据质量评估改为按需加载（当用户需要时才触发）
+      // 请求权分析保留为单个事件点击时调用（EventClaimAnalysisDialog）
 
       setAnalysisProgress('📊 处理分析结果...')
 
@@ -470,7 +428,7 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
           analysisMethod: aiMode,
           turningPoints,
           riskCount: analysisData?.risks?.length || 0,
-          evidenceChain: analysisData?.evidenceChain,
+          evidenceMapping: analysisData?.evidenceMapping,
           fallbackHint,
           emptyHint,
           warnings: aiWarnings
@@ -551,132 +509,9 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
         })
       }
 
-      // 处理请求权分析结果
-      if (claimResult.status === 'fulfilled' && claimResult.value.id) {
-        setClaimAnalysis(claimResult.value)
-        const primaryClaims = claimResult.value.claims?.primary?.length || 0
-        const defenses = claimResult.value.claims?.defense?.length || 0
-        const aiConfidence = claimResult.value.metadata?.confidence
-        const emptyHint = primaryClaims === 0
-          ? '未生成任何主要请求权，可能是AI调用失败或降级数据'
-          : undefined
-
-        const degraded = Boolean(emptyHint)
-
-        recordDiagnostic({
-          模块: '请求权分析',
-          状态: degraded ? '失败' : '成功',
-          AI模式: claimResult.value.metadata?.model || 'unknown',
-          数据摘要: `主要请求权 ${primaryClaims} 项 / 抗辩 ${defenses} 项`,
-          触发条件: 'HTTP 200 & payload.id存在',
-          提示: emptyHint
-        })
-
-        const logPayload = {
-          primaryClaims,
-          defenses,
-          burdenOfProof: claimResult.value.burdenOfProof?.length || 0,
-          confidence: aiConfidence,
-          emptyHint
-        }
-
-        if (degraded) {
-          console.warn('⚠️ 请求权分析降级:', logPayload)
-          if (emptyHint) {
-            setAnalysisError(prev => prev ?? emptyHint)
-          }
-        } else {
-          console.log('✅ 请求权分析完成', logPayload)
-        }
-      } else {
-        const errorMsg = claimResult.status === 'rejected'
-          ? (claimResult.reason?.message || claimResult.reason?.toString() || '请求权分析服务异常')
-          : (claimResult.value?.error || '请求权分析返回格式异常');
-        console.warn('⚠️ 请求权分析失败:', errorMsg)
-        if (!analysisError) { // 避免覆盖之前的错误信息
-          setAnalysisError(`请求权分析失败: ${errorMsg}`)
-        }
-
-        recordDiagnostic({
-          模块: '请求权分析',
-          状态: '失败',
-          触发条件: claimResult.status === 'rejected' ? 'Promise rejected' : '缺少必要字段',
-          提示: errorMsg
-        })
-      }
-
-      // 处理证据分析结果 - 适配AI增强版响应结构
-      if (evidenceResult.status === 'fulfilled' && evidenceResult.value.success) {
-        const enhancedEvidence = evidenceResult.value;
-
-        // 转换为兼容原有显示逻辑的格式
-        const adaptedEvidenceAnalysis = {
-          success: true,
-          mode: enhancedEvidence.mode,
-          // 保持向下兼容的mappings字段
-          mappings: enhancedEvidence.basicMappings || enhancedEvidence.mappings || [],
-          // AI增强的字段
-          qualityAssessments: enhancedEvidence.qualityAssessments || [],
-          chainAnalyses: enhancedEvidence.chainAnalyses || [],
-          summary: enhancedEvidence.summary || {},
-          // 传统字段
-          analysis: enhancedEvidence.analysis,
-          unmappedElements: enhancedEvidence.unmappedElements || [],
-          conflicts: enhancedEvidence.conflicts || []
-        };
-
-        setEvidenceAnalysis(adaptedEvidenceAnalysis);
-
-        const qualityCount = enhancedEvidence.qualityAssessments?.length || 0
-        const chainCount = enhancedEvidence.chainAnalyses?.length || 0
-        const emptyHint = qualityCount === 0 && chainCount === 0
-          ? 'AI未返回质量或证据链分析，可能使用了降级数据'
-          : undefined
-
-        const degraded = Boolean(emptyHint)
-
-        recordDiagnostic({
-          模块: '证据分析',
-          状态: degraded ? '失败' : '成功',
-          AI模式: enhancedEvidence.mode || 'unknown',
-          数据摘要: `质量评估 ${qualityCount} 条 / 证据链 ${chainCount} 条`,
-          触发条件: 'HTTP 200 & success=true',
-          提示: emptyHint
-        })
-
-        if (degraded) {
-          console.warn('⚠️ 证据分析降级:', {
-            mode: enhancedEvidence.mode,
-            qualityCount,
-            chainCount,
-            emptyHint
-          })
-          if (emptyHint) {
-            setAnalysisError(prev => prev ?? emptyHint)
-          }
-        } else {
-          console.log('✅ AI增强证据分析完成', {
-            mode: enhancedEvidence.mode,
-            qualityCount,
-            chainCount
-          })
-        }
-      } else {
-        const errorMsg = evidenceResult.status === 'rejected'
-          ? (evidenceResult.reason?.message || evidenceResult.reason?.toString() || 'AI证据分析服务异常')
-          : (evidenceResult.value?.error || 'AI证据分析返回格式异常');
-        console.warn('⚠️ AI证据分析失败:', errorMsg);
-        if (!analysisError) {
-          setAnalysisError(`证据分析失败: ${errorMsg}`);
-        }
-
-        recordDiagnostic({
-          模块: '证据分析',
-          状态: '失败',
-          触发条件: evidenceResult.status === 'rejected' ? 'Promise rejected' : 'success!==true',
-          提示: errorMsg
-        })
-      }
+      // 批量请求权分析已删除，改为单个事件点击时分析
+      // 保留EventClaimAnalysisDialog用于深度分析
+      // 证据质量评估改为按需加载，不再默认执行
 
       if (diagnostics.length > 0) {
         console.groupCollapsed('🛰️ 四大分析诊断信息 (展开查看详细原因为何显示为成功或失败)')
@@ -817,7 +652,7 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
                       </div>
 
                       {/* AI增强信息 */}
-                      {(analysisResult || disputeAnalysis || claimAnalysis || evidenceAnalysis) && (
+                      {(analysisResult || disputeAnalysis) && (
                         <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
                           {/* 检查是否为转折点 - 兼容两种字段名 */}
                           {(analysisResult?.keyTurningPoints || analysisResult?.turningPoints)?.some((tp: TurningPoint) =>
@@ -862,24 +697,8 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
                             return null;
                           })()}
 
-                          {/* 请求权标记 - 添加兜底处理 */}
-                          {claimAnalysis?.claims?.primary?.some((claim: any) => {
-                            // 兜底处理：处理可能的undefined和字段缺失
-                            const events = claim?.events || claim?.relatedEvents || [];
-                            return events.includes(event.id || event.date) ||
-                                   events.includes(`E${index + 1}`) ||
-                                   event.type === 'legal' || event.type === 'claim';
-                          }) && (
-                            <div className="flex items-center gap-2 text-sm text-purple-600">
-                              <Gavel className="w-4 h-4" />
-                              <span className="font-medium">请求权基础</span>
-                            </div>
-                          )}
-
-                          {/* 证据标记 */}
-                          {getEvidenceCount(event) > 0 && evidenceAnalysis?.mappings?.some((mapping: any) =>
-                            mapping.evidenceId === (event.id || event.date)
-                          ) && (
+                          {/* 证据标记 - 基于本地证据数量 */}
+                          {getEvidenceCount(event) > 0 && (
                             <div className="flex items-center gap-2 text-sm text-green-600">
                               <FileText className="w-4 h-4" />
                               <span className="font-medium">关键证据({getEvidenceCount(event)})</span>
@@ -906,204 +725,113 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
             </div>
           </div>
 
-          {/* 综合AI分析结果 */}
-          {(analysisResult || disputeAnalysis || claimAnalysis || evidenceAnalysis) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* 关键转折点 & 争议焦点 */}
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                <h5 className="font-semibold flex items-center gap-2 mb-3">
-                  <TrendingUp className="w-5 h-5 text-orange-600" />
-                  关键转折点与争议焦点
-                </h5>
-                <div className="space-y-2">
-                  {/* 时间轴转折点 - 修复字段名：keyTurningPoints改为turningPoints */}
-                  {(analysisResult?.keyTurningPoints || analysisResult?.turningPoints)?.slice(0, 3).map((point: TurningPoint, index: number) => (
-                    <div key={`tp-${index}`} className="text-sm">
-                      <div className="flex items-center gap-2">
-                        <TrendingUp className="w-3 h-3 text-orange-600" />
-                        <div className="font-medium text-orange-900">{point.date}</div>
-                      </div>
-                      <div className="text-orange-700 ml-5">{point.legalSignificance}</div>
-                    </div>
-                  ))}
-                  {/* 争议焦点 */}
-                  {disputeAnalysis?.disputes?.slice(0, 2).map((dispute: any, index: number) => (
-                    <div key={`dispute-${index}`} className="text-sm">
-                      <div className="flex items-center gap-2">
-                        <AlertCircle className="w-3 h-3 text-blue-600" />
-                        <div className="font-medium text-blue-900">{dispute.title || '争议焦点'}</div>
-                      </div>
-                      <div className="text-blue-700 ml-5">{dispute.description?.substring(0, 50) || '待分析'}...</div>
-                    </div>
-                  ))}
-                  {(!(analysisResult?.keyTurningPoints || analysisResult?.turningPoints)?.length && !disputeAnalysis?.disputes?.length) && (
-                    <div className="text-sm text-gray-500 italic">暂无关键转折点或争议数据</div>
-                  )}
-                </div>
-              </div>
-
-              {/* 请求权分析 & 法律风险 */}
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <h5 className="font-semibold flex items-center gap-2 mb-3">
-                  <Gavel className="w-5 h-5 text-red-600" />
-                  请求权与风险
-                </h5>
-                <div className="space-y-2">
-                  {/* 请求权分析 */}
-                  {claimAnalysis?.claims?.primary?.slice(0, 2).map((claim: any, index: number) => (
-                    <div key={`claim-${index}`} className="text-sm">
-                      <div className="flex items-center gap-2">
-                        <Gavel className="w-3 h-3 text-purple-600" />
-                        <div className="font-medium text-purple-900">
-                          {claim.type || claim.name || '请求权基础'}
+          {/* 综合AI分析结果 - 精简布局 */}
+          {(analysisResult || disputeAnalysis) && (
+            <div className="space-y-6">
+              {/* 主要分析结果 - 全宽展示 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* 关键转折点 */}
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <h5 className="font-semibold flex items-center gap-2 mb-3">
+                    <TrendingUp className="w-5 h-5 text-orange-600" />
+                    关键转折点
+                  </h5>
+                  <div className="space-y-3">
+                    {(analysisResult?.keyTurningPoints || analysisResult?.turningPoints)?.slice(0, 3).map((point: TurningPoint, index: number) => (
+                      <div key={`tp-${index}`} className="text-sm">
+                        <div className="flex items-center gap-2 mb-1">
+                          <TrendingUp className="w-3 h-3 text-orange-600" />
+                          <div className="font-medium text-orange-900">{point.date}</div>
                         </div>
+                        <div className="text-orange-700 ml-5">{point.legalSignificance}</div>
                       </div>
-                      <div className="text-purple-700 ml-5">
-                        {claim.description?.substring(0, 50) || '待分析'}...
-                      </div>
-                    </div>
-                  ))}
-                  {/* 法律风险 */}
-                  {analysisResult?.legalRisks?.slice(0, 2).map((risk, index) => (
-                    <div key={`risk-${index}`} className="text-sm">
-                      <div className="flex items-center gap-2">
-                        <AlertTriangle className="w-3 h-3 text-red-600" />
-                        <Badge variant={risk.likelihood === 'high' ? 'destructive' : 'secondary'} className="text-xs">
-                          {risk.likelihood === 'high' ? '高风险' :
-                           risk.likelihood === 'medium' ? '中风险' : '低风险'}
-                        </Badge>
-                        <span className="text-red-700">{risk.description}</span>
-                      </div>
-                    </div>
-                  ))}
-                  {(!claimAnalysis?.claims?.primary?.length && !analysisResult?.legalRisks?.length) && (
-                    <div className="text-sm text-gray-500 italic">暂无请求权或风险数据</div>
-                  )}
+                    ))}
+                    {!(analysisResult?.keyTurningPoints || analysisResult?.turningPoints)?.length && (
+                      <div className="text-sm text-gray-500 italic">暂无关键转折点数据</div>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* 证据体系 - 增强显示证据链关系 */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h5 className="font-semibold flex items-center gap-2 mb-3">
-                  <FileText className="w-5 h-5 text-blue-600" />
-                  证据链条分析
-                </h5>
-                <div className="space-y-2 text-sm">
-                  {/* 证据链完整性 */}
-                  {analysisResult?.evidenceChain && (
-                    <>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">完整性</span>
-                        <span className="font-medium text-blue-700">
-                          {Math.round(analysisResult.evidenceChain.completeness * 100)}%
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">逻辑一致性</span>
-                        <span className="font-medium text-blue-700">
-                          {Math.round(analysisResult.evidenceChain.logicalConsistency * 100)}%
-                        </span>
-                      </div>
-                      {/* 证据优势 */}
-                      {analysisResult.evidenceChain.strengths?.length > 0 && (
-                        <div className="mt-2">
-                          <div className="font-medium text-green-700">证据优势：</div>
-                          <ul className="text-xs text-green-600 ml-2 mt-1">
-                            {analysisResult.evidenceChain.strengths.slice(0, 2).map((strength, idx) => (
-                              <li key={idx}>• {strength}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  {/* 证据质量评估 */}
-                  {evidenceAnalysis?.mappings?.slice(0, 3).map((mapping: any, index: number) => (
-                    <div key={`evidence-${index}`} className="flex items-center justify-between">
-                      <span className="text-blue-600 text-xs">{mapping.evidenceId}</span>
-                      <Badge variant="outline" className="text-xs">
-                        质量: {Math.round((mapping.relevance || 0.7) * 100)}%
-                      </Badge>
-                    </div>
-                  ))}
-                  {/* 证据缺口 */}
-                  {analysisResult?.evidenceChain?.gaps && analysisResult.evidenceChain.gaps.length > 0 && (
-                    <div className="mt-2 text-xs text-orange-600">
-                      <span className="font-medium">证据缺口：</span>
-                      {analysisResult.evidenceChain.gaps.join('、')}
-                    </div>
-                  )}
-                  {(!analysisResult?.evidenceChain && !evidenceAnalysis?.mappings?.length) && (
-                    <div className="text-sm text-gray-500 italic">暂无证据分析数据</div>
-                  )}
-                </div>
-              </div>
-
-              {/* 行为模式分析 - 替换AI预测模块 */}
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <h5 className="font-semibold flex items-center gap-2 mb-3">
-                  <Brain className="w-5 h-5 text-green-600" />
-                  行为模式与策略建议
-                </h5>
-                <div className="space-y-2">
-                  {/* 行为模式分析 */}
-                  {analysisResult?.behaviorPatterns?.slice(0, 2).map((pattern, index) => (
-                    <div key={`pattern-${index}`} className="text-sm">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge variant="secondary" className="text-xs">
-                          {pattern.party}
-                        </Badge>
-                        <span className="text-green-700 font-medium">{pattern.pattern}</span>
-                      </div>
-                      <div className="text-green-600 text-xs ml-2">
-                        动机：{pattern.motivation}
-                      </div>
-                    </div>
-                  ))}
-                  {/* 综合建议 */}
-                  {claimAnalysis?.strategy?.recommendations?.slice(0, 2).map((rec: any, index: number) => {
-                    // 处理不同格式的建议数据
-                    const renderRecommendation = () => {
-                      if (typeof rec === 'string') {
-                        return rec;
-                      }
-                      if (typeof rec === 'object' && rec !== null) {
-                        // 如果是对象，尝试渲染关键信息
-                        if (rec.action) {
-                          return (
-                            <div>
-                              <div className="font-medium">{rec.action}</div>
-                              {rec.rationale && (
-                                <div className="text-xs mt-1 text-gray-600">{rec.rationale}</div>
-                              )}
-                              {rec.priority && (
-                                <span className="text-xs text-amber-600 ml-2">
-                                  优先级: {rec.priority}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        }
-                        // 如果对象没有action字段，尝试显示其他内容
-                        return rec.description || rec.content || rec.text || '建议内容';
-                      }
-                      return '建议内容';
-                    };
-
-                    return (
-                      <div key={`rec-${index}`} className="text-sm">
+                {/* 争议焦点 */}
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <h5 className="font-semibold flex items-center gap-2 mb-3">
+                    <Target className="w-5 h-5 text-yellow-600" />
+                    争议焦点分析
+                  </h5>
+                  <div className="space-y-3">
+                    {disputeAnalysis?.disputes?.slice(0, 3).map((dispute: any, index: number) => (
+                      <div key={`dispute-${index}`} className="text-sm">
                         <div className="flex items-start gap-2">
-                          <Star className="w-3 h-3 text-green-600 mt-1" />
-                          <div className="text-green-700 flex-1">
-                            {renderRecommendation()}
+                          <span className="text-yellow-700 font-medium">{index + 1}.</span>
+                          <div className="flex-1">
+                            <div className="text-gray-700">{dispute.description}</div>
+                            {dispute.difficulty && (
+                              <Badge variant="outline" className="text-xs mt-1">
+                                难度: {dispute.difficulty === 'high' ? '高' :
+                                       dispute.difficulty === 'medium' ? '中' : '低'}
+                              </Badge>
+                            )}
                           </div>
                         </div>
                       </div>
-                    );
-                  })}
-                  {(!analysisResult?.behaviorPatterns?.length && !claimAnalysis?.strategy?.recommendations?.length) && (
-                    <div className="text-sm text-gray-500 italic">暂无行为模式或建议数据</div>
-                  )}
+                    ))}
+                    {!disputeAnalysis?.disputes?.length && (
+                      <div className="text-sm text-gray-500 italic">暂无争议焦点数据</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 风险与教学建议 - 合并展示 */}
+              <div className="bg-gradient-to-r from-red-50 to-green-50 border border-gray-200 rounded-lg p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* 法律风险 */}
+                  <div>
+                    <h5 className="font-semibold flex items-center gap-2 mb-3">
+                      <AlertTriangle className="w-5 h-5 text-red-600" />
+                      法律风险提示
+                    </h5>
+                    <div className="space-y-2">
+                      {analysisResult?.legalRisks?.slice(0, 2).map((risk, index) => (
+                        <div key={`risk-${index}`} className="text-sm">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="w-3 h-3 text-red-600 mt-1" />
+                            <div>
+                              <Badge variant={risk.likelihood === 'high' ? 'destructive' : 'secondary'} className="text-xs mb-1">
+                                {risk.likelihood === 'high' ? '高' :
+                                 risk.likelihood === 'medium' ? '中' : '低'}风险
+                              </Badge>
+                              <div className="text-red-700">{risk.description}</div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      {!analysisResult?.legalRisks?.length && (
+                        <div className="text-sm text-gray-500 italic">暂无风险数据</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 教学建议 */}
+                  <div>
+                    <h5 className="font-semibold flex items-center gap-2 mb-3">
+                      <Brain className="w-5 h-5 text-green-600" />
+                      教学重点提示
+                    </h5>
+                    <div className="space-y-2">
+                      {analysisResult?.summary ? (
+                        <div className="text-sm text-green-700">
+                          <p className="line-clamp-3">{analysisResult.summary}</p>
+                        </div>
+                      ) : analysisResult?.turningPoints?.length > 0 ? (
+                        <div className="text-sm text-green-700">
+                          <p>建议重点关注{analysisResult.turningPoints.length}个关键转折点，引导学生理解案件发展脉络。</p>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500 italic">分析完成后显示教学建议</div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

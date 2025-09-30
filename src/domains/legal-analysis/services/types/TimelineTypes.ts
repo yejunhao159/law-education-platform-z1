@@ -24,10 +24,8 @@ export interface TimelineEvent {
 export interface TimelineAnalysis {
   keyTurningPoints?: TurningPoint[];  // 兼容旧版本
   turningPoints?: TurningPoint[];      // AI返回的新字段名
-  behaviorPatterns: BehaviorPattern[];
-  evidenceChain: EvidenceChainAnalysis;
+  evidenceMapping?: EvidenceMapping;   // 简化的证据映射（替代复杂的evidenceChain）
   legalRisks: LegalRisk[];
-  predictions: CasePrediction[];
   summary: string;
   confidence: number;
   aiWarnings?: string[];
@@ -43,20 +41,12 @@ export interface TurningPoint {
   consequences: string[];
 }
 
-export interface BehaviorPattern {
-  party: string;
-  pattern: string;
-  motivation: string;
-  consistency: number;
-  implications: string[];
-}
-
-export interface EvidenceChainAnalysis {
-  completeness: number;
-  logicalConsistency: number;
-  gaps: string[];
-  strengths: string[];
-  weaknesses: string[];
+// 简化的证据映射（替代复杂的EvidenceChainAnalysis）
+export interface EvidenceMapping {
+  evidenceToFacts: Map<string, string[]>;  // 证据ID -> 事实ID[]
+  factToEvidence: Map<string, string[]>;   // 事实ID -> 证据ID[]
+  strength: number;  // 整体证据强度 0-1
+  gaps?: string[];   // 保留缺失证据提示
 }
 
 export interface LegalRisk {
@@ -65,13 +55,6 @@ export interface LegalRisk {
   likelihood: 'high' | 'medium' | 'low';
   impact: 'high' | 'medium' | 'low';
   mitigation: string;
-}
-
-export interface CasePrediction {
-  scenario: string;
-  probability: number;
-  reasoning: string;
-  factors: string[];
 }
 
 // ========== 枚举类型 ==========
@@ -129,8 +112,7 @@ export interface TimelineAnalysisRequest {
 
 export interface TimelineAnalysisOptions {
   enableRiskAnalysis?: boolean;
-  enablePredictions?: boolean;
-  enableEvidenceChain?: boolean;
+  enableEvidenceMapping?: boolean;  // 简化的证据映射
   maxTurningPoints?: number;
   confidenceThreshold?: number;
 }
@@ -205,20 +187,5 @@ export interface AITimelineResponse {
 
 // ========== 处理结果类型 ==========
 
-export interface ProcessedDocument {
-  originalText: string;
-  cleanedText: string;
-  sentences?: string[];  // \u53e5\u5b50\u6570\u7ec4
-  paragraphs?: string[];  // \u6bb5\u843d\u6570\u7ec4
-  language?: string;  // \u8bed\u8a00\u7c7b\u578b
-  metadata: {
-    eventCount: number;
-    dateRange: {
-      start: string;
-      end: string;
-    };
-    mainParties: string[];
-    documentType: string;
-    [key: string]: any;  // \u5141\u8bb8\u989d\u5916\u7684\u5143\u6570\u636e
-  };
-}
+// ProcessedDocument 类型已从 @/types/legal-intelligence 导入
+// 如需在此文件使用，请从 @/types/legal-intelligence 导入

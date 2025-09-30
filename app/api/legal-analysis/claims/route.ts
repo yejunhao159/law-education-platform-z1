@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { analyzeClaimsWithAI } from '@/lib/ai-legal-agent'
 import { analyzeTimelineClaimsWithAI } from '@/src/domains/legal-analysis/services/ClaimAnalysisService'
 import type { ClaimAnalysisRequest, ClaimAnalysisResult } from '../../../../types/timeline-claim-analysis'
+import type { TimelineEvent } from '@/src/domains/legal-analysis/services/types/TimelineTypes'
 
 /**
  * POST /api/legal-analysis/claims
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 验证是否有证据数据（警告但不阻止）
-    const eventsWithEvidence = body.events.filter(e => e.evidence && e.evidence.length > 0)
+    const eventsWithEvidence = (body.events as TimelineEvent[]).filter(e => e.evidence && e.evidence.length > 0)
     if (eventsWithEvidence.length === 0) {
       console.warn('⚠️ 警告：没有事件包含证据数据，分析质量可能受影响')
     }
