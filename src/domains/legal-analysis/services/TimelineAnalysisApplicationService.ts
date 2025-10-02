@@ -5,9 +5,6 @@
  * 已迁移至统一AI调用代理模式 - Issue #21
  */
 
-import { DocumentPreprocessor } from '../intelligence/preprocessor';
-import { RuleExtractor } from '../intelligence/rule-extractor';
-import { SmartMerger } from '../intelligence/smart-merger';
 import { callUnifiedAI } from '../../../infrastructure/ai/AICallProxy';
 
 import {
@@ -120,6 +117,7 @@ export class TimelineAnalysisApplicationService {
 
   /**
    * Step 2: 预处理事件数据
+   * 简化版：直接构造 ProcessedDocument，不再依赖已删除的 DocumentPreprocessor
    */
   private preprocessEvents(events: TimelineEvent[]): ProcessedDocument {
     // 安全地将事件转换为文本
@@ -137,10 +135,17 @@ export class TimelineAnalysisApplicationService {
     // 如果没有有效的事件文本，提供一个默认值
     const textToProcess = eventTexts || '无有效事件数据';
 
-    // 使用文档预处理器
-    const processedDoc = DocumentPreprocessor.processDocument(textToProcess);
+    // 简单的文本清理
+    const cleanedText = textToProcess
+      .replace(/\r\n/g, '\n')
+      .replace(/\s+/g, ' ')
+      .trim();
 
-    // 增强元数据，安全地处理dates数组
+    // 分句和分段
+    const sentences = cleanedText.split(/[。！？.!?]+/).filter(s => s.trim());
+    const paragraphs = cleanedText.split(/\n+/).filter(p => p.trim());
+
+    // 收集日期和当事人
     const dates = events
       .map(e => e?.date)
       .filter(Boolean)
@@ -150,12 +155,19 @@ export class TimelineAnalysisApplicationService {
       .flatMap(e => e?.parties || [])
       .filter((p, i, arr) => p && arr.indexOf(p) === i);
 
-    // 扩展元数据，使用类型扩展
-    const enrichedDoc: ProcessedDocument = {
-      ...processedDoc,
+    // 构造 ProcessedDocument
+    const processedDoc: ProcessedDocument = {
+      originalText: textToProcess,
+      cleanedText: cleanedText,
+      sentences: sentences,
+      paragraphs: paragraphs,
+      language: 'zh' as const,
       metadata: {
-        ...processedDoc.metadata,
+        uploadTime: new Date().toISOString(),
         documentType: 'unknown' as const,
+        extractionTime: new Date().toISOString(),
+        extractionVersion: '2.0.0',
+        // 扩展元数据
         ...({
           eventCount: events.length,
           dateRange: {
@@ -167,15 +179,32 @@ export class TimelineAnalysisApplicationService {
       }
     };
 
-    return enrichedDoc;
+    return processedDoc;
   }
 
   /**
    * Step 3: 规则分析
+   * 简化版：直接返回基础数据结构，不再依赖已删除的 RuleExtractor
    */
-  private performRuleAnalysis(processedDoc: ProcessedDocument): ExtractedData {
-    console.log('Step 3: 规则分析...');
-    return RuleExtractor.extract(processedDoc);
+  private performRuleAnalysis(_processedDoc: ProcessedDocument): ExtractedData {
+    console.log('Step 3: 规则分析（简化版）...');
+
+    // 返回空的基础结构，实际分析将由AI完成
+    return {
+      dates: [],
+      parties: [],
+      amounts: [],
+      legalClauses: [],
+      facts: [],
+      metadata: {
+        uploadTime: new Date().toISOString(),
+        documentType: 'unknown' as const,
+        extractionTime: new Date().toISOString(),
+        extractionVersion: '2.0.0'
+      },
+      confidence: 0.5,
+      source: 'rule' as const
+    };
   }
 
   /**
@@ -222,9 +251,10 @@ export class TimelineAnalysisApplicationService {
 
   /**
    * Step 5: 合并分析结果
+   * 简化版：直接使用AI分析结果，不再依赖已删除的 SmartMerger
    */
   private combineAnalysisResults(ruleAnalysis: ExtractedData, aiAnalysis: AITimelineResponse | null): CombinedAnalysisResult {
-    console.log('Step 5: 合并分析结果...');
+    console.log('Step 5: 合并分析结果（简化版）...');
 
     if (!aiAnalysis || !aiAnalysis.analysis) {
       const ruleOnly = {
@@ -234,40 +264,27 @@ export class TimelineAnalysisApplicationService {
       return ruleOnly;
     }
 
-    // 确保数据结构兼容 SmartMerger
-    const formattedRuleData = {
-      dates: ruleAnalysis?.dates || [],
-      parties: ruleAnalysis?.parties || [],
-      amounts: ruleAnalysis?.amounts || [],
-      legalClauses: ruleAnalysis?.legalClauses || [],
-      facts: ruleAnalysis?.facts || [],
-      metadata: ruleAnalysis?.metadata || {},
-      confidence: ruleAnalysis?.confidence || 0.8,
-      source: 'rule' as 'rule'
+    // 简化合并逻辑：优先使用AI分析结果
+    const aiExtracted = aiAnalysis.analysis || {};
+
+    const mergedData = {
+      dates: aiExtracted?.dates || ruleAnalysis?.dates || [],
+      parties: aiExtracted?.parties || ruleAnalysis?.parties || [],
+      amounts: aiExtracted?.amounts || ruleAnalysis?.amounts || [],
+      legalClauses: aiExtracted?.legalClauses || ruleAnalysis?.legalClauses || [],
+      facts: aiExtracted?.facts || ruleAnalysis?.facts || [],
+      metadata: aiExtracted?.metadata || ruleAnalysis?.metadata || {
+        uploadTime: new Date().toISOString(),
+        documentType: 'unknown' as const,
+        extractionTime: new Date().toISOString(),
+        extractionVersion: '2.0.0'
+      },
+      confidence: aiAnalysis?.confidence || aiExtracted?.metadata?.confidence || 0.85,
+      source: 'ai' as 'ai'
     };
 
-    const aiExtracted = aiAnalysis?.analysis || {};
-
-    const formattedAiData = {
-      dates: aiExtracted?.dates || [],
-      parties: aiExtracted?.parties || [],
-      amounts: aiExtracted?.amounts || [],
-      legalClauses: aiExtracted?.legalClauses || [],
-      facts: aiExtracted?.facts || [],
-      metadata: aiExtracted?.metadata || {},
-      confidence: aiAnalysis?.confidence || aiExtracted?.metadata?.confidence || 0.7,
-      source: 'ai' as 'ai'
-    } as unknown as ExtractedData;
-
-    // 使用智能合并器
-    const merged = SmartMerger.merge(formattedRuleData, formattedAiData, {
-      strategy: 'confidence-based',
-      aiWeight: 0.6,
-      ruleWeight: 0.4
-    });
-
     const result = {
-      ...merged,
+      ...mergedData,
       aiInsights: aiAnalysis.analysis,
       rawAIResponse: aiAnalysis.rawContent,
       aiWarnings: aiAnalysis.warnings

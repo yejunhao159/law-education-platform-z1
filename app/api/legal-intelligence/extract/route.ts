@@ -1,24 +1,24 @@
 /**
- * 法律智能提取API - 使用旧系统（稳定版）
- * 临时回退：新系统JSON解析不稳定，暂时使用旧的DeepSeekLegalAgent
- * TODO: 等新系统稳定后再切换回来
+ * 法律智能提取API - 使用DDD架构新系统
+ * 迁移完成：使用 JudgmentExtractionService（DDD架构）
+ * 功能完整：包含 reasoning、evidence、facts、basicInfo
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { DeepSeekLegalAgent } from '../../../../lib/ai-legal-agent';
+import { JudgmentExtractionService } from '@/src/domains/legal-analysis/services';
 
-// 使用旧系统（稳定且有完整的教学三要素）
-const legalAgent = new DeepSeekLegalAgent();
+// 使用新系统（DDD架构，完整的教学三要素）
+const judgmentService = new JudgmentExtractionService();
 
 /**
  * 法律智能提取API
- * 使用旧系统的DeepSeekLegalAgent（稳定且完整）
+ * 使用DDD架构的JudgmentExtractionService（稳定且完整）
  */
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
 
   try {
-    console.log('📊 使用旧系统DeepSeekLegalAgent提取判决书...');
+    console.log('📊 使用DDD架构JudgmentExtractionService提取判决书...');
 
     // 解析请求
     const body = await req.json();
@@ -30,8 +30,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 调用旧系统的完整提取方法
-    const result = await legalAgent.extractThreeElements(body.text);
+    // 调用新系统的完整提取方法
+    const result = await judgmentService.extractThreeElements(body.text);
 
     // 转换为前端期望的格式
     const responseData = {
@@ -48,11 +48,11 @@ export async function POST(req: NextRequest) {
       }
     };
 
-    console.log('✅ 旧系统提取完成，耗时:', Date.now() - startTime, 'ms');
+    console.log('✅ DDD架构提取完成，耗时:', Date.now() - startTime, 'ms');
 
     return NextResponse.json({
       success: true,
-      method: 'ai-deepseek',
+      method: 'ai-ddd-judgment',
       data: responseData,
       confidence: result.metadata.confidence
     }, { status: 200 });

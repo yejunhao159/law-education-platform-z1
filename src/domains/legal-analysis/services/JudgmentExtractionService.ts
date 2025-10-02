@@ -1,20 +1,33 @@
 /**
- * DeepSeek API集成 - 法律文书智能分析器
- * 使用DeepSeek的AI模型进行深度分析
- * Based on Andrew Ng's Data-Centric AI approach
+ * 判决书提取服务
+ * 职责：从判决书中提取完整的三要素（事实、证据、推理）
+ *
+ * 迁移自：lib/ai-legal-agent.ts (DeepSeekLegalAgent)
+ * DeepPractice Standards Compliant
+ *
+ * 核心功能：
+ * - extractBasicInfo: 提取案件基本信息
+ * - extractFacts: 提取案件事实和时间轴
+ * - extractEvidence: 提取证据分析（教学核心）
+ * - extractReasoning: 提取法官说理（教学核心）
  */
 
+import { callUnifiedAI } from '@/src/infrastructure/ai/AICallProxy';
+import { createLogger } from '@/lib/logging';
 import type {
   BasicInfo,
   Facts,
   Evidence,
   Reasoning,
   Metadata,
-  Party
 } from '@/types/legal-case';
-import { callUnifiedAI } from '@/src/infrastructure/ai/AICallProxy';
 
-export interface AIExtractedElements {
+const logger = createLogger('JudgmentExtractionService');
+
+/**
+ * 判决书提取结果
+ */
+export interface JudgmentExtractedData {
   basicInfo: BasicInfo;
   facts: Facts;
   evidence: Evidence;
@@ -22,41 +35,45 @@ export interface AIExtractedElements {
   metadata: Metadata;
 }
 
-// 导出通用的AI分析函数
-export async function analyzeClaimsWithAI(prompt: string): Promise<string> {
-  const result = await callUnifiedAI(
-    '你是一位精通德国法学请求权分析法的法律专家，必须严格按照JSON Schema输出结果。',
-    prompt,
-    {
-      temperature: 0.3,
-      maxTokens: 2000,
-      responseFormat: 'json'
-    }
-  )
-
-  return result.content || ''
+/**
+ * 判决书提取服务配置
+ */
+export interface JudgmentExtractionConfig {
+  apiKey?: string;
+  apiUrl?: string;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+  timeout?: number;
 }
 
-export class DeepSeekLegalAgent {
+/**
+ * 判决书提取服务
+ */
+export class JudgmentExtractionService {
   private apiKey: string;
   private apiUrl: string;
   private model: string;
-  
-  constructor(apiKey?: string) {
-    this.apiKey = apiKey || process.env.DEEPSEEK_API_KEY || '';
-    this.apiUrl = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1';
-    this.model = 'deepseek-chat'; // DeepSeek的模型名称
+  private temperature: number;
+  private maxTokens: number;
+
+  constructor(config?: JudgmentExtractionConfig) {
+    this.apiKey = config?.apiKey || process.env.DEEPSEEK_API_KEY || '';
+    this.apiUrl = config?.apiUrl || process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1';
+    this.model = config?.model || 'deepseek-chat';
+    this.temperature = config?.temperature || 0.3;
+    this.maxTokens = config?.maxTokens || 2000;
   }
-  
+
   /**
    * 主入口：提取判决书完整数据
    */
-  async extractThreeElements(documentText: string): Promise<AIExtractedElements> {
+  async extractThreeElements(documentText: string): Promise<JudgmentExtractedData> {
     const startTime = Date.now();
-    
+
     try {
-      console.log('🤖 使用DeepSeek AI进行深度分析...');
-      
+      logger.info('开始使用AI进行判决书深度分析...');
+
       // 并行执行四个专门的提取任务
       const [basicInfo, facts, evidence, reasoning] = await Promise.all([
         this.extractBasicInfo(documentText),
@@ -64,7 +81,9 @@ export class DeepSeekLegalAgent {
         this.extractEvidence(documentText),
         this.extractReasoning(documentText)
       ]);
-      
+
+      const processingTime = Date.now() - startTime;
+
       return {
         basicInfo,
         facts,
@@ -73,18 +92,18 @@ export class DeepSeekLegalAgent {
         metadata: {
           extractedAt: new Date().toISOString(),
           confidence: this.calculateConfidence(facts, evidence, reasoning),
-          processingTime: Date.now() - startTime,
+          processingTime,
           aiModel: `DeepSeek-${this.model}`,
           extractionMethod: 'pure-ai',
-          version: '1.0.0'
+          version: '2.0.0'
         }
       };
     } catch (error) {
-      console.error('DeepSeek AI extraction failed:', error);
+      logger.error('判决书提取失败', error);
       throw error;
     }
   }
-  
+
   /**
    * 提取基本信息
    */
@@ -130,16 +149,16 @@ export class DeepSeekLegalAgent {
 
 判决书内容（节选）：
 ${text.substring(0, 2000)}`;
-    
+
     try {
       const response = await this.callDeepSeekAPI(prompt);
       return this.parseBasicInfoResponse(response);
     } catch (error) {
-      console.error('提取基本信息失败:', error);
+      logger.error('提取基本信息失败', error);
       return this.getDefaultBasicInfo();
     }
   }
-  
+
   /**
    * 提取案件事实
    */
@@ -172,18 +191,18 @@ ${text.substring(0, 2000)}`;
 
 判决书内容（节选）：
 ${text.substring(0, 2000)}`;
-    
+
     try {
       const response = await this.callDeepSeekAPI(prompt);
       return this.parseFactsResponse(response);
     } catch (error) {
-      console.error('提取事实失败:', error);
+      logger.error('提取事实失败', error);
       return this.getDefaultFacts();
     }
   }
-  
+
   /**
-   * 提取证据分析
+   * 提取证据分析（教学核心）
    */
   private async extractEvidence(text: string): Promise<Evidence> {
     const prompt = `你是一位专业的法律证据分析专家。请从以下判决书中提取和分析证据部分。
@@ -223,18 +242,18 @@ ${text.substring(0, 2000)}`;
 
 判决书内容（节选）：
 ${text.substring(0, 2000)}`;
-    
+
     try {
       const response = await this.callDeepSeekAPI(prompt);
       return this.parseEvidenceResponse(response);
     } catch (error) {
-      console.error('提取证据失败:', error);
+      logger.error('提取证据失败', error);
       return this.getDefaultEvidence();
     }
   }
-  
+
   /**
-   * 提取裁判理由
+   * 提取裁判理由（教学核心）
    */
   private async extractReasoning(text: string): Promise<Reasoning> {
     const prompt = `你是一位专业的法官助理。请从以下判决书中提取法官说理部分。
@@ -273,34 +292,34 @@ ${text.substring(0, 2000)}`;
 
 判决书内容（节选）：
 ${text.substring(0, 2000)}`;
-    
+
     try {
       const response = await this.callDeepSeekAPI(prompt);
       return this.parseReasoningResponse(response);
     } catch (error) {
-      console.error('提取裁判理由失败:', error);
+      logger.error('提取裁判理由失败', error);
       return this.getDefaultReasoning();
     }
   }
-  
+
   /**
    * 调用DeepSeek API
    */
-  public async callDeepSeekAPI(prompt: string): Promise<any> {
+  private async callDeepSeekAPI(prompt: string): Promise<any> {
     try {
       // 检查API Key
       if (!this.apiKey) {
         throw new Error('DeepSeek API Key未配置');
       }
 
-      console.log('📡 调用DeepSeek API...');
+      logger.info('调用DeepSeek API...');
 
-      // 如果apiUrl已经包含完整路径，直接使用；否则添加/chat/completions
+      // 确保API URL正确
       const apiEndpoint = this.apiUrl.includes('/chat/completions')
         ? this.apiUrl
         : `${this.apiUrl}/chat/completions`;
 
-      // 添加超时和重试机制
+      // 添加超时控制
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
 
@@ -323,8 +342,8 @@ ${text.substring(0, 2000)}`;
                 content: prompt
               }
             ],
-            temperature: 0.3,  // 降低温度以提高准确性
-            max_tokens: 2000
+            temperature: this.temperature,
+            max_tokens: this.maxTokens
           }),
           signal: controller.signal
         });
@@ -332,63 +351,52 @@ ${text.substring(0, 2000)}`;
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error?.message || errorData.message || errorMessage;
-        } catch (e) {
-          // 如果无法解析错误响应，使用默认错误消息
+          let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error?.message || errorData.message || errorMessage;
+          } catch (e) {
+            // 如果无法解析错误响应，使用默认错误消息
+          }
+          throw new Error(`DeepSeek API错误: ${errorMessage}`);
         }
-        throw new Error(`DeepSeek API错误: ${errorMessage}`);
-      }
-      
-      const data = await response.json();
-      const content = data.choices[0]?.message?.content;
-      
-      if (!content) {
-        throw new Error('DeepSeek返回内容为空');
-      }
-      
-      // 尝试解析JSON
-      try {
+
+        const data = await response.json();
+        const content = data.choices[0]?.message?.content;
+
+        if (!content) {
+          throw new Error('DeepSeek返回内容为空');
+        }
+
         // 处理DeepSeek返回的markdown代码块格式
         let jsonContent = content;
-        
-        // 如果内容包含markdown代码块，提取其中的JSON
         if (content.includes('```json')) {
           const match = content.match(/```json\n([\s\S]*?)\n```/);
           if (match && match[1]) {
             jsonContent = match[1];
           }
         }
-        
+
         return JSON.parse(jsonContent);
-      } catch (parseError) {
-        console.warn('JSON解析失败，尝试提取文本内容');
-        // 如果解析失败，返回默认结构
-        return null;
-      }
 
-      } catch (networkError) {
+      } catch (networkError: any) {
         clearTimeout(timeoutId);
-        console.error('网络请求失败:', networkError);
 
-        // 区分不同类型的网络错误
         if (networkError.name === 'AbortError') {
           throw new Error('DeepSeek API调用超时，请检查网络连接');
         } else if (networkError.code === 'ECONNRESET' || networkError.code === 'ENOTFOUND') {
           throw new Error('DeepSeek API网络连接失败，可能是网络环境限制');
         } else {
-          throw new Error(`DeepSeek API网络错误: ${networkError.message}`);
+          throw networkError;
         }
       }
 
     } catch (error) {
-      console.error('调用DeepSeek API失败:', error);
+      logger.error('调用DeepSeek API失败', error);
       throw error;
     }
   }
-  
+
   /**
    * 解析基本信息响应
    */
@@ -396,7 +404,7 @@ ${text.substring(0, 2000)}`;
     if (!response || typeof response === 'string') {
       return this.getDefaultBasicInfo();
     }
-    
+
     return {
       caseNumber: response.caseNumber || '',
       court: response.court || '',
@@ -421,29 +429,28 @@ ${text.substring(0, 2000)}`;
       }
     };
   }
-  
+
   /**
    * 解析事实响应
    */
   private parseFactsResponse(response: any): Facts {
-    console.log('📝 解析事实响应:', typeof response, response);
+    logger.info('解析事实响应', { type: typeof response });
 
     // 如果是字符串，尝试解析JSON
     if (typeof response === 'string') {
       try {
         response = JSON.parse(response);
       } catch (e) {
-        console.error('解析JSON失败，使用默认值');
+        logger.error('解析JSON失败，使用默认值');
         return this.getDefaultFacts();
       }
     }
 
     if (!response) {
-      console.error('响应为空，使用默认值');
+      logger.error('响应为空，使用默认值');
       return this.getDefaultFacts();
     }
 
-    // 确保返回完整的事实结构
     const facts = {
       summary: response.summary || '基于AI分析的事实摘要',
       timeline: Array.isArray(response.timeline) ? response.timeline.map((t: any) => ({
@@ -461,40 +468,40 @@ ${text.substring(0, 2000)}`;
 
     // 验证并补充缺失的数据
     if (facts.timeline.length === 0) {
-      console.warn('时间线为空，使用默认时间线');
+      logger.warn('时间线为空，使用默认时间线');
       facts.timeline = this.getDefaultFacts().timeline;
     }
 
     if (facts.keyFacts.length === 0) {
-      console.warn('关键事实为空，使用默认关键事实');
+      logger.warn('关键事实为空，使用默认关键事实');
       facts.keyFacts = this.getDefaultFacts().keyFacts;
     }
 
-    console.log('✅ 事实解析完成:', facts);
+    logger.info('事实解析完成');
     return facts;
   }
-  
+
   /**
    * 解析证据响应
    */
   private parseEvidenceResponse(response: any): Evidence {
-    console.log('⚖️ 解析证据响应:', typeof response, response);
+    logger.info('解析证据响应', { type: typeof response });
 
     // 如果是字符串，尝试解析JSON
     if (typeof response === 'string') {
       try {
         response = JSON.parse(response);
       } catch (e) {
-        console.error('解析JSON失败，使用默认值');
+        logger.error('解析JSON失败，使用默认值');
         return this.getDefaultEvidence();
       }
     }
 
     if (!response) {
-      console.error('响应为空，使用默认值');
+      logger.error('响应为空，使用默认值');
       return this.getDefaultEvidence();
     }
-    
+
     const evidence = {
       summary: response.summary || '暂无摘要',
       items: Array.isArray(response.items) ? response.items.map((item: any) => ({
@@ -518,31 +525,31 @@ ${text.substring(0, 2000)}`;
       crossExamination: response.crossExamination
     };
 
-    console.log('✅ 证据解析完成');
+    logger.info('证据解析完成');
     return evidence;
   }
-  
+
   /**
    * 解析裁判理由响应
    */
   private parseReasoningResponse(response: any): Reasoning {
-    console.log('⚖️ 解析裁判理由响应:', typeof response, response);
+    logger.info('解析裁判理由响应', { type: typeof response });
 
     // 如果是字符串，尝试解析JSON
     if (typeof response === 'string') {
       try {
         response = JSON.parse(response);
       } catch (e) {
-        console.error('解析JSON失败，使用默认值');
+        logger.error('解析JSON失败，使用默认值');
         return this.getDefaultReasoning();
       }
     }
 
     if (!response) {
-      console.error('响应为空，使用默认值');
+      logger.error('响应为空，使用默认值');
       return this.getDefaultReasoning();
     }
-    
+
     const reasoning = {
       summary: response.summary || '暂无摘要',
       legalBasis: Array.isArray(response.legalBasis) ? response.legalBasis.map((lb: any) => ({
@@ -563,10 +570,10 @@ ${text.substring(0, 2000)}`;
       dissenting: response.dissenting
     };
 
-    console.log('✅ 裁判理由解析完成');
+    logger.info('裁判理由解析完成');
     return reasoning;
   }
-  
+
   /**
    * 默认基本信息结构
    */
@@ -581,7 +588,7 @@ ${text.substring(0, 2000)}`;
       }
     };
   }
-  
+
   /**
    * 默认事实结构
    */
@@ -632,7 +639,7 @@ ${text.substring(0, 2000)}`;
       ]
     };
   }
-  
+
   /**
    * 默认证据结构
    */
@@ -647,7 +654,7 @@ ${text.substring(0, 2000)}`;
       }
     };
   }
-  
+
   /**
    * 默认裁判理由结构
    */
@@ -660,7 +667,7 @@ ${text.substring(0, 2000)}`;
       judgment: ''
     };
   }
-  
+
   /**
    * 计算提取结果的置信度
    */
@@ -670,7 +677,7 @@ ${text.substring(0, 2000)}`;
     reasoning: any
   ): number {
     let confidence = 0;
-    
+
     // 基于提取的完整性计算置信度
     if (facts.summary && facts.summary !== '基于规则提取的事实摘要') confidence += 20;
     if (facts.timeline.length > 0) confidence += 15;
@@ -678,47 +685,21 @@ ${text.substring(0, 2000)}`;
     if (evidence.chainAnalysis) confidence += 15;
     if (reasoning.legalBasis.length > 0) confidence += 15;
     if (reasoning.judgment) confidence += 15;
-    
+
     return Math.min(confidence, 100);
   }
 }
 
 /**
- * 智能融合器：结合AI和规则的结果
+ * 导出默认实例（单例模式）
  */
-export class IntelligentMerger {
-  /**
-   * 融合AI结果和规则结果
-   */
-  static merge(aiResult: AIExtractedElements, ruleResult: any): AIExtractedElements {
-    // 实现智能融合逻辑
-    // 1. 优先使用AI的深度理解结果
-    // 2. 用规则结果补充AI可能遗漏的细节
-    // 3. 交叉验证提高准确性
-    
-    return {
-      ...aiResult,
-      basicInfo: {
-        ...aiResult.basicInfo,
-        // 如果AI未提取到某些字段，使用规则引擎的结果
-        caseNumber: aiResult.basicInfo.caseNumber || ruleResult.caseNumber || '',
-        court: aiResult.basicInfo.court || ruleResult.court || '',
-        judgeDate: aiResult.basicInfo.judgeDate || ruleResult.date || ''
-      },
-      metadata: {
-        ...aiResult.metadata,
-        extractionMethod: 'hybrid'
-      }
-    };
-  }
-}
+let _judgmentExtractionService: JudgmentExtractionService;
 
-/**
- * 导出默认使用DeepSeek的LegalAIAgent
- */
-export class LegalAIAgent extends DeepSeekLegalAgent {
-  constructor(apiKey?: string) {
-    super(apiKey);
-    console.log('📘 使用DeepSeek AI服务');
+export const judgmentExtractionService = {
+  get instance() {
+    if (!_judgmentExtractionService) {
+      _judgmentExtractionService = new JudgmentExtractionService();
+    }
+    return _judgmentExtractionService;
   }
-}
+};

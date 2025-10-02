@@ -38,6 +38,7 @@ export class PDFDocumentParser {
    */
   async checkContent(file: File): Promise<{hasText: boolean, pageCount: number}> {
     try {
+      // @ts-ignore - pdfjs-dist 缺少类型声明
       const pdfjs = await import('pdfjs-dist/legacy/build/pdf.min.js');
 
       if (!pdfjs.GlobalWorkerOptions.workerSrc) {
@@ -120,6 +121,7 @@ export class PDFDocumentParser {
       });
 
       // 动态导入 pdfjs-dist
+      // @ts-ignore - pdfjs-dist 缺少类型声明
       const pdfjs = await import('pdfjs-dist/legacy/build/pdf.min.js');
 
       onProgress?.({

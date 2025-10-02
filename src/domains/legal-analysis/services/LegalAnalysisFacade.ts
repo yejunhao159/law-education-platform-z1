@@ -27,7 +27,6 @@ import { caseNarrativeService } from './CaseNarrativeService';
 import { ClaimAnalysisService } from './ClaimAnalysisService';
 import { DisputeAnalysisService } from './DisputeAnalysisService';
 import { EvidenceIntelligenceService } from './EvidenceIntelligenceService';
-import { LegalExtractionApplicationService } from './LegalExtractionApplicationService';
 import { TimelineAnalysisApplicationService } from './TimelineAnalysisApplicationService';
 
 const logger = createLogger('LegalAnalysisFacade');
@@ -93,7 +92,6 @@ export class LegalAnalysisFacade {
   private claimService: ClaimAnalysisService;
   private disputeService: DisputeAnalysisService;
   private evidenceService: EvidenceIntelligenceService;
-  private extractionService: LegalExtractionApplicationService;
   private timelineService: TimelineAnalysisApplicationService;
 
   constructor(config?: Partial<LegalAnalysisFacadeConfig>) {
@@ -108,7 +106,6 @@ export class LegalAnalysisFacade {
     this.claimService = new ClaimAnalysisService();
     this.disputeService = new DisputeAnalysisService();
     this.evidenceService = new EvidenceIntelligenceService();
-    this.extractionService = new LegalExtractionApplicationService();
     this.timelineService = new TimelineAnalysisApplicationService();
 
     logger.info('LegalAnalysisFacade初始化完成', this.config);
@@ -140,10 +137,6 @@ export class LegalAnalysisFacade {
 
         case 'evidence':
           result = await this.handleEvidence(params);
-          break;
-
-        case 'extract':
-          result = await this.handleExtraction(params);
           break;
 
         case 'timeline':
@@ -258,20 +251,6 @@ export class LegalAnalysisFacade {
   }
 
   /**
-   * 三要素提取
-   */
-  private async handleExtraction(params: AnalysisParams): Promise<unknown> {
-    logger.info('执行三要素提取');
-    if (!this.isExtractionParams(params)) {
-      throw new Error('Invalid extraction parameters');
-    }
-    return await this.extractionService.extractLegalElements({
-      text: params.text,
-      ...(params.options || {})
-    });
-  }
-
-  /**
    * 时间轴分析
    */
   private async handleTimeline(params: AnalysisParams): Promise<unknown> {
@@ -355,7 +334,6 @@ export class LegalAnalysisFacade {
         claim: !!this.claimService,
         dispute: !!this.disputeService,
         evidence: !!this.evidenceService,
-        extraction: !!this.extractionService,
         timeline: !!this.timelineService,
       },
       config: this.config

@@ -5,17 +5,15 @@
  * 已迁移至统一AI调用代理模式 - Issue #21
  */
 
-import type {
-  DisputeFocus,
-  ClaimBasis
-} from '@/types/dispute-evidence';
-
 // 导入统一AI调用代理
 import { callUnifiedAI } from '../../../infrastructure/ai/AICallProxy';
-// 导入数据验证器
-import { validateDisputeResponse, isValidDisputeResponse } from '../validators/dispute-validator';
+// 导入数据验证器和类型
+import {
+  validateDisputeResponse,
+  type DisputeAnalysisResponse as ValidatedDisputeAnalysisResponse
+} from '../validators/dispute-validator';
 // 导入统一服务响应验证器
-import { validateServiceResponse, createStandardErrorResponse } from '@/src/utils/service-response-validator';
+import { validateServiceResponse } from '@/src/utils/service-response-validator';
 
 // 重新导出核心类型，保持接口一致性
 export type CaseType = 'civil' | 'criminal' | 'administrative';
@@ -68,14 +66,8 @@ export interface ClaimBasisMapping {
   confidence?: number;
 }
 
-export interface DisputeAnalysisResponse {
-  success: boolean;
-  disputes: DisputeFocus[];
-  claimBasisMappings: ClaimBasisMapping[];
-  metadata: AnalysisMetadata;
-  error?: DisputeAnalysisError;
-  warnings?: string[];
-}
+// 使用 validator 中定义的类型，确保类型一致性
+export type DisputeAnalysisResponse = ValidatedDisputeAnalysisResponse;
 
 export interface AnalysisStatistics {
   totalRequests: number;
@@ -91,14 +83,12 @@ export interface AnalysisStatistics {
  */
 export class DisputeAnalysisService {
   private readonly apiKey: string;
-  private readonly apiUrl: string;
   private statistics: AnalysisStatistics;
 
   constructor() {
     // 注意：现在通过AICallProxy统一管理API Key和URL
-    // 保留这些字段是为了保持接口兼容性，实际调用通过代理处理
+    // 保留apiKey字段是为了保持接口兼容性，实际调用通过代理处理
     this.apiKey = process.env.DEEPSEEK_API_KEY || '';
-    this.apiUrl = 'https://api.deepseek.com/v1';
     this.statistics = {
       totalRequests: 0,
       successfulRequests: 0,

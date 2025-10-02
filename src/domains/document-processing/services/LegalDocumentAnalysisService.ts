@@ -39,10 +39,18 @@ interface ThreeElements {
   };
 }
 
-interface LegalAnalysisResult extends LegalDocument {
+interface LegalAnalysisResult {
+  caseNumber?: string;
+  court?: string;
+  date?: string;
+  parties?: {
+    plaintiff?: string;
+    defendant?: string;
+  };
   threeElements: ThreeElements;
   evidence?: Evidence[];
   disputes?: string[];
+  raw?: string;
 }
 
 export class LegalDocumentAnalysisService {
@@ -50,15 +58,21 @@ export class LegalDocumentAnalysisService {
    * 解析判决书文本
    */
   analyze(text: string): LegalAnalysisResult {
+    const basicInfo = this.extractBasicInfo(text);
+    const parties = basicInfo.parties as { plaintiff?: string; defendant?: string } | undefined;
     return {
-      ...this.extractBasicInfo(text),
+      caseNumber: basicInfo.caseNumber,
+      court: basicInfo.court,
+      date: basicInfo.date,
+      parties,
       threeElements: {
         facts: this.extractFacts(text),
         law: this.extractLawBasis(text),
         reasoning: this.extractReasoning(text)
       },
       evidence: this.extractEvidence(text),
-      disputes: this.extractDisputes(text)
+      disputes: this.extractDisputes(text),
+      raw: text
     };
   }
 
@@ -225,7 +239,7 @@ export class LegalDocumentAnalysisService {
 
     for (const pattern of factPatterns) {
       const match = text.match(pattern);
-      if (match) {
+      if (match && match[1]) {
         facts.content = match[1].trim().substring(0, 500);
         break;
       }
@@ -234,19 +248,22 @@ export class LegalDocumentAnalysisService {
     // 如果没有找到，尝试更宽泛的提取
     if (!facts.content) {
       const sections = text.split(/本院认为|判决如下/);
-      if (sections.length > 1) {
-        facts.content = sections[0].substring(Math.max(0, sections[0].length - 500));
+      const firstSection = sections[0];
+      if (sections.length > 1 && firstSection) {
+        facts.content = firstSection.substring(Math.max(0, firstSection.length - 500));
       }
     }
 
     // 提取时间线
     const dateEvents = text.matchAll(/(\d{4}年\d{1,2}月\d{1,2}日)[，,]?(.*?)(?=[。；])/g);
     for (const match of dateEvents) {
-      if (match[2] && match[2].length < 100) {
+      const dateStr = match[1];
+      const eventText = match[2];
+      if (dateStr && eventText && eventText.length < 100) {
         facts.timeline.push({
-          date: match[1],
-          event: match[2].trim(),
-          importance: this.isImportantEvent(match[2]) ? 'critical' : 'normal'
+          date: dateStr,
+          event: eventText.trim(),
+          importance: this.isImportantEvent(eventText) ? 'critical' : 'normal'
         });
       }
     }
@@ -313,7 +330,7 @@ export class LegalDocumentAnalysisService {
 
     for (const pattern of reasoningPatterns) {
       const match = text.match(pattern);
-      if (match) {
+      if (match && match[1]) {
         reasoning.content = match[1].trim().substring(0, 500);
         break;
       }
@@ -321,7 +338,7 @@ export class LegalDocumentAnalysisService {
 
     // 提取判决结论
     const conclusionMatch = text.match(/判决如下[：:]([\s\S]*?)(?=如不服|案件受理费|$)/);
-    if (conclusionMatch) {
+    if (conclusionMatch && conclusionMatch[1]) {
       reasoning.conclusion = conclusionMatch[1].trim().substring(0, 300);
     }
 
@@ -340,7 +357,7 @@ export class LegalDocumentAnalysisService {
     // 查找证据部分
     const evidenceSection = text.match(/(?:原告提供|被告提供|证据如下|举证|质证)([\s\S]*?)(?=本院认为|经审理)/);
 
-    if (evidenceSection) {
+    if (evidenceSection && evidenceSection[1]) {
       const evidenceText = evidenceSection[1];
 
       // 常见证据类型
@@ -396,11 +413,11 @@ export class LegalDocumentAnalysisService {
     if (disputes.length === 0) {
       if (text.includes('是否构成')) {
         const match = text.match(/(.*?是否构成.*?)(?=[。；])/);
-        if (match) disputes.push(match[1]);
+        if (match && match[1]) disputes.push(match[1]);
       }
       if (text.includes('能否')) {
         const match = text.match(/(.*?能否.*?)(?=[。；])/);
-        if (match) disputes.push(match[1]);
+        if (match && match[1]) disputes.push(match[1]);
       }
     }
 

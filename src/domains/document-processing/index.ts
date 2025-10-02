@@ -30,9 +30,12 @@ export const documentParsingService = {
     return _documentParsingService;
   },
   // 兼容直接调用的方法
-  parseDocument: (...args: any[]) => documentParsingService.instance.parseDocument(...args),
-  canParse: (...args: any[]) => documentParsingService.instance.canParse(...args),
-  getConversionTip: (...args: any[]) => documentParsingService.instance.getConversionTip(...args),
+  parseDocument: (args: Parameters<DocumentParsingService['parseDocument']>[0]) =>
+    documentParsingService.instance.parseDocument(args),
+  canParse: (file: File) =>
+    documentParsingService.instance.canParse(file),
+  getConversionTip: (file: File) =>
+    documentParsingService.instance.getConversionTip(file),
 };
 
 export const legalDocumentAnalysisService = {
@@ -43,8 +46,10 @@ export const legalDocumentAnalysisService = {
     return _legalDocumentAnalysisService;
   },
   // 兼容直接调用的方法
-  analyze: (...args: any[]) => legalDocumentAnalysisService.instance.analyze(...args),
-  formatAnalysisResult: (...args: any[]) => legalDocumentAnalysisService.instance.formatAnalysisResult(...args),
+  analyze: (text: string) =>
+    legalDocumentAnalysisService.instance.analyze(text),
+  formatAnalysisResult: (doc: ReturnType<LegalDocumentAnalysisService['analyze']>) =>
+    legalDocumentAnalysisService.instance.formatAnalysisResult(doc),
 };
 
 // 向后兼容性导出（与原lib文件API保持兼容）

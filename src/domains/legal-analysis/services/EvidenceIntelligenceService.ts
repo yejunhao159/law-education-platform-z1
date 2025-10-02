@@ -6,7 +6,6 @@
  */
 
 import { createLogger } from '@/lib/logging';
-import { EvidenceMappingService, type EvidenceMapping } from '@/lib/evidence-mapping-service';
 import type { Evidence } from '@/types/evidence';
 import { normalizeEvidenceList } from '@/utils/evidence-adapter';
 import { callUnifiedAI } from '../../../infrastructure/ai/AICallProxy';
@@ -101,11 +100,9 @@ interface AIServiceConfig {
 }
 
 export class EvidenceIntelligenceService {
-  private mappingService: EvidenceMappingService;
   private aiConfig: AIServiceConfig;
 
   constructor() {
-    this.mappingService = new EvidenceMappingService();
     this.aiConfig = {
       apiUrl: process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1',
       apiKey: process.env.DEEPSEEK_API_KEY || '',
@@ -181,9 +178,9 @@ export class EvidenceIntelligenceService {
    * 保留方法签名以兼容旧代码，但返回空数组
    */
   async analyzeEvidenceChains(
-    evidence: Evidence[],
-    claimElements: ClaimElement[],
-    caseContext: any
+    _evidence: Evidence[],
+    _claimElements: ClaimElement[],
+    _caseContext: any
   ): Promise<EvidenceChainAnalysis[]> {
     logger.info('证据链分析已废弃，返回空结果');
     return [];
@@ -239,7 +236,7 @@ export class EvidenceIntelligenceService {
   /**
    * 基于规则的证据评估
    */
-  private performRuleBasedAssessment(evidence: Evidence, caseContext: any): any {
+  private performRuleBasedAssessment(evidence: Evidence, _caseContext: any): any {
     // 基础规则评估逻辑
     const baseScores = {
       authenticity: 0.7,
@@ -358,20 +355,6 @@ export class EvidenceIntelligenceService {
     }
   }
 
-  /**
-   * AI证据链分析 - 已废弃
-   * @deprecated 与 analyzeEvidenceChains 一同废弃
-   */
-  private async performAIChainAnalysis(evidence: Evidence[], element: ClaimElement, caseContext: any): Promise<any> {
-    return {
-      logicalConsistency: 0,
-      completeness: 0,
-      criticalGaps: [],
-      redundancies: [],
-      reinforcements: [],
-      assessment: '证据链分析功能已移除'
-    };
-  }
 
   /**
    * 构建学习问题生成提示词
@@ -465,12 +448,10 @@ ${claimElements.map((e, i) => `${i+1}. ${e.name}：${e.description}`).join('\n')
       logger.warn('AI学习问题解析失败', parseError);
     }
 
-    return this.generateFallbackQuestions(evidence, config);
+    // 如果解析失败，抛出错误而不是返回硬编码问题
+    throw new Error('AI学习问题生成失败：无法解析AI响应');
   }
 
-  /**
-   * 生成备选学习问题
-   */
   /**
    * 已删除 generateFallbackQuestions 方法
    * 原因: AI失败时返回硬编码问题会误导学生,降低教学质量
@@ -544,17 +525,6 @@ ${claimElements.map((e, i) => `${i+1}. ${e.name}：${e.description}`).join('\n')
     return ruleScore * 0.4 + aiScore * 0.6;
   }
 
-  /**
-   * 辅助方法：构建证据序列
-   */
-  private buildEvidenceSequence(evidence: Evidence[], element: ClaimElement): Evidence[] {
-    // 按照证据类型和相关性排序
-    return evidence.sort((a, b) => {
-      const relevanceA = this.mappingService.calculateRelevance(a, element);
-      const relevanceB = this.mappingService.calculateRelevance(b, element);
-      return relevanceB - relevanceA;
-    });
-  }
 
   /**
    * 辅助方法：基于规则的优势识别

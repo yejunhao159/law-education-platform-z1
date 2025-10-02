@@ -263,7 +263,7 @@ packages/
 
 | 教学阶段 | 教学目标 | 技术实现 | 核心代码位置 |
 |---------|---------|---------|------------|
-| **第一幕：案例导入** | 激发兴趣，建立场景 | 文档上传、OCR、信息提取 | `domains/document-processing/` |
+| **第一幕：案例导入** | 激发兴趣，建立场景 | 文档上传、OCR、判决书提取（reasoning+evidence） | `domains/document-processing/` + `domains/legal-analysis/services/JudgmentExtractionService` |
 | **第二幕：深度分析** | 培养分析能力 | AI分析器矩阵（事实/争议/证据） | `domains/legal-analysis/` |
 | **第三幕：苏格拉底讨论** | 启发思辨 | AI对话引擎+Friendly Socratic | `domains/socratic-dialogue/` |
 | **第四幕：总结提升** | 知识内化 | 报告生成、学习路径推荐 | `domains/teaching-acts/` |
@@ -470,6 +470,12 @@ const result = await callUnifiedAI(
    - 门面模式简化调用
    - 智能叙事生成（支持多风格）
    - 请求权分析（德国法学方法）
+
+6. ✅ **第一幕判决书提取DDD架构整合** (2025-10-02)
+   - 从 lib/ai-legal-agent.ts 迁移到 domains/legal-analysis/services/JudgmentExtractionService
+   - 完整保留 reasoning 和 evidence 提取能力
+   - 删除约2000行死代码（intelligence目录、未使用的服务）
+   - 统一DDD架构，清理技术债务
 
 **技术债务清理**：
 - 移除重复代码和未使用组件
