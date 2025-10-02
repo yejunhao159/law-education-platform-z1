@@ -14,6 +14,10 @@ export interface ExtractedData {
   amounts: Amount[]
   legalClauses: LegalClause[]
   facts: FactElement[]
+  // 教学核心要素：证据质证
+  evidence?: EvidenceElement[]
+  // 教学核心要素：法官说理
+  reasoning?: ReasoningElement
   metadata: DocumentMetadata
   confidence: number
   source: 'rule' | 'ai' | 'merged'
@@ -94,6 +98,65 @@ export interface FactElement {
     order: number
   }
   confidence?: number
+}
+
+/**
+ * 证据元素（教学用）
+ * 用于证据质证环节分析
+ */
+export interface EvidenceElement {
+  id: string
+  name: string // 证据名称，如"借款合同"
+  type: 'documentary' | 'physical' | 'witness' | 'expert' | 'audio-visual' | 'electronic'
+  content: string // 证据内容描述
+  submittedBy: string // 提交方（原告/被告）
+  purpose: string // 证明目的
+  credibilityScore: number // 可信度评分 0-1
+  accepted: boolean // 法院是否采信
+  rejectionReason?: string // 不采信理由
+  relatedFacts: string[] // 关联事实ID
+  crossExamination?: {
+    questions: string[] // 质证问题
+    responses: string[] // 回应
+  }
+  judicialAnalysis?: string // 法官对该证据的分析
+  confidence?: number
+}
+
+/**
+ * 法官说理元素（教学用）
+ * 用于分析法官的推理逻辑链
+ */
+export interface ReasoningElement {
+  summary: string // 说理总结
+  legalBasis: LegalBasisItem[] // 法律依据
+  logicChain: LogicChainStep[] // 逻辑推理链
+  keyArguments: string[] // 关键论点
+  judgment: string // 判决结论
+  dissent?: string // 不同意见（如有）
+  confidence?: number
+}
+
+/**
+ * 法律依据项
+ */
+export interface LegalBasisItem {
+  law: string // 法律名称
+  article: string // 条款号
+  content?: string // 条款内容
+  application: string // 如何应用到本案
+}
+
+/**
+ * 逻辑推理链步骤
+ */
+export interface LogicChainStep {
+  step: number // 步骤序号
+  premise: string // 前提（事实+法律）
+  inference: string // 推理过程
+  conclusion: string // 中间结论
+  relatedEvidence?: string[] // 相关证据ID
+  relatedFacts?: string[] // 相关事实ID
 }
 
 /**

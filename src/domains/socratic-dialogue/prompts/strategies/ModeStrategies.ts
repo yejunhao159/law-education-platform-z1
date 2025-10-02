@@ -494,7 +494,25 @@ export function getTeachingModeStrategiesPrompt(
   currentMode: keyof typeof TEACHING_MODE_STRATEGIES,
   apiMode?: 'response' | 'suggestions' | 'analysis'
 ): string {
-  const strategy = TEACHING_MODE_STRATEGIES[currentMode];
+  // 🔧 修复大小写问题：统一转为小写
+  const normalizedMode = (currentMode as string).toLowerCase() as keyof typeof TEACHING_MODE_STRATEGIES;
+
+  // 调试日志
+  console.log(`[ModeStrategies] 原始 mode: ${currentMode}, 标准化后: ${normalizedMode}`);
+
+  // 防御性检查：如果模式不存在，使用默认的 exploration 模式
+  if (!(normalizedMode in TEACHING_MODE_STRATEGIES)) {
+    console.error(`❌ 教学模式策略未找到: "${normalizedMode}", 使用默认的 exploration 模式`);
+    return getTeachingModeStrategiesPrompt('exploration' as keyof typeof TEACHING_MODE_STRATEGIES, apiMode);
+  }
+
+  const strategy = TEACHING_MODE_STRATEGIES[normalizedMode];
+
+  if (!strategy) {
+    console.error(`❌ Strategy 为 undefined: ${normalizedMode}, 使用默认的 exploration 模式`);
+    return getTeachingModeStrategiesPrompt('exploration' as keyof typeof TEACHING_MODE_STRATEGIES, apiMode);
+  }
+
   let prompt = `## 当前教学模式：${strategy.name}
 
 **模式描述**：${strategy.description}

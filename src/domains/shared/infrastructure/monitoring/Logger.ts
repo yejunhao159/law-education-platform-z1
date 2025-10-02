@@ -20,7 +20,7 @@ export interface LogEntry {
   message: string
   timestamp: Date
   context?: string
-  data?: any
+  data?: unknown
   location?: string
 }
 
@@ -59,7 +59,7 @@ export class Logger {
   /**
    * 格式化日志消息
    */
-  private formatMessage(level: LogLevel, message: string, data?: any): string {
+  private formatMessage(level: LogLevel, message: string, data?: unknown): string {
     const parts: string[] = []
 
     // 添加时间戳
@@ -118,8 +118,10 @@ export class Logger {
     const match = callerLine.match(/at\s+(.*)\s+\((.*):(\d+):(\d+)\)/)
     if (match) {
       const [, funcName, file, line] = match
-      const fileName = file.split('/').pop()
-      return `${fileName}:${line} (${funcName})`
+      if (file) {
+        const fileName = file.split('/').pop()
+        return `${fileName}:${line} (${funcName})`
+      }
     }
 
     return undefined
@@ -128,7 +130,7 @@ export class Logger {
   /**
    * 创建日志条目
    */
-  private createLogEntry(level: LogLevel, message: string, data?: any): LogEntry {
+  private createLogEntry(level: LogLevel, message: string, data?: unknown): LogEntry {
     return {
       level,
       message,
@@ -142,7 +144,7 @@ export class Logger {
   /**
    * 输出日志
    */
-  private output(level: LogLevel, message: string, data?: any): void {
+  private output(level: LogLevel, message: string, data?: unknown): void {
     if (!this.shouldLog(level)) return
 
     const formattedMessage = this.formatMessage(level, message, data)
@@ -171,36 +173,36 @@ export class Logger {
   /**
    * Debug级别日志
    */
-  debug(message: string, data?: any): void {
+  debug(message: string, data?: unknown): void {
     this.output('debug', message, data)
   }
 
   /**
    * Info级别日志
    */
-  info(message: string, data?: any): void {
+  info(message: string, data?: unknown): void {
     this.output('info', message, data)
   }
 
   /**
    * Warning级别日志
    */
-  warn(message: string, data?: any): void {
+  warn(message: string, data?: unknown): void {
     this.output('warn', message, data)
   }
 
   /**
    * Error级别日志
    */
-  error(message: string, error?: Error | any): void {
-    let errorData: any = error
+  error(message: string, error?: Error | unknown): void {
+    let errorData: unknown = error
 
     if (error instanceof Error) {
       errorData = {
         name: error.name,
         message: error.message,
         stack: error.stack,
-        ...(error as any)
+        cause: error.cause
       }
     }
 
@@ -216,7 +218,7 @@ export class Logger {
     const start = Date.now()
     this.debug(`⏱️ 开始计时: ${label}`)
 
-    const logEnd = (result?: any) => {
+    const logEnd = (result?: unknown) => {
       const duration = Date.now() - start
       this.info(`⏱️ 计时结束: ${label} (${duration}ms)`, result)
     }
@@ -274,9 +276,9 @@ export class Logger {
   }
 
   // 事件发射器功能
-  private listeners: Map<string, Function[]> = new Map()
+  private listeners: Map<string, Array<(entry: LogEntry) => void>> = new Map()
 
-  private emit(event: string, data: any): void {
+  private emit(event: string, data: LogEntry): void {
     const handlers = this.listeners.get(event)
     if (handlers) {
       handlers.forEach(handler => {

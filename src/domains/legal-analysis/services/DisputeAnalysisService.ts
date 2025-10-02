@@ -128,7 +128,7 @@ export class DisputeAnalysisService {
       }
 
       if (!request.documentText || request.documentText.trim().length === 0) {
-        return this.createErrorResponse('INVALID_DOCUMENT', '文档内容为空');
+        throw new Error('文档内容为空');
       }
 
       // 构建分析prompt
@@ -155,16 +155,9 @@ export class DisputeAnalysisService {
       console.error('❌ 争议焦点分析失败:', error);
       this.statistics.failedRequests++;
 
-      if (error instanceof Error) {
-        if (error.message.includes('API Key')) {
-          return this.createErrorResponse('API_ERROR', error.message);
-        }
-        if (error.message.includes('timeout')) {
-          return this.createErrorResponse('TIMEOUT', '分析超时，请重试');
-        }
-      }
-
-      return this.createErrorResponse('ANALYSIS_FAILED', '争议分析失败');
+      // 直接抛出错误,不做降级处理
+      // 让上层明确知道失败并返回正确的HTTP状态码
+      throw error;
     }
   }
 
@@ -311,89 +304,67 @@ ${structuredEvents.map(e => `${e.id}${e.date ? ` (${e.date})` : ''}: ${e.content
    * 解析API响应
    */
   private parseAPIResponse(apiResponse: any, analysisTime: number): DisputeAnalysisResponse {
-    try {
-      const content = apiResponse.choices?.[0]?.message?.content;
-      if (!content) {
-        throw new Error('API响应为空');
-      }
-
-      // 处理markdown包装的JSON响应
-      let jsonContent = content;
-      if (content.includes('```json')) {
-        const match = content.match(/```json\n([\s\S]*?)\n```/);
-        if (match && match[1]) {
-          jsonContent = match[1];
-        }
-      }
-
-      const parsed = JSON.parse(jsonContent);
-
-      // 使用验证器规范化响应数据
-      const validatedResponse = validateDisputeResponse({
-        ...parsed,
-        success: true,
-        metadata: {
-          ...parsed.metadata,
-          analysisTime,
-          modelVersion: 'deepseek-chat',
-          timestamp: new Date().toISOString()
-        }
-      });
-
-      // 使用新的统一验证器进行深度验证
-      const validationResult = validateServiceResponse(
-        validatedResponse,
-        ['disputes', 'metadata'],
-        {
-          checkForHardcodedValues: true,
-          minContentLength: 20,
-          requireAIGenerated: true
-        }
-      );
-
-      // 如果验证失败，抛出详细错误
-      if (!validationResult.isValid) {
-        console.error('❌ 争议分析响应验证失败:', {
-          errors: validationResult.errors,
-          warnings: validationResult.warnings
-        });
-        throw new Error(`争议分析结果无效: ${validationResult.errors.join(', ')}`);
-      }
-
-      // 记录警告信息
-      if (validationResult.warnings.length > 0) {
-        console.warn('⚠️ 争议分析响应警告:', validationResult.warnings);
-      }
-
-      return validatedResponse;
-    } catch (error) {
-      console.error('解析API响应失败:', error);
-      return this.createErrorResponse('API_ERROR', 'API响应解析失败');
+    const content = apiResponse.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error('API响应为空');
     }
+
+    // 处理markdown包装的JSON响应
+    let jsonContent = content;
+    if (content.includes('```json')) {
+      const match = content.match(/```json\n([\s\S]*?)\n```/);
+      if (match && match[1]) {
+        jsonContent = match[1];
+      }
+    }
+
+    const parsed = JSON.parse(jsonContent);
+
+    // 使用验证器规范化响应数据
+    const validatedResponse = validateDisputeResponse({
+      ...parsed,
+      success: true,
+      metadata: {
+        ...parsed.metadata,
+        analysisTime,
+        modelVersion: 'deepseek-chat',
+        timestamp: new Date().toISOString()
+      }
+    });
+
+    // 使用新的统一验证器进行深度验证
+    const validationResult = validateServiceResponse(
+      validatedResponse,
+      ['disputes', 'metadata'],
+      {
+        checkForHardcodedValues: true,
+        minContentLength: 20,
+        requireAIGenerated: true
+      }
+    );
+
+    // 如果验证失败，抛出详细错误
+    if (!validationResult.isValid) {
+      console.error('❌ 争议分析响应验证失败:', {
+        errors: validationResult.errors,
+        warnings: validationResult.warnings
+      });
+      throw new Error(`争议分析结果无效: ${validationResult.errors.join(', ')}`);
+    }
+
+    // 记录警告信息
+    if (validationResult.warnings.length > 0) {
+      console.warn('⚠️ 争议分析响应警告:', validationResult.warnings);
+    }
+
+    return validatedResponse;
   }
 
   /**
-   * 创建错误响应
+   * 已删除 createErrorResponse 方法
+   * 原因:降级处理会隐藏真实错误,让问题无法暴露
+   * 现在所有错误直接抛出,由上层处理并返回正确的HTTP状态码
    */
-  private createErrorResponse(code: ErrorCode, message: string): DisputeAnalysisResponse {
-    return {
-      success: false,
-      disputes: [],
-      claimBasisMappings: [],
-      error: {
-        code,
-        message,
-        timestamp: Date.now(),
-        retryable: code !== 'INVALID_DOCUMENT'
-      },
-      metadata: {
-        analysisTime: 0,
-        modelVersion: 'deepseek-chat',
-        confidence: 0,
-        timestamp: new Date().toISOString()
-      }
-    };
-  }
 
   /**
    * 更新平均分析时间

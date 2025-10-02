@@ -20,11 +20,11 @@ import {
   EvidenceMapping,
   LegalRisk,
   AnalysisType,
-  TimelineErrorCode,
   AITimelineRequest,
-  AITimelineResponse
+  AITimelineResponse,
+  CombinedAnalysisResult
 } from './types/TimelineTypes';
-import { ProcessedDocument } from '@/types/legal-intelligence';
+import { ProcessedDocument, ExtractedData } from '@/types/legal-intelligence';
 
 export class TimelineAnalysisApplicationService {
   private apiKey: string;
@@ -80,7 +80,7 @@ export class TimelineAnalysisApplicationService {
 
     } catch (error) {
       console.error('❌ 时间轴分析错误:', error);
-      return this.buildErrorResponse(error, startTime);
+      throw error;
     }
   }
 
@@ -150,24 +150,30 @@ export class TimelineAnalysisApplicationService {
       .flatMap(e => e?.parties || [])
       .filter((p, i, arr) => p && arr.indexOf(p) === i);
 
-    (processedDoc as any).metadata = {
-      ...processedDoc.metadata,
-      eventCount: events.length,
-      dateRange: {
-        start: dates.length > 0 ? dates[0] : '',
-        end: dates.length > 0 ? dates[dates.length - 1] : ''
-      },
-      mainParties: parties,
-      documentType: 'timeline'
+    // 扩展元数据，使用类型扩展
+    const enrichedDoc: ProcessedDocument = {
+      ...processedDoc,
+      metadata: {
+        ...processedDoc.metadata,
+        documentType: 'unknown' as const,
+        ...({
+          eventCount: events.length,
+          dateRange: {
+            start: dates.length > 0 ? dates[0] : '',
+            end: dates.length > 0 ? dates[dates.length - 1] : ''
+          },
+          mainParties: parties
+        } as Record<string, unknown>)
+      }
     };
 
-    return processedDoc;
+    return enrichedDoc;
   }
 
   /**
    * Step 3: 规则分析
    */
-  private performRuleAnalysis(processedDoc: ProcessedDocument): any {
+  private performRuleAnalysis(processedDoc: ProcessedDocument): ExtractedData {
     console.log('Step 3: 规则分析...');
     return RuleExtractor.extract(processedDoc);
   }
@@ -217,14 +223,14 @@ export class TimelineAnalysisApplicationService {
   /**
    * Step 5: 合并分析结果
    */
-  private combineAnalysisResults(ruleAnalysis: any, aiAnalysis: AITimelineResponse | null): any {
+  private combineAnalysisResults(ruleAnalysis: ExtractedData, aiAnalysis: AITimelineResponse | null): CombinedAnalysisResult {
     console.log('Step 5: 合并分析结果...');
 
     if (!aiAnalysis || !aiAnalysis.analysis) {
-      const ruleOnly = { ...ruleAnalysis };
-      if (aiAnalysis?.warnings?.length) {
-        (ruleOnly as any).aiWarnings = aiAnalysis.warnings;
-      }
+      const ruleOnly = {
+        ...ruleAnalysis,
+        aiWarnings: aiAnalysis?.warnings
+      } as CombinedAnalysisResult;
       return ruleOnly;
     }
 
@@ -249,9 +255,9 @@ export class TimelineAnalysisApplicationService {
       legalClauses: aiExtracted?.legalClauses || [],
       facts: aiExtracted?.facts || [],
       metadata: aiExtracted?.metadata || {},
-      confidence: aiAnalysis?.confidence || aiExtracted?.confidence || 0.7,
+      confidence: aiAnalysis?.confidence || aiExtracted?.metadata?.confidence || 0.7,
       source: 'ai' as 'ai'
-    };
+    } as unknown as ExtractedData;
 
     // 使用智能合并器
     const merged = SmartMerger.merge(formattedRuleData, formattedAiData, {
@@ -260,41 +266,37 @@ export class TimelineAnalysisApplicationService {
       ruleWeight: 0.4
     });
 
-    if (aiAnalysis?.analysis) {
-      (merged as any).aiInsights = aiAnalysis.analysis;
+    const result = {
+      ...merged,
+      aiInsights: aiAnalysis.analysis,
+      rawAIResponse: aiAnalysis.rawContent,
+      aiWarnings: aiAnalysis.warnings
+    } as CombinedAnalysisResult;
 
-      // 调试日志：检查AI返回的数据
-      console.log('📊 AI分析数据:', {
-        turningPointsCount: aiAnalysis.analysis?.turningPoints?.length || 0,
-        behaviorPatternsCount: aiAnalysis.analysis?.behaviorPatterns?.length || 0,
-        legalRisksCount: aiAnalysis.analysis?.legalRisks?.length || 0,
-        hasEvidenceChain: !!aiAnalysis.analysis?.evidenceChain,
-        hasSummary: !!aiAnalysis.analysis?.summary
-      });
+    // 调试日志：检查AI返回的数据
+    console.log('📊 AI分析数据:', {
+      turningPointsCount: aiAnalysis.analysis?.turningPoints?.length || 0,
+      behaviorPatternsCount: aiAnalysis.analysis?.behaviorPatterns?.length || 0,
+      legalRisksCount: aiAnalysis.analysis?.legalRisks?.length || 0,
+      hasEvidenceChain: !!aiAnalysis.analysis?.evidenceChain,
+      hasSummary: !!aiAnalysis.analysis?.summary
+    });
 
-      if (aiAnalysis.rawContent) {
-        (merged as any).rawAIResponse = aiAnalysis.rawContent;
-      }
-    }
-    if (aiAnalysis?.warnings?.length) {
-      (merged as any).aiWarnings = aiAnalysis.warnings;
-    }
-
-    return merged;
+    return result;
   }
 
   /**
    * Step 6: 生成时间轴分析
    */
-  private generateTimelineAnalysis(combinedAnalysis: any, events: TimelineEvent[]): TimelineAnalysis {
+  private generateTimelineAnalysis(combinedAnalysis: CombinedAnalysisResult, events: TimelineEvent[]): TimelineAnalysis {
     console.log('Step 6: 生成时间轴分析...');
 
     const keyTurningPoints = this.identifyTurningPoints(events, combinedAnalysis);
     const evidenceMapping = this.generateEvidenceMapping(events, combinedAnalysis);
     const legalRisks = this.analyzeLegalRisks(combinedAnalysis);
 
-    const aiWarnings = (combinedAnalysis as any).aiWarnings;
-    const analysisSource: 'ai' | 'rule' = (combinedAnalysis as any).aiInsights ? 'ai' : 'rule';
+    const aiWarnings = combinedAnalysis.aiWarnings;
+    const analysisSource: 'ai' | 'rule' = combinedAnalysis.aiInsights ? 'ai' : 'rule';
 
     // 调试日志：检查生成的分析结果
     console.log('🎯 生成的时间轴分析结果:', {
@@ -302,7 +304,7 @@ export class TimelineAnalysisApplicationService {
       legalRisksCount: legalRisks.length,
       evidenceMappingStrength: evidenceMapping?.strength || 0,
       analysisSource,
-      hasAIInsights: !!(combinedAnalysis as any).aiInsights
+      hasAIInsights: !!combinedAnalysis.aiInsights
     });
 
     return {
@@ -311,7 +313,7 @@ export class TimelineAnalysisApplicationService {
       evidenceMapping,
       legalRisks,
       summary: this.generateSummary(events, combinedAnalysis),
-      confidence: combinedAnalysis.confidence || 0.8,
+      confidence: (combinedAnalysis.confidence as number) || 0.8,
       aiWarnings,
       analysisSource
     };
@@ -502,13 +504,13 @@ ${focusAreas}
   /**
    * 识别关键转折点
    */
-  private identifyTurningPoints(events: TimelineEvent[], analysis: any): TurningPoint[] {
-    const insights = (analysis as any)?.aiInsights;
+  private identifyTurningPoints(events: TimelineEvent[], analysis: CombinedAnalysisResult): TurningPoint[] {
+    const insights = analysis.aiInsights;
 
     if (insights?.turningPoints?.length) {
-      return insights.turningPoints.map((tp: any) => ({
+      return insights.turningPoints.map(tp => ({
         date: tp.date || '',
-        description: tp.title || tp.description || '关键事件',
+        description: tp.title || '关键事件',
         legalSignificance: tp.legalSignificance || '需要进一步法律分析',
         impact: this.normalizeImpact(tp.impact),
         consequences: Array.isArray(tp.consequences) && tp.consequences.length > 0
@@ -537,7 +539,7 @@ ${focusAreas}
    * 生成简化的证据映射
    * 替代复杂的证据链分析
    */
-  private generateEvidenceMapping(events: TimelineEvent[], _analysis: any): EvidenceMapping | undefined {
+  private generateEvidenceMapping(events: TimelineEvent[], _analysis: CombinedAnalysisResult): EvidenceMapping | undefined {
     try {
       const evidenceToFacts = new Map<string, string[]>();
       const factToEvidence = new Map<string, string[]>();
@@ -545,15 +547,17 @@ ${focusAreas}
       // 从事件中提取证据和事实的映射关系
       events.forEach((event, index) => {
         const factId = event.id || `fact-${index}`;
-        const evidence = event.evidence || [];
+        const evidence: Array<string | { id?: string }> = event.evidence || [];
 
         // 建立事实到证据的映射
         if (evidence.length > 0) {
-          factToEvidence.set(factId, evidence);
+          const evidenceIds = evidence.map(ev =>
+            typeof ev === 'string' ? ev : String(ev?.id || ev)
+          );
+          factToEvidence.set(factId, evidenceIds);
 
           // 建立证据到事实的反向映射
-          evidence.forEach(ev => {
-            const evId = typeof ev === 'string' ? ev : (ev as any).id || String(ev);
+          evidenceIds.forEach(evId => {
             if (!evidenceToFacts.has(evId)) {
               evidenceToFacts.set(evId, []);
             }
@@ -586,10 +590,10 @@ ${focusAreas}
   /**
    * 分析法律风险
    */
-  private analyzeLegalRisks(analysis: any): LegalRisk[] {
-    const insights = (analysis as any)?.aiInsights;
+  private analyzeLegalRisks(analysis: CombinedAnalysisResult): LegalRisk[] {
+    const insights = analysis.aiInsights;
     if (Array.isArray(insights?.legalRisks) && insights.legalRisks.length > 0) {
-      return insights.legalRisks.map((risk: any) => ({
+      return insights.legalRisks.map(risk => ({
         type: risk.type || RiskType.LEGAL,
         description: risk.description || '需要进一步法律审查',
         likelihood: this.normalizeProbabilityLabel(risk.likelihood),
@@ -612,8 +616,8 @@ ${focusAreas}
   /**
    * 生成摘要
    */
-  private generateSummary(events: TimelineEvent[], analysis: any): string {
-    const insights = (analysis as any)?.aiInsights;
+  private generateSummary(events: TimelineEvent[], analysis: CombinedAnalysisResult): string {
+    const insights = analysis.aiInsights;
     if (typeof insights?.summary === 'string' && insights.summary.trim().length > 0) {
       return insights.summary.trim();
     }
@@ -625,11 +629,11 @@ ${focusAreas}
    * 计算时间跨度
    */
   private calculateTimeSpan(events: TimelineEvent[]): string {
-    const dates = events.map(e => e.date).filter(Boolean).sort();
+    const dates = events.map(e => e.date).filter((d): d is string => Boolean(d)).sort();
     if (dates.length < 2) return '较短时期';
 
-    const startDate = new Date(dates[0]);
-    const endDate = new Date(dates[dates.length - 1]);
+    const startDate = new Date(dates[0]!);
+    const endDate = new Date(dates[dates.length - 1]!);
     const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
 
     if (daysDiff < 30) return `${daysDiff}天`;
@@ -647,7 +651,7 @@ ${focusAreas}
     return '需要进一步法律分析';
   }
 
-  private normalizeImpact(value: any): 'high' | 'medium' | 'low' {
+  private normalizeImpact(value: string | number | undefined): 'high' | 'medium' | 'low' {
     if (typeof value === 'number') {
       if (value >= 0.66) return 'high';
       if (value <= 0.33) return 'low';
@@ -660,7 +664,7 @@ ${focusAreas}
     return 'medium';
   }
 
-  private normalizeProbabilityLabel(value: any): 'high' | 'medium' | 'low' {
+  private normalizeProbabilityLabel(value: string | number | undefined): 'high' | 'medium' | 'low' {
     if (typeof value === 'number') {
       if (value >= 0.66) return 'high';
       if (value <= 0.33) return 'low';
@@ -705,29 +709,9 @@ ${focusAreas}
   /**
    * 构建错误响应
    */
-  private buildErrorResponse(error: unknown, startTime: number): TimelineAnalysisResponse {
-    const errorMessage = error instanceof Error ? error.message : '未知错误';
-
-    let errorCode = TimelineErrorCode.INTERNAL_ERROR;
-    if (errorMessage.includes('事件数据')) {
-      errorCode = TimelineErrorCode.INVALID_EVENTS;
-    } else if (errorMessage.includes('字段')) {
-      errorCode = TimelineErrorCode.MISSING_DATA;
-    }
-
-    return {
-      success: false,
-      error: {
-        message: errorMessage,
-        code: errorCode
-      },
-      metadata: {
-        processingTime: Date.now() - startTime,
-        eventCount: 0,
-        analysisMethod: 'rule-based',
-        confidence: 0,
-        version: '1.0.0'
-      }
-    };
-  }
+  /**
+   * 已删除 buildErrorResponse 方法
+   * 原因: Service层不应返回结构化错误响应,应直接抛出错误
+   * 现在所有错误直接throw,由API层统一处理并返回正确的HTTP状态码
+   */
 }

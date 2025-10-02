@@ -83,19 +83,21 @@ export async function OPTIONS() {
 
 /**
  * 处理流式请求 - Server-Sent Events (SSE)
+ * 使用ai-chat 0.5.0的真正流式输出（非模拟）
  */
 async function handleStreamingRequest(requestData: any): Promise<Response> {
   try {
-    // 创建流式迭代器
-    const stream = await socraticService.generateQuestionStream(requestData);
+    console.log('🚀 开始真正的流式输出...');
 
     // 创建ReadableStream用于SSE
     const readableStream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
         let isClosed = false;
+        let tokenCount = 0;
+        const startTime = Date.now();
 
-        // Phase B修复: 安全的enqueue包装函数
+        // 安全的enqueue包装函数
         const safeEnqueue = (data: Uint8Array) => {
           if (!isClosed) {
             try {
@@ -107,7 +109,7 @@ async function handleStreamingRequest(requestData: any): Promise<Response> {
           }
         };
 
-        // Phase B修复: 安全的close包装函数
+        // 安全的close包装函数
         const safeClose = () => {
           if (!isClosed) {
             try {
@@ -121,28 +123,29 @@ async function handleStreamingRequest(requestData: any): Promise<Response> {
         };
 
         try {
-          // Phase B: 收集完整内容用于Markdown转换
-          let fullContent = '';
+          // 使用真正的流式迭代器（从ai-chat实时获取）
+          const stream = socraticService.generateQuestionStream(requestData);
+
+          // 实时转发每个chunk
           for await (const chunk of stream) {
-            fullContent += chunk;
+            tokenCount++;
+
+            // 实时发送每个文本chunk（无延迟！）
+            const sseData = `data: ${JSON.stringify({ content: chunk })}\n\n`;
+            safeEnqueue(encoder.encode(sseData));
           }
 
-          // 转换Markdown为纯文本
-          const plainText = markdownToPlainText(fullContent);
-
-          // 分段流式输出纯文本 - 优化打字机效果
-          const chunkSize = 3; // 每次输出3个字符(中文友好)
-          for (let i = 0; i < plainText.length; i += chunkSize) {
-            const textChunk = plainText.slice(i, i + chunkSize);
-            const data = `data: ${JSON.stringify({ content: textChunk })}\n\n`;
-            safeEnqueue(encoder.encode(data));
-            // 延迟150ms,模拟真实打字速度
-            await new Promise(resolve => setTimeout(resolve, 150));
-          }
+          const duration = Date.now() - startTime;
+          console.log('✅ 流式输出完成:', {
+            tokens: tokenCount,
+            duration: `${duration}ms`,
+            tokensPerSecond: (tokenCount / (duration / 1000)).toFixed(2)
+          });
 
           // 发送完成信号
           safeEnqueue(encoder.encode('data: [DONE]\n\n'));
           safeClose();
+
         } catch (error) {
           console.error('❌ 流式输出错误:', error);
           const errorData = `data: ${JSON.stringify({
@@ -158,8 +161,9 @@ async function handleStreamingRequest(requestData: any): Promise<Response> {
       status: 200,
       headers: {
         'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',  // 禁用Nginx缓冲
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type'

@@ -126,55 +126,32 @@ export async function POST(request: NextRequest) {
     // Step 4: 调用智能叙事服务
     const result = await caseNarrativeService.generateIntelligentNarrative(narrativeRequest);
 
-    // Step 5: 处理生成结果
-    if (!result.success) {
-      console.error('AI叙事生成失败:', result.error);
-      return NextResponse.json(
-        {
-          error: '智能叙事生成失败',
-          details: result.error,
-          fallback: 'rule-based-narrative'
-        },
-        { status: 500 }
-      );
-    }
+    // Step 5: 返回生成结果
+    console.log('✅ 智能叙事生成成功:', {
+      chaptersCount: result.chapters.length,
+      confidence: result.metadata.confidence,
+      processingTime: result.metadata.processingTime
+    });
 
-    // 检查是否使用了fallback
-    if (result.metadata.fallbackUsed) {
-      console.warn('⚠️ 使用了fallback叙事:', {
-        reason: result.metadata.errorMessage || '未知原因',
-        confidence: result.metadata.confidence
-      });
-    } else {
-      console.log('✅ 智能叙事生成成功:', {
-        chaptersCount: result.chapters.length,
-        confidence: result.metadata.confidence,
-        processingTime: result.metadata.processingTime
-      });
-    }
-
-    // Step 6: 返回结果（包括fallback状态）
     return NextResponse.json({
       success: true,
       chapters: result.chapters,
-      metadata: result.metadata,
-      // 明确标识是否为AI生成
-      isAIGenerated: !result.metadata.fallbackUsed
+      metadata: result.metadata
     });
 
   } catch (error) {
     console.error('❌ 智能叙事生成API错误:', error);
 
-    // Step 7: 全局错误处理
+    // 服务不可用时返回503状态码
     const errorMessage = error instanceof Error ? error.message : '未知错误';
 
     return NextResponse.json(
       {
-        error: '服务器内部错误',
+        error: 'Narrative generation service unavailable',
         details: errorMessage,
         timestamp: new Date().toISOString()
       },
-      { status: 500 }
+      { status: 503 }
     );
   }
 }

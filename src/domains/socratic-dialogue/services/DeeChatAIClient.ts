@@ -1,12 +1,11 @@
 /**
- * DeeChat驱动的AI客户端
- * 集成官方DeeChat包，提供统一的AI接口
+ * DeeChat驱动的AI客户端 - 使用ai-chat 0.5.0
+ * 集成官方@deepracticex/ai-chat包，提供统一的AI接口
  * DeepPractice Standards Compliant
  */
 
-import { AIChat } from '@deepracticex/ai-chat';
+import { AIChat, type ChatStreamChunk } from '@deepracticex/ai-chat';
 import { countTokens, CostCalculator, TokenCalculator } from '@deepracticex/token-calculator';
-import { ContextFormatter } from '@deepracticex/context-manager';
 import type { Message, SocraticRequest } from '../types';
 
 // 类型别名，保持兼容
@@ -47,16 +46,6 @@ interface AIResponse {
   duration: number;
 }
 
-interface StreamingResponse {
-  stream: AsyncIterable<any>;
-  metadata: {
-    estimatedTokens: number;
-    estimatedCost: number;
-    model: string;
-    provider: string;
-  };
-}
-
 export class DeeChatAIClient {
   private aiChat: AIChat;
   private config: DeeChatConfig;
@@ -65,9 +54,22 @@ export class DeeChatAIClient {
 
   constructor(config: DeeChatConfig) {
     this.config = config;
-    // Phase B修复: 暂时不初始化有问题的AIChat
-    // @ts-ignore - aiChat将被原生fetch替代
-    this.aiChat = null;
+
+    // 使用ai-chat 0.5.0创建实例
+    this.aiChat = new AIChat({
+      baseUrl: this.getBaseUrl(),
+      model: config.model,
+      apiKey: config.apiKey,
+      temperature: config.temperature,
+      maxTokens: config.maxContextTokens,
+      timeout: 90000  // 90秒超时，适合流式长响应
+    });
+
+    console.log('✅ DeeChatAIClient初始化完成:', {
+      provider: config.provider,
+      model: config.model,
+      baseUrl: this.getBaseUrl()
+    });
   }
 
   /**
@@ -105,7 +107,7 @@ export class DeeChatAIClient {
       const availableTokens = this.config.maxContextTokens - inputTokens - this.config.reserveTokens;
       const maxOutputTokens = Math.max(100, Math.min(1000, availableTokens));
 
-      const isOptimal = availableTokens > 200; // 至少200个token用于输出
+      const isOptimal = availableTokens > 300; // 至少300个token用于输出
 
       return {
         inputTokens,
@@ -162,83 +164,63 @@ export class DeeChatAIClient {
   }
 
   /**
-   * 发送消息 - 统一接口
+   * 发送自定义消息 - 使用ai-chat的流式迭代器（非流式完整响应）
    */
-  async sendMessage(contextString: string, request: SocraticRequest): Promise<AIResponse> {
+  async sendCustomMessage(
+    messages: Array<{ role: 'system' | 'user' | 'assistant', content: string }>,
+    options?: {
+      temperature?: number;
+      maxTokens?: number;
+      enableCostOptimization?: boolean;
+    }
+  ): Promise<AIResponse> {
     const startTime = Date.now();
 
     try {
-      // Token优化
-      const tokenInfo = await this.calculateOptimalTokens(
-        request.messages || [],
-        contextString
-      );
+      // 转换为ai-chat格式
+      const aiChatMessages = messages.map(m => ({
+        role: m.role,
+        content: m.content
+      }));
 
-      // 成本检查
-      if (this.config.enableCostOptimization) {
-        const costEstimate = await this.estimateRequestCost(
-          tokenInfo.inputTokens,
-          tokenInfo.maxOutputTokens
-        );
+      let content = '';
+      let usage: any;
+      let model = '';
 
-        if (!costEstimate.withinBudget) {
-          throw new Error(`预估成本 $${costEstimate.totalCost.toFixed(4)} 超出阈值 $${this.config.costThreshold}`);
+      // 使用ai-chat的流式迭代器聚合为完整响应
+      for await (const chunk of this.aiChat.sendMessage(aiChatMessages, {
+        temperature: options?.temperature || this.config.temperature,
+        maxTokens: options?.maxTokens || this.config.maxContextTokens
+      })) {
+        if (chunk.content) {
+          content += chunk.content;
         }
+        if (chunk.usage) usage = chunk.usage;
+        if (chunk.model) model = chunk.model;
+        if (chunk.error) throw new Error(chunk.error);
+        if (chunk.done) break;
       }
 
-      // 构建消息
-      const messages = [
-        {
-          role: 'user' as const,
-          content: contextString
-        }
-      ];
-
-      // Phase B修复: 使用原生fetch
-      const apiResponse = await fetch(`${this.getBaseUrl()}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`
-        },
-        body: JSON.stringify({
-          model: this.config.model,
-          messages: messages.map(m => ({ role: m.role, content: m.content })),
-          temperature: this.config.temperature,
-          max_tokens: tokenInfo.maxOutputTokens
-        })
-      });
-
-      if (!apiResponse.ok) {
-        throw new Error(`API调用失败: ${apiResponse.status} ${apiResponse.statusText}`);
-      }
-
-      const apiResult = await apiResponse.json();
-      const content = apiResult.choices?.[0]?.message?.content || '';
-
-      // 计算实际使用的token和成本
-      const outputTokens = countTokens(content, this.config.provider, this.config.model);
-      const actualCost = await this.estimateRequestCost(tokenInfo.inputTokens, outputTokens);
+      // 计算成本
+      const inputTokens = usage?.prompt_tokens || 0;
+      const outputTokens = usage?.completion_tokens || 0;
+      const cost = await this.estimateRequestCost(inputTokens, outputTokens);
 
       // 更新统计
       this.requestCount++;
-      this.totalCost += actualCost.totalCost;
+      this.totalCost += cost.totalCost;
 
       const duration = Date.now() - startTime;
 
       return {
         content,
         tokensUsed: {
-          input: tokenInfo.inputTokens,
+          input: inputTokens,
           output: outputTokens,
-          total: tokenInfo.inputTokens + outputTokens
+          total: inputTokens + outputTokens
         },
-        cost: {
-          input: actualCost.inputCost,
-          output: actualCost.outputCost,
-          total: actualCost.totalCost
-        },
-        model: this.config.model,
+        cost: cost,
+        model: model || this.config.model,
         provider: this.config.provider,
         duration
       };
@@ -250,78 +232,28 @@ export class DeeChatAIClient {
   }
 
   /**
-   * 流式响应 - 实时生成
+   * 发送流式自定义消息 - 直接返回ai-chat的流式迭代器
    */
-  async sendMessageStream(contextString: string, request: SocraticRequest): Promise<StreamingResponse> {
-    try {
-      // Token和成本预估
-      const tokenInfo = await this.calculateOptimalTokens(
-        request.messages || [],
-        contextString
-      );
+  async *sendCustomMessageStream(
+    messages: Array<{ role: 'system' | 'user' | 'assistant', content: string }>,
+    options?: {
+      temperature?: number;
+      maxTokens?: number;
+      enableCostOptimization?: boolean;
+    }
+  ): AsyncIterable<ChatStreamChunk> {
+    // 转换为ai-chat格式
+    const aiChatMessages = messages.map(m => ({
+      role: m.role,
+      content: m.content
+    }));
 
-      const costEstimate = await this.estimateRequestCost(
-        tokenInfo.inputTokens,
-        tokenInfo.maxOutputTokens
-      );
-
-      if (this.config.enableCostOptimization && !costEstimate.withinBudget) {
-        throw new Error(`预估成本超出预算`);
-      }
-
-      // 构建消息
-      const messages = [
-        {
-          role: 'user' as const,
-          content: contextString
-        }
-      ];
-
-      // Phase B优化: 同样的TLS解决方案
-      const response = await fetch(`${this.getBaseUrl()}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`,
-          'Accept': 'text/event-stream',
-          'Connection': 'keep-alive',
-          'Cache-Control': 'no-cache'
-        },
-        body: JSON.stringify({
-          model: this.config.model,
-          messages: messages.map(m => ({ role: m.role, content: m.content })),
-          temperature: this.config.temperature,
-          max_tokens: tokenInfo.maxOutputTokens,
-          stream: true
-        }),
-        keepalive: true,
-        // @ts-ignore
-        duplex: 'half'
-      });
-
-      if (!response.ok) {
-        throw new Error(`流式API调用失败: ${response.status} ${response.statusText}`);
-      }
-
-      if (!response.body) {
-        throw new Error('响应body为空');
-      }
-
-      const stream = this.createStreamIterator(response.body);
-
-      return {
-        stream,
-        metadata: {
-          estimatedTokens: tokenInfo.inputTokens + tokenInfo.maxOutputTokens,
-          estimatedCost: costEstimate.totalCost,
-          model: this.config.model,
-          provider: this.config.provider
-        }
-      };
-
-    } catch (error) {
-      console.error('DeeChat流式调用失败:', error);
-      throw error;
+    // 直接yield ai-chat的chunks
+    for await (const chunk of this.aiChat.sendMessage(aiChatMessages, {
+      temperature: options?.temperature || this.config.temperature,
+      maxTokens: options?.maxTokens || this.config.maxContextTokens
+    })) {
+      yield chunk;
     }
   }
 
@@ -359,252 +291,20 @@ export class DeeChatAIClient {
   updateConfig(updates: Partial<DeeChatConfig>) {
     this.config = { ...this.config, ...updates };
 
-    // 更新AIChat实例
+    // 重新创建AIChat实例
     this.aiChat = new AIChat({
       baseUrl: this.getBaseUrl(),
       model: this.config.model,
-      apiKey: this.config.apiKey
+      apiKey: this.config.apiKey,
+      temperature: this.config.temperature,
+      maxTokens: this.config.maxContextTokens,
+      timeout: 90000
     });
-  }
-
-  /**
-   * 发送自定义消息 - 支持双提示词模式 (System + User)
-   * 为EnhancedSocraticService的模块化架构提供支持
-   */
-  async sendCustomMessage(
-    messages: Array<{ role: 'system' | 'user' | 'assistant', content: string }>,
-    options?: {
-      temperature?: number;
-      maxTokens?: number;
-      enableCostOptimization?: boolean;
-    }
-  ): Promise<AIResponse> {
-    const startTime = Date.now();
-
-    try {
-      // 参数验证
-      if (!Array.isArray(messages)) {
-        throw new Error(`DeeChatAIClient.sendCustomMessage: messages参数必须是数组，实际类型: ${typeof messages}`);
-      }
-
-      // 合并配置选项
-      const finalOptions = {
-        temperature: options?.temperature || this.config.temperature,
-        maxTokens: options?.maxTokens || 1000,
-        enableCostOptimization: options?.enableCostOptimization ?? this.config.enableCostOptimization
-      };
-
-      // 计算输入token数（合并所有消息内容）
-      const combinedContent = messages.map(m => m.content).join('\n');
-      const inputTokens = countTokens(combinedContent, this.config.provider, this.config.model);
-
-      // 成本检查
-      if (finalOptions.enableCostOptimization) {
-        const costEstimate = await this.estimateRequestCost(
-          inputTokens,
-          finalOptions.maxTokens
-        );
-
-        if (!costEstimate.withinBudget) {
-          throw new Error(`预估成本 $${costEstimate.totalCost.toFixed(4)} 超出阈值 $${this.config.costThreshold}`);
-        }
-      }
-
-      // Phase B修复: 使用原生fetch替换有问题的ai-chat包
-      const apiResponse = await fetch(`${this.getBaseUrl()}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`
-        },
-        body: JSON.stringify({
-          model: this.config.model,
-          messages: messages.map(m => ({ role: m.role, content: m.content })),
-          temperature: finalOptions.temperature,
-          max_tokens: finalOptions.maxTokens
-        })
-      });
-
-      if (!apiResponse.ok) {
-        throw new Error(`API调用失败: ${apiResponse.status} ${apiResponse.statusText}`);
-      }
-
-      const apiResult = await apiResponse.json();
-      const content = apiResult.choices?.[0]?.message?.content || '';
-
-      // 计算实际使用的token和成本
-      const outputTokens = countTokens(content, this.config.provider, this.config.model);
-      const actualCost = await this.estimateRequestCost(inputTokens, outputTokens);
-
-      // 更新统计
-      this.requestCount++;
-      this.totalCost += actualCost.totalCost;
-
-      const duration = Date.now() - startTime;
-
-      return {
-        content,
-        tokensUsed: {
-          input: inputTokens,
-          output: outputTokens,
-          total: inputTokens + outputTokens
-        },
-        cost: {
-          input: actualCost.inputCost,
-          output: actualCost.outputCost,
-          total: actualCost.totalCost
-        },
-        model: this.config.model,
-        provider: this.config.provider,
-        duration
-      };
-
-    } catch (error) {
-      console.error('DeeChat自定义消息调用失败:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 发送流式自定义消息 - 支持双提示词模式的流式响应
-   */
-  async sendCustomMessageStream(
-    messages: Array<{ role: 'system' | 'user' | 'assistant', content: string }>,
-    options?: {
-      temperature?: number;
-      maxTokens?: number;
-      enableCostOptimization?: boolean;
-    }
-  ): Promise<StreamingResponse> {
-    try {
-      // 合并配置选项
-      const finalOptions = {
-        temperature: options?.temperature || this.config.temperature,
-        maxTokens: options?.maxTokens || 1000,
-        enableCostOptimization: options?.enableCostOptimization ?? this.config.enableCostOptimization
-      };
-
-      // 计算输入token数和成本预估
-      const combinedContent = messages.map(m => m.content).join('\n');
-      const inputTokens = countTokens(combinedContent, this.config.provider, this.config.model);
-      const costEstimate = await this.estimateRequestCost(inputTokens, finalOptions.maxTokens);
-
-      if (finalOptions.enableCostOptimization && !costEstimate.withinBudget) {
-        throw new Error(`预估成本超出预算`);
-      }
-
-      // Phase B优化: 解决TLS socket断连问题
-      // 方案: 使用keep-alive和优化的fetch配置
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 90000); // 增加到90秒
-
-      let stream;
-      try {
-        const response = await fetch(`${this.getBaseUrl()}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.config.apiKey}`,
-            'Accept': 'text/event-stream',
-            'Connection': 'keep-alive', // 保持连接
-            'Cache-Control': 'no-cache'
-          },
-          body: JSON.stringify({
-            model: this.config.model,
-            messages: messages.map(m => ({ role: m.role, content: m.content })),
-            temperature: finalOptions.temperature,
-            max_tokens: finalOptions.maxTokens,
-            stream: true
-          }),
-          signal: controller.signal,
-          // 关键优化: Next.js环境下的fetch配置
-          keepalive: true, // 启用keep-alive
-          // @ts-ignore - Next.js特定配置
-          duplex: 'half' // 流式请求必需
-        });
-
-        clearTimeout(timeout);
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`流式API调用失败: ${response.status} - ${errorText}`);
-        }
-
-        if (!response.body) {
-          throw new Error('响应body为空');
-        }
-
-        stream = this.createStreamIterator(response.body);
-      } catch (error) {
-        clearTimeout(timeout);
-        console.error('流式fetch失败,详细错误:', error);
-        throw error;
-      }
-
-      return {
-        stream,
-        metadata: {
-          estimatedTokens: inputTokens + finalOptions.maxTokens,
-          estimatedCost: costEstimate.totalCost,
-          model: this.config.model,
-          provider: this.config.provider
-        }
-      };
-
-    } catch (error) {
-      console.error('DeeChat自定义流式调用失败:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Phase B新增: 创建SSE流迭代器
-   * 将ReadableStream转换为AsyncIterable<string>
-   */
-  private async *createStreamIterator(body: ReadableStream<Uint8Array>): AsyncIterable<string> {
-    const reader = body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // 保留不完整的行
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed === 'data: [DONE]') continue;
-
-          if (trimmed.startsWith('data: ')) {
-            try {
-              const jsonStr = trimmed.slice(6); // 移除 "data: " 前缀
-              const parsed = JSON.parse(jsonStr);
-              const content = parsed.choices?.[0]?.delta?.content;
-
-              if (content) {
-                // Phase B: 直接yield原始内容,不做Markdown转换
-                // Markdown转换由前端或最终输出时统一处理
-                yield content;
-              }
-            } catch (e) {
-              console.warn('解析SSE数据失败:', trimmed, e);
-            }
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock();
-    }
   }
 }
 
 // 默认配置工厂函数
 export function createDeeChatConfig(overrides: Partial<DeeChatConfig> = {}): DeeChatConfig {
-  // 优先使用传入的配置，其次是环境变量，最后是默认值
   const config = {
     provider: overrides.provider || 'deepseek' as const,
     apiKey: overrides.apiKey || process.env.DEEPSEEK_API_KEY || '',
@@ -612,19 +312,17 @@ export function createDeeChatConfig(overrides: Partial<DeeChatConfig> = {}): Dee
     model: overrides.model || 'deepseek-chat',
     maxContextTokens: overrides.maxContextTokens || 8000,
     reserveTokens: overrides.reserveTokens || 100,
-    costThreshold: overrides.costThreshold ?? 0.50, // 增加到50美分，确保AI功能正常工作
+    costThreshold: overrides.costThreshold ?? 0.50,
     temperature: overrides.temperature ?? 0.7,
     enableStreaming: overrides.enableStreaming ?? true,
     enableCostOptimization: overrides.enableCostOptimization ?? true,
   };
 
-  // 调试信息
   console.log('🔧 DeeChatConfig创建:', {
     provider: config.provider,
     apiUrl: config.apiUrl,
     model: config.model,
-    hasApiKey: !!config.apiKey,
-    costThreshold: config.costThreshold
+    hasApiKey: !!config.apiKey
   });
 
   return config;
@@ -632,8 +330,7 @@ export function createDeeChatConfig(overrides: Partial<DeeChatConfig> = {}): Dee
 
 /**
  * Markdown转纯文本 - 清洗输出格式
- * Phase B新增: 将AI返回的Markdown转为清爽的纯文本
- * 特殊处理: 保留选项标记(A. B. C. D. E.)用于ISSUE方法论
+ * 保留选项标记(A. B. C. D. E.)用于ISSUE方法论
  */
 export function markdownToPlainText(markdown: string): string {
   let text = markdown;
@@ -665,7 +362,6 @@ export function markdownToPlainText(markdown: string): string {
   text = text.replace(/^>\s+/gm, '');
 
   // 清理列表标记,但保留选项标记(A. B. C. D. E.)
-  // 先标记选项行,避免被清理
   const optionLines = new Map<string, string>();
   let lineIndex = 0;
   text = text.replace(/^[\s]*([A-E])[.、:：]\s*(.+)$/gm, (match, letter, content) => {

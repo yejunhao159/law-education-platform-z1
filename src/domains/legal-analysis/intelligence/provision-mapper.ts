@@ -147,16 +147,19 @@ export class ProvisionMapper {
    */
   static enhanceLegalClauses(clauses: LegalClause[]): LegalClause[] {
     return clauses.map(clause => {
+      // 安全检查：确保clause.source存在
+      if (!clause.source) return clause;
+
       // 查找完整的法律内容
-      const law = this.provisions.find(p => 
-        p.title.includes(clause.source) || clause.source.includes(p.title)
+      const law = this.provisions.find(p =>
+        p.title?.includes(clause.source) || clause.source?.includes(p.title)
       )
-      
+
       if (!law) return clause
-      
-      const article = law.articles.find(a => 
-        a.article === clause.article || 
-        (clause.article && a.article.includes(clause.article))
+
+      const article = law.articles.find(a =>
+        a.article === clause.article ||
+        (clause.article && a.article?.includes(clause.article))
       )
       
       if (!article) return clause

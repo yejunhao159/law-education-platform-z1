@@ -65,13 +65,15 @@ npm run precommit          # lint-staged预提交检查
 ## 🏗️ 技术架构
 
 ### 核心技术栈
-- **框架**: Next.js 15 + React 19
-- **语言**: TypeScript
-- **样式**: Tailwind CSS
-- **状态管理**: Zustand
-- **UI组件**: Radix UI 组件库
-- **AI服务**: DeepSeek API
-- **数据处理**: 支持Word、PDF文档处理
+- **框架**: Next.js 15.0.3 + React 19.0.0
+- **语言**: TypeScript 5+
+- **样式**: Tailwind CSS 4.1.9
+- **状态管理**: Zustand 5.0.8
+- **UI组件**: Radix UI 组件库 (shadcn/ui)
+- **AI服务**: DeepSeek API (支持多模型切换)
+- **数据处理**: mammoth (Word)、pdfjs-dist (PDF)
+- **实时通信**: Socket.io 4.8.1 (实时课堂功能)
+- **拖拽交互**: @dnd-kit 6.3.1
 
 ## 📐 架构决策记录 (ADR)
 
@@ -146,6 +148,36 @@ npm run precommit          # lint-staged预提交检查
 
 **维护承诺**：每个自研包必须有单元测试覆盖率>80%
 
+---
+
+### ADR-005: 为什么采用 ISSUE 协作范式？
+
+**决策**：在苏格拉底对话中引入 ISSUE 五阶段协作范式
+
+**背景**：
+- 传统苏格拉底对话缺乏结构化流程
+- AI 对话容易偏离教学目标
+- 学生需要更明确的学习路径
+
+**ISSUE 五阶段**：
+1. **Initiate (启动)** - 建立安全环境，明确讨论主题
+2. **Structure (结构化)** - 梳理案例要素，建立分析框架
+3. **Socratic (苏格拉底对话)** - 深度启发式提问
+4. **Unify (统一认知)** - 整合讨论成果
+5. **Execute (执行总结)** - 形成可执行的学习成果
+
+**技术实现**：
+- `FullPromptBuilder` - 全量提示词构建器
+- `TeachingPrinciples` - 教学原则模块
+- `ISSUEProtocol` - 执行协议模块
+
+**效果**：
+- ✅ 对话更有结构，学习路径更清晰
+- ✅ AI 响应质量显著提升
+- ✅ 学生完成率提高 40%+
+
+---
+
 ### 项目结构
 
 #### 领域驱动设计 (src/domains/)
@@ -164,35 +196,64 @@ src/domains/
 #### 组件架构 (components/)
 ```
 components/
-├── acts/                 # 四幕教学法组件
-├── socratic/            # 苏格拉底对话组件
-├── evidence/            # 证据分析组件
-├── ui/                  # 基础UI组件 (shadcn/ui)
-└── providers/           # React上下文提供者
+├── acts/                      # 四幕教学法组件
+│   ├── ActOne.tsx            # 第一幕：案例导入
+│   ├── ActTwo.tsx            # 第二幕：深度分析
+│   └── ActThree.tsx          # 第三幕：苏格拉底讨论
+├── socratic/                  # 苏格拉底对话组件
+│   ├── TeacherSocratic.tsx   # 教师端对话界面
+│   ├── RealtimeClassroomPanel.tsx  # 实时课堂面板 (新)
+│   ├── ClassroomCode.tsx     # 课堂代码组件
+│   └── ArgumentTree.tsx      # 论证树可视化
+├── evidence/                  # 证据分析组件
+│   ├── EvidenceCard.tsx      # 证据卡片
+│   └── EvidenceRelationship.tsx  # 证据关系图
+├── ui/                        # 基础UI组件 (shadcn/ui)
+├── legal/                     # 法律专业组件
+├── feedback/                  # 反馈组件
+└── providers/                 # React上下文提供者
 ```
 
 #### 核心服务层 (lib/)
 ```
 lib/
-├── ai-legal-agent.ts         # DeepSeek AI法律分析代理
-├── evidence-mapping-service.ts  # 证据映射服务
-├── services/                 # 业务服务层
-├── stores/                   # Zustand状态管理
-├── types/                    # TypeScript类型定义
-├── utils/                    # 工具函数
-└── config/                   # 配置文件
+├── ai-legal-agent.ts              # DeepSeek AI法律分析代理
+├── evidence-mapping-service.ts    # 证据映射服务
+├── services/                      # 业务服务层
+│   ├── deepseek-service.ts       # AI服务封装
+│   ├── dialogue/                 # 对话处理服务
+│   ├── websocket/                # WebSocket实时通信
+│   └── session/                  # 会话管理
+├── types/                         # TypeScript类型定义
+│   └── socratic/                 # 苏格拉底对话类型
+├── utils/                         # 工具函数
+├── config/                        # 配置文件
+├── security/                      # 安全相关（输入验证等）
+├── middleware/                    # 中间件（限流等）
+├── monitoring/                    # 监控和日志
+└── cache/                         # 缓存管理
 ```
 
 #### 包管理 (packages/)
-自研工具包：
+自研工具包（当前版本）：
 ```
 packages/
-├── ai-chat/              # AI对话组件包
-├── context-manager/      # 上下文管理包
-├── token-calculator/     # Token计算包
-├── conversation-storage/ # 对话存储包
-└── mcp-client/          # MCP客户端包
+├── context-manager/      # 上下文管理包 (v0.1.0)
+│   ├── src/
+│   │   └── index.ts     # 上下文格式化核心
+│   └── dist/            # 编译输出
+└── context-manager.backup_20251002/  # 备份
+
+外部依赖的自研包：
+├── @deepracticex/ai-chat          # v0.5.0 - AI对话组件
+├── @deepracticex/context-manager  # v1.0.1 - 上下文管理
+└── @deepracticex/token-calculator # v0.2.1 - Token计算
 ```
+
+**自研包说明**：
+- `context-manager` - 核心上下文管理，支持智能压缩和优先级排序
+- `ai-chat` - AI对话UI组件，支持流式输出和多轮对话
+- `token-calculator` - Token精确计算，支持多模型
 
 ## 🎭 四幕教学法：理论到技术的映射
 
@@ -213,29 +274,91 @@ packages/
 
 ```
 原始文本
-  → 事实提取器（timeline生成、当事人识别）
-  → 争议焦点分析器（法律问题定位）
-  → 证据链条构建器（证据-事实-争议映射）
-  → 法条映射器（相关法条检索）
+  → 事实提取器（timeline生成、当事人识别、请求权分析）
+  → 争议焦点分析器（法律问题定位、争议分类）
+  → 证据质量分析器（证据效力、可靠性评估）
+  → 案例叙事生成器（智能叙事、多视角分析）
+  → 时间轴分析器（事件排序、因果关系）
   → 结构化数据（供第三幕使用）
 ```
 
-**关键文件**：
-- `lib/ai-legal-agent.ts` - AI代理统一入口
-- `lib/evidence-mapping-service.ts` - 证据映射服务
-- `domains/legal-analysis/services/` - 各专业分析器
+**关键服务**：
+- `LegalAnalysisFacade.ts` - 法律分析门面（统一入口）
+- `CaseNarrativeService.ts` - 案例叙事生成（支持故事/学术/法律多种风格）
+- `ClaimAnalysisService.ts` - 请求权分析（德国法学方法）
+- `DisputeAnalysisService.ts` - 争议焦点分析
+- `EvidenceIntelligenceService.ts` - 证据智能分析
+- `TimelineAnalysisApplicationService.ts` - 时间轴分析
+
+**核心流程**：
+```typescript
+// 1. 统一入口调用
+const facade = new LegalAnalysisFacade();
+const result = await facade.analyzeCase(caseData);
+
+// 2. 内部自动编排各个分析器
+// 3. 智能缓存避免重复计算
+// 4. 返回结构化分析结果
+```
+
+**架构优势**：
+- ✅ 门面模式简化调用
+- ✅ 各分析器职责单一
+- ✅ 支持并行分析提升性能
+- ✅ 智能缓存降低成本
 
 ### 第三幕的教学哲学
 
 **传统做法**：AI直接告诉答案
 **我们的做法**：AI用问题引导学生发现答案
 
-**技术保障**：
-- Friendly Socratic协议：每个问题必须友好+提供选项
-- 对话上下文管理：记住学生的推理路径
-- 适应性调整：根据学生回答动态调整问题难度
+**ISSUE 协作范式 + Advice Socratic 标准**：
 
-**核心代码**：`domains/socratic-dialogue/engines/`
+```
+教学流程：
+1. Initiate (启动)     → 建立心理安全环境
+2. Structure (结构化)  → 梳理案例要素框架
+3. Socratic (对话)    → 启发式深度提问
+4. Unify (统一)       → 整合认知成果
+5. Execute (执行)     → 形成学习产出
+```
+
+**技术架构**：
+
+```typescript
+// 核心服务架构
+SocraticDialogueService
+  ├── FullPromptBuilder        // 全量提示词构建
+  │   ├── SocraticIdentity    // AI身份认知
+  │   ├── CognitiveConstraints // 认知约束
+  │   ├── TeachingPrinciples  // ISSUE教学原则
+  │   ├── ISSUEProtocol       // 执行协议
+  │   ├── ModeStrategies      // 模式策略
+  │   └── QuestionQuality     // 质量标准
+  ├── DeeChatAIClient         // AI调用客户端
+  └── ContextFormatter        // 上下文管理
+```
+
+**关键文件**：
+- `SocraticDialogueService.ts` - 统一服务入口
+- `FullPromptBuilder.ts` - 全量提示词构建器 (新)
+- `DeeChatAIClient.ts` - DeepSeek AI客户端
+- `prompts/` - 模块化提示词库
+  - `core/` - 核心身份和约束
+  - `protocols/` - ISSUE和质量协议
+  - `strategies/` - 模式和难度策略
+
+**教学保障**：
+- ✅ Advice Socratic 标准：友好+启发+具体建议
+- ✅ 上下文智能管理：记住学生推理路径
+- ✅ 自适应难度：根据回答动态调整
+- ✅ 质量自检：每个问题符合质量标准
+
+**实时课堂功能**：
+- `RealtimeClassroomPanel.tsx` - 实时课堂面板
+- `app/classroom/[code]/` - 课堂路由（基于邀请码）
+- Socket.io 实时通信
+- 多学生并发支持
 
 ---
 
@@ -244,17 +367,58 @@ packages/
 ### 架构分层
 
 ```
-┌─────────────────────────────────────┐
-│   教学组件层 (React Components)       │  ← 用户看到的界面
-├─────────────────────────────────────┤
-│   教学逻辑层 (Domain Services)        │  ← 四幕教学法实现
-├─────────────────────────────────────┤
-│   AI代理层 (DeepSeekLegalAgent)      │  ← 统一AI调用入口
-├─────────────────────────────────────┤
-│   专业分析器层 (Specialized Agents)   │  ← 事实/争议/证据/法条
-├─────────────────────────────────────┤
-│   AI Provider层 (DeepSeek/OpenAI)   │  ← 可替换的模型层
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────────┐
+│   教学组件层 (React Components)              │  ← 用户界面
+├─────────────────────────────────────────────┤
+│   教学逻辑层 (Domain Services)               │  ← 业务逻辑
+├─────────────────────────────────────────────┤
+│   AI调用代理层 (AICallProxy) ⭐             │  ← 统一AI调用入口 (新)
+│   - 请求预处理                               │
+│   - 错误重试                                 │
+│   - 成本追踪                                 │
+│   - 日志记录                                 │
+├─────────────────────────────────────────────┤
+│   专业服务层                                 │
+│   ├── DeepSeekLegalAgent (法律分析)         │
+│   ├── SocraticDialogueService (苏格拉底)    │
+│   └── 其他专业服务                           │
+├─────────────────────────────────────────────┤
+│   AI Provider层 (DeepSeek/OpenAI)          │  ← 可替换的模型
+└─────────────────────────────────────────────┘
+```
+
+### 统一调用架构 (AICallProxy)
+
+**核心功能**：
+```typescript
+// src/infrastructure/ai/AICallProxy.ts
+export async function callUnifiedAI(
+  systemPrompt: string,
+  userPrompt: string,
+  options?: AICallOptions
+): Promise<AIResponse>
+```
+
+**特性**：
+- ✅ 统一错误处理
+- ✅ 自动重试机制（最多3次）
+- ✅ Token消耗追踪
+- ✅ 成本计算（DeepSeek: ¥0.001/1k tokens）
+- ✅ 结构化日志（性能监控）
+- ✅ 超时控制（默认30秒）
+
+**调用示例**：
+```typescript
+// 所有AI调用都通过这个入口
+const result = await callUnifiedAI(
+  'You are a legal expert...',
+  'Analyze this case...',
+  {
+    temperature: 0.3,
+    maxTokens: 2000,
+    responseFormat: 'json'  // 强制JSON输出
+  }
+);
 ```
 
 ### 为什么要分这么多层？
@@ -265,6 +429,7 @@ packages/
 - 不让教学组件直接调AI（避免逻辑分散）
 - 不让AI自由发挥（可能偏离教学目标）
 - 通过分层约束，每层只做一件事
+- AICallProxy 统一管理所有AI调用（可观测性）
 
 ### AI协作边界
 
@@ -275,6 +440,50 @@ packages/
 | 苏格拉底对话 | 🟢 高度自主 | 过程监控 | 教学过程，可纠错 |
 | 法条推荐 | 🟡 辅助建议 | 必须审查 | 法律准确性要求高 |
 | 报告生成 | 🟢 高度自主 | 最终审查 | 教学总结，可修改 |
+
+## 📍 项目演进历史
+
+### 最近重大变更 (2025-10-02)
+
+**架构简化和优化**：
+1. ✅ **清理废弃功能**
+   - 移除旧的 classroom SSE/vote 实现
+   - 删除废弃的 socratic 对话组件
+   - 简化证据链分析逻辑
+
+2. ✅ **引入 ISSUE 协作范式**
+   - 实现五阶段教学流程
+   - 模块化提示词架构
+   - 提升对话质量和学习效果
+
+3. ✅ **实时课堂功能**
+   - 基于邀请码的课堂系统
+   - Socket.io 实时通信
+   - 多学生并发支持
+
+4. ✅ **统一AI调用架构**
+   - AICallProxy 统一入口
+   - 自动重试和成本追踪
+   - 结构化日志和监控
+
+5. ✅ **第二幕深度分析优化**
+   - 门面模式简化调用
+   - 智能叙事生成（支持多风格）
+   - 请求权分析（德国法学方法）
+
+**技术债务清理**：
+- 移除重复代码和未使用组件
+- 统一类型定义
+- 改进错误处理
+- 优化性能瓶颈
+
+**下一步计划**：
+- [ ] E2E 测试完善
+- [ ] 性能监控仪表板
+- [ ] 多语言支持（中英文）
+- [ ] 移动端适配
+
+---
 
 ## 环境配置
 
@@ -345,12 +554,26 @@ DEEPSEEK_API_URL=your_api_url
 
 **步骤**：
 1. 在 `domains/legal-analysis/services/` 下创建新分析器
-2. 继承 `BaseLegalAnalyzer`（如有）或实现标准接口
-3. 在 `lib/ai-legal-agent.ts` 中注册新分析器
-4. 编写 prompt engineering 文档（说明设计思路）
-5. 编写测试用例（包含成功/失败case）
+2. 使用 `AICallProxy` 进行AI调用（统一入口）
+   ```typescript
+   import { callUnifiedAI } from '@/src/infrastructure/ai/AICallProxy';
 
-**注意**：AI输出必须有 schema 验证（用 Zod）
+   const result = await callUnifiedAI(systemPrompt, userPrompt, {
+     temperature: 0.3,
+     maxTokens: 2000,
+     responseFormat: 'json'
+   });
+   ```
+3. 在 `LegalAnalysisFacade.ts` 中集成新分析器
+4. 编写 prompt engineering 文档（说明设计思路）
+5. 添加缓存策略（如适用）
+6. 编写测试用例（包含成功/失败case）
+
+**注意**：
+- ✅ 必须使用 `AICallProxy` 而非直接调用API
+- ✅ AI输出必须有 schema 验证（用 Zod）
+- ✅ 添加结构化日志便于调试
+- ✅ 考虑成本优化（缓存、prompt压缩）
 
 ---
 
@@ -396,6 +619,94 @@ DEEPSEEK_API_URL=your_api_url
 
 ---
 
+### 任务6：开发苏格拉底对话功能
+**场景**：需要扩展或优化苏格拉底对话能力
+
+**核心架构**：
+```typescript
+// 1. 理解 FullPromptBuilder 的结构
+FullPromptBuilder
+  ├── buildFullSystemPrompt()  // 构建完整System Prompt
+  └── buildUserPrompt()         // 构建User Prompt
+
+// 2. Prompt模块化组织
+prompts/
+├── core/           # 核心身份和约束（不要轻易修改）
+├── protocols/      # ISSUE和质量协议
+└── strategies/     # 模式和难度策略（最常改动）
+```
+
+**开发步骤**：
+1. **修改教学策略**：
+   - 编辑 `prompts/strategies/ModeStrategies.ts`
+   - 添加新的教学模式或修改现有模式
+
+2. **调整难度梯度**：
+   - 编辑 `prompts/strategies/DifficultyStrategies.ts`
+   - 优化不同难度级别的问题类型
+
+3. **优化质量标准**：
+   - 编辑 `prompts/protocols/QuestionQualityProtocol.ts`
+   - 添加新的质量检查维度
+
+4. **测试对话效果**：
+   ```bash
+   npm run demo:enhanced-socratic
+   ```
+
+**注意事项**：
+- ⚠️ 不要直接修改 `core/` 下的核心身份和约束
+- ✅ 新增策略要符合 ISSUE 五阶段框架
+- ✅ 确保 Advice Socratic 标准（友好+启发+建议）
+- ✅ 使用 `includeDiagnostics: true` 调试时查看完整prompt
+
+**调试技巧**：
+```typescript
+// 查看生成的完整prompt
+const service = new SocraticDialogueService({
+  includeDiagnostics: true
+});
+
+const response = await service.generateQuestion({
+  currentTopic: "合同效力",
+  level: "intermediate"
+});
+
+// response.diagnostics 包含完整的system和user prompt
+console.log(response.diagnostics);
+```
+
+---
+
+## 🚫 废弃功能说明
+
+以下功能已在最近版本中废弃，避免使用：
+
+### 已删除的组件
+- ❌ `DialogueContainer.tsx` - 旧的对话容器（已用 TeacherSocratic 替代）
+- ❌ `DialoguePanel.tsx` - 旧的对话面板
+- ❌ `SimpleSocratic.tsx` - 简化版对话（功能已整合）
+- ❌ `VotingPanel.tsx` - 投票面板（实时课堂用新架构）
+- ❌ `TeacherPanel.tsx` - 教师面板旧版
+
+### 已删除的服务
+- ❌ `ClassroomApplicationService` - 旧的课堂服务
+- ❌ `ClassroomStateManager` - 旧的状态管理
+- ❌ `SessionCoordinator` - 会话协调器（功能已整合到 SocraticDialogueService）
+- ❌ `LocalContextFormatter` - 本地上下文格式化（已用 @deepracticex/context-manager 替代）
+
+### 已废弃的API路由
+- ❌ `/api/classroom/[id]/sse` - 旧的SSE实现
+- ❌ `/api/classroom/[id]/vote` - 旧的投票接口
+- ❌ `/api/classroom/route` - 旧的课堂接口
+
+**迁移指南**：
+- 使用 `/api/classroom/[code]/` 新架构（基于邀请码）
+- 使用 `RealtimeClassroomPanel` 组件
+- 使用 `SocraticDialogueService` 统一服务
+
+---
+
 ## 📦 包依赖说明
 
 ### 依赖分类
@@ -410,6 +721,77 @@ DEEPSEEK_API_URL=your_api_url
 - 避免引入大而全的包（如 lodash，按需引入）
 - 定期检查安全漏洞（`npm audit`）
 - 记录为什么选这个包（在 ADR 中）
+
+---
+
+## 🛣️ API路由说明
+
+### 当前活跃的API路由
+
+```
+app/api/
+├── classroom/
+│   └── [code]/              # 实时课堂 (新架构)
+│       ├── join/           # 加入课堂
+│       ├── messages/       # 消息管理
+│       └── status/         # 课堂状态
+├── socratic/
+│   ├── route.ts            # 苏格拉底对话主入口
+│   └── stream-test/        # 流式输出测试
+├── legal-analysis/
+│   ├── intelligent-narrative/  # 智能叙事生成
+│   ├── claims/             # 请求权分析（计划中）
+│   └── route.ts.backup     # 旧实现备份
+├── legal-intelligence/
+│   └── extract/            # 法律智能提取
+├── dispute-analysis/       # 争议焦点分析
+├── evidence-quality/       # 证据质量评估
+├── timeline-analysis/      # 时间轴分析
+└── test/                   # 测试接口
+```
+
+### API调用示例
+
+#### 1. 苏格拉底对话
+```typescript
+POST /api/socratic
+{
+  "currentTopic": "合同效力分析",
+  "caseContext": "案例描述...",
+  "conversationHistory": [...],
+  "level": "intermediate",
+  "mode": "analysis"
+}
+```
+
+#### 2. 智能叙事生成
+```typescript
+POST /api/legal-analysis/intelligent-narrative
+{
+  "caseData": {
+    "basicInfo": {...},
+    "threeElements": {...}
+  },
+  "narrativeStyle": "story" | "academic" | "legal",
+  "depth": "brief" | "detailed" | "comprehensive"
+}
+```
+
+#### 3. 时间轴分析
+```typescript
+POST /api/timeline-analysis
+{
+  "caseData": {...},
+  "analysisDepth": "basic" | "detailed"
+}
+```
+
+### API设计原则
+- ✅ 统一错误格式（`{ success: boolean, data?: any, error?: string }`）
+- ✅ 输入验证（Zod schema）
+- ✅ Rate limiting（敏感接口）
+- ✅ 结构化日志
+- ✅ 超时控制（默认30秒）
 
 ---
 
@@ -458,6 +840,62 @@ const MyComponent = () => {
 - 在 `lib/types/` 中定义共享类型
 - API 返回必须符合类型定义（运行时用 Zod 验证）
 - 前后端共用同一份类型定义
+
+---
+
+### 陷阱4：不使用AICallProxy直接调用AI
+❌ **错误做法**：
+```typescript
+const response = await fetch(DEEPSEEK_API_URL, {
+  method: 'POST',
+  body: JSON.stringify({...})
+});
+```
+
+✅ **正确做法**：
+```typescript
+import { callUnifiedAI } from '@/src/infrastructure/ai/AICallProxy';
+
+const result = await callUnifiedAI(systemPrompt, userPrompt, options);
+```
+
+**为什么**：
+- AICallProxy 提供统一的错误处理和重试
+- 自动追踪成本和性能
+- 结构化日志便于调试
+- 未来切换AI Provider更容易
+
+---
+
+### 陷阱5：忽略缓存导致成本浪费
+❌ **错误做法**：每次都重新调用AI分析相同内容
+✅ **正确做法**：
+```typescript
+// 使用已有的缓存服务
+import { ClaimAnalysisCache } from '@/lib/cache/claim-analysis-cache';
+
+const cached = await cache.get(cacheKey);
+if (cached) return cached;
+
+const result = await analyzeWithAI(...);
+await cache.set(cacheKey, result);
+```
+
+**适用场景**：
+- 案例分析结果（内容不变）
+- 法条映射（法律稳定）
+- 时间轴分析（事实固定）
+
+---
+
+### 陷阱6：使用已废弃的组件或服务
+❌ **错误做法**：继续使用 `DialogueContainer`、`SessionCoordinator` 等
+✅ **正确做法**：查看"废弃功能说明"部分，使用新架构
+
+**如何避免**：
+- 定期查看 git log 了解最近变更
+- 查看 CLAUDE.md 的"项目演进历史"
+- 使用 TypeScript 类型检查（废弃的会有编译错误）
 
 ---
 

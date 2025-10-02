@@ -1,18 +1,18 @@
 /**
  * 苏格拉底对话服务 - 统一入口
- * 集成所有模块化组件：UnifiedPromptBuilder + XML结构化 + 双提示词模式
+ * 集成所有模块化组件：FullPromptBuilder + XML结构化 + 双提示词模式
  * DeepPractice Standards Compliant
  *
  * @description
  * 这是Socratic对话功能的唯一服务入口，整合了：
  * - AI调用（DeeChatAIClient）
- * - Prompt构建（UnifiedPromptBuilder）
- * - 上下文格式化（LocalContextFormatter）
+ * - Prompt构建（FullPromptBuilder）
+ * - 上下文格式化（@deepracticex/context-manager）
  */
 
-import { DeeChatAIClient, createDeeChatConfig, type DeeChatConfig } from './DeeChatAIClient';
-import { buildAPICompatiblePrompt } from '../prompts/builders/UnifiedPromptBuilder';
-import { ContextFormatter } from '../utils/LocalContextFormatter';
+import { DeeChatAIClient, createDeeChatConfig } from './DeeChatAIClient';
+import { ContextFormatter } from '@deepracticex/context-manager';
+import { FullPromptBuilder, type FullPromptContext } from './FullPromptBuilder';
 import {
   SocraticRequest,
   SocraticResponse,
@@ -32,7 +32,8 @@ export interface SocraticDialogueConfig {
   temperature: number;
   maxTokens: number;
   enableXMLStructure: boolean;
-  enableModularPrompts: boolean;
+  /** 是否包含诊断信息（默认false，仅用于调试） */
+  includeDiagnostics?: boolean;
 }
 
 /**
@@ -60,7 +61,7 @@ export class SocraticDialogueService {
       temperature: 0.7,
       maxTokens: 1200,
       enableXMLStructure: true,
-      enableModularPrompts: true,
+      includeDiagnostics: false, // 默认不包含诊断信息（生产环境）
       ...config
     };
 
@@ -100,14 +101,25 @@ export class SocraticDialogueService {
    */
   async generateQuestion(request: SocraticRequest): Promise<SocraticResponse> {
     try {
-      // 第1步：使用UnifiedPromptBuilder构建System Prompt
+      // 第1步：构建完整的 System Prompt（包含所有教学知识）
       const systemPrompt = this.buildSystemPrompt(request);
 
-      // 第2步：使用LocalContextFormatter构建XML结构化的User Prompt
-      const userPrompt = this.buildUserPrompt(request);
+      // 第2步：准备标准输入数据（role = System Prompt）
+      const standardInput = {
+        role: systemPrompt,  // 完整的 System Prompt 作为 role
+        conversation: this.buildConversationHistory(request.messages || []),
+        current: this.buildCurrentContext(request)
+      };
 
-      // 第3步：使用修改后的DeeChatAIClient进行双提示词调用
-      const aiResponse = await this.callAIWithDualPrompts(systemPrompt, userPrompt);
+      // 第3步：使用 ContextFormatter 生成完整的 messages 数组（集成！）
+      const messages = ContextFormatter.fromTemplateAsMessages('standard', standardInput);
+
+      // 调试：查看生成的消息结构
+      console.log('[集成架构] 生成的 messages 数量:', messages.length);
+      console.log('[集成架构] System Prompt 长度:', messages[0]?.content?.length || 0);
+
+      // 第4步：直接使用生成的 messages 调用 AI
+      const aiResponse = await this.callAIWithMessages(messages);
 
       return {
         success: true,
@@ -154,27 +166,40 @@ export class SocraticDialogueService {
    * }
    * ```
    */
-  async generateQuestionStream(request: SocraticRequest): Promise<AsyncIterable<string>> {
+  async *generateQuestionStream(request: SocraticRequest): AsyncIterable<string> {
     try {
-      // 第1步：构建System Prompt
+      // 第1步：构建完整的 System Prompt（包含所有教学知识）
       const systemPrompt = this.buildSystemPrompt(request);
 
-      // 第2步：构建XML结构化的User Prompt
-      const userPrompt = this.buildUserPrompt(request);
+      // 第2步：准备标准输入数据（role = System Prompt）
+      const standardInput = {
+        role: systemPrompt,  // 完整的 System Prompt 作为 role
+        conversation: this.buildConversationHistory(request.messages || []),
+        current: this.buildCurrentContext(request)
+      };
 
-      // 第3步：使用流式调用
-      const messages = [
-        { role: 'system' as const, content: systemPrompt },
-        { role: 'user' as const, content: userPrompt }
-      ];
+      // 第3步：使用 ContextFormatter 生成完整的 messages 数组（集成！）
+      const messages = ContextFormatter.fromTemplateAsMessages('standard', standardInput);
 
-      const streamingResponse = await this.aiClient.sendCustomMessageStream(messages, {
+      // 第4步：过滤并调用流式 API
+      const filteredMessages = messages
+        .filter(msg => ['system', 'user', 'assistant'].includes(msg.role))
+        .map(msg => ({
+          role: msg.role as 'system' | 'user' | 'assistant',
+          content: msg.content
+        }));
+
+      // 直接使用ai-chat的流式迭代器，提取文本内容
+      for await (const chunk of this.aiClient.sendCustomMessageStream(filteredMessages, {
         temperature: this.config.temperature,
         maxTokens: this.config.maxTokens,
         enableCostOptimization: true
-      });
-
-      return streamingResponse.stream;
+      })) {
+        // 只yield文本内容给route.ts（保持简单的字符串接口）
+        if (chunk.content) {
+          yield chunk.content;
+        }
+      }
 
     } catch (error) {
       console.error('SocraticDialogueService Stream Error:', error);
@@ -191,124 +216,68 @@ export class SocraticDialogueService {
   }
 
   /**
-   * 构建System Prompt - 使用简化的API兼容提示词构建器
+   * 构建System Prompt - 全量注入所有教学知识
    */
   private buildSystemPrompt(request: SocraticRequest): string {
-    if (!this.config.enableModularPrompts) {
-      // 简化版系统提示词
-      return `你是一位专业的中国法学苏格拉底导师，使用问题引导学生思考。
-每次只问一个问题，提供3-5个思考选项，保持开放性探索。`;
-    }
-
-    // 使用API兼容的简化提示词构建器
-    const difficulty = this.mapToModernDifficultyLevel(request.level || 'intermediate');
-
-    return buildAPICompatiblePrompt(
-      difficulty,
-      'response', // 固定使用response模式，适合对话生成
-      {
-        topic: request.currentTopic,
-        caseInfo: request.caseContext
-      }
-    );
+    // 🔥 直接使用全量注入，不再保留简化版本
+    return this.buildFullSystemPrompt(request);
   }
 
   /**
-   * 构建User Prompt - 使用LocalContextFormatter的XML结构化
+   * 🔥 构建全量System Prompt - 注入所有教学知识
+   *
+   * 注入策略：
+   * 1. 基于AI注意力机制优化顺序（开头和结尾是高注意力区）
+   * 2. 完整注入所有7个prompts模块
+   * 3. 使用清晰的分隔符和标题结构
+   * 4. 适配DeepSeek 128K Context Window
    */
-  private buildUserPrompt(request: SocraticRequest): string {
-    if (!this.config.enableXMLStructure) {
-      // 简单文本格式
-      return this.buildSimpleContext(request);
-    }
-
-    // 处理案例上下文：支持字符串和结构化对象
-    let caseContextText = '无特定案例';
-    if (request.caseContext) {
-      if (typeof request.caseContext === 'string') {
-        caseContextText = request.caseContext;
-      } else {
-        // 结构化案例上下文转换为富文本
-        caseContextText = this.formatStructuredCase(request.caseContext);
-      }
-    }
-
-    // 使用XML结构化格式
-    const contextData = {
-      current: this.buildCurrentContext(request),
-      conversation: this.buildConversationHistory(request.messages || []),
-      case: caseContextText,
-      topic: request.currentTopic || '法学基础讨论'
+  private buildFullSystemPrompt(request: SocraticRequest): string {
+    const context: FullPromptContext = {
+      mode: this.mapToTeachingMode(request.mode || 'exploration'),
+      difficulty: this.mapToModernDifficultyLevel(request.level || 'intermediate'),
+      topic: request.currentTopic,
+      issuePhase: undefined, // 可以从SessionContext中获取，当前暂时不传
+      includeDiagnostics: this.config.includeDiagnostics || false
     };
 
-    return ContextFormatter.format(contextData);
+    return FullPromptBuilder.buildFullSystemPrompt(context);
   }
 
   /**
-   * 格式化结构化案例上下文为可读文本
+   * 映射DialogueMode到教学模式
    */
-  private formatStructuredCase(caseData: any): string {
-    const sections: string[] = [];
-
-    sections.push(`【案件名称】${caseData.title}`);
-
-    if (caseData.facts && Array.isArray(caseData.facts)) {
-      sections.push('\n【案件事实】');
-      caseData.facts.forEach((fact: any, index: number) => {
-        const factNum = index + 1;
-        let factText = `事实${factNum}: ${fact.content}`;
-        if (fact.date) factText += ` (时间: ${fact.date})`;
-        if (fact.evidence && fact.evidence.length > 0) {
-          factText += ` [证据: ${fact.evidence.join('、')}]`;
-        }
-        sections.push(factText);
-      });
-    }
-
-    if (caseData.laws && Array.isArray(caseData.laws)) {
-      sections.push('\n【相关法条】');
-      caseData.laws.forEach((law: any) => {
-        let lawText = `${law.article}: ${law.content}`;
-        if (law.relevance) lawText += ` (适用于: ${law.relevance})`;
-        sections.push(lawText);
-      });
-    }
-
-    if (caseData.disputes) {
-      sections.push('\n【争议焦点】');
-      if (Array.isArray(caseData.disputes)) {
-        if (typeof caseData.disputes[0] === 'string') {
-          caseData.disputes.forEach((d: string, i: number) => {
-            sections.push(`争议${i + 1}: ${d}`);
-          });
-        } else {
-          caseData.disputes.forEach((dispute: any, i: number) => {
-            sections.push(`争议${i + 1}: ${dispute.focus}`);
-            if (dispute.plaintiffView) sections.push(`  原告观点: ${dispute.plaintiffView}`);
-            if (dispute.defendantView) sections.push(`  被告观点: ${dispute.defendantView}`);
-          });
-        }
-      }
-    }
-
-    return sections.join('\n');
+  private mapToTeachingMode(mode: DialogueMode): 'exploration' | 'analysis' | 'synthesis' | 'evaluation' {
+    // DialogueMode和教学模式是一致的，直接返回
+    return mode as 'exploration' | 'analysis' | 'synthesis' | 'evaluation';
   }
 
   /**
-   * 调用AI服务 - 支持双提示词模式
+   * 构建User Prompt - 使用官方ContextFormatter的XML结构化
    */
-  private async callAIWithDualPrompts(
-    systemPrompt: string,
-    userPrompt: string
-  ) {
-    // 构造双提示词消息数组
-    const messages = [
-      { role: 'system' as const, content: systemPrompt },
-      { role: 'user' as const, content: userPrompt }
-    ];
+  /**
+   * 🗑️ 已废弃的方法（由集成架构替代）
+   * - buildUserPrompt: 被 ContextFormatter.fromTemplateAsMessages 替代
+   * - formatStructuredCase: 暂不需要，案例上下文直接传递
+   * - buildSimpleContext: 被集成架构替代
+   */
 
-    // 使用扩展的DeeChatAIClient方法
-    return await this.aiClient.sendCustomMessage(messages, {
+  /**
+   * 调用AI服务 - 使用集成架构
+   */
+  /**
+   * 使用完整的 messages 数组调用 AI（集成架构）
+   */
+  private async callAIWithMessages(messages: any[]) {
+    // 过滤掉可能的 tool 角色消息，只保留基础角色
+    const filteredMessages = messages
+      .filter(msg => ['system', 'user', 'assistant'].includes(msg.role))
+      .map(msg => ({
+        role: msg.role as 'system' | 'user' | 'assistant',
+        content: msg.content
+      }));
+
+    return await this.aiClient.sendCustomMessage(filteredMessages, {
       temperature: this.config.temperature,
       maxTokens: this.config.maxTokens,
       enableCostOptimization: true
@@ -353,31 +322,6 @@ export class SocraticDialogueService {
   }
 
   /**
-   * 构建简单上下文（备选方案）
-   */
-  private buildSimpleContext(request: SocraticRequest): string {
-    let context = '';
-
-    if (request.currentTopic) {
-      context += `当前主题：${request.currentTopic}\n`;
-    }
-
-    if (request.caseContext) {
-      context += `案例信息：${request.caseContext}\n`;
-    }
-
-    if (request.messages && request.messages.length > 0) {
-      const lastMessage = request.messages[request.messages.length - 1];
-      if (lastMessage) {
-        context += `学生说：${lastMessage.content}\n`;
-      }
-    }
-
-    context += '\n请基于以上信息，提出一个引导性的苏格拉底问题。';
-    return context;
-  }
-
-  /**
    * 映射难度级别
    */
   private mapToModernDifficultyLevel(level: DialogueLevel): 'basic' | 'intermediate' | 'advanced' {
@@ -398,14 +342,14 @@ export class SocraticDialogueService {
   /**
    * 获取服务配置
    */
-  getConfig(): EnhancedSocraticConfig {
+  getConfig(): SocraticDialogueConfig {
     return { ...this.config };
   }
 
   /**
    * 更新服务配置
    */
-  updateConfig(updates: Partial<EnhancedSocraticConfig>): void {
+  updateConfig(updates: Partial<SocraticDialogueConfig>): void {
     this.config = { ...this.config, ...updates };
   }
 

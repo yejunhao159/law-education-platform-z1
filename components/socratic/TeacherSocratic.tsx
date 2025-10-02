@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button';
 // 移除复杂的标签页系统
 import ArgumentTree, { ArgumentNode } from './ArgumentTree';
 import { ClassroomCode } from './ClassroomCode';
+import { RealtimeClassroomPanel } from './RealtimeClassroomPanel';
 import { ClassroomSession, DialogueLevel } from '@/lib/types/socratic';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Send,
   Bot,
@@ -17,7 +19,8 @@ import {
   RotateCcw,
   Download,
   Settings,
-  QrCode
+  QrCode,
+  MessageSquare
 } from 'lucide-react';
 
 /**
@@ -32,9 +35,11 @@ interface TeacherSocraticProps {
     laws: string[];
     dispute: string;
   };
+  /** 可选：外部传入的课堂代码（用于独立访问模式） */
+  initialClassroomCode?: string;
 }
 
-export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
+export default function TeacherSocratic({ caseData, initialClassroomCode }: TeacherSocraticProps) {
   // 对话历史
   const [messages, setMessages] = useState<Array<{
     id: string;
@@ -69,6 +74,9 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
     "关键证据的证明力如何？",
     "如果改变某个事实，结论会改变吗？"
   ]);
+
+  // AI生成的当前问题（用于推送到实时课堂）
+  const [currentAIQuestion, setCurrentAIQuestion] = useState<string>('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -214,6 +222,9 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
         }
       };
       setArgumentNodes(prev => [...prev, aiNode]);
+
+      // 更新当前AI问题（用于推送到学生端）
+      setCurrentAIQuestion(fullContent);
     } catch (error) {
       console.error('调用API时出错:', error);
       // 使用备用响应
@@ -281,9 +292,10 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
     setCurrentChoices([]); // 清空当前选项
   };
 
-  // 生成课堂二维码
+  // 生成或使用已有课堂代码
   const generateClassroomCode = () => {
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    // 如果外部传入了课堂代码，使用传入的；否则生成新的
+    const code = initialClassroomCode || Math.random().toString(36).substring(2, 8).toUpperCase();
     const now = Date.now();
     const session: ClassroomSession = {
       code,
@@ -295,6 +307,87 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
     };
     setClassroomSession(session);
     setShowQRCode(true);
+  };
+
+  // 如果有传入的课堂代码，自动创建会话
+  useEffect(() => {
+    if (initialClassroomCode && !classroomSession) {
+      generateClassroomCode();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialClassroomCode]);
+
+  // 实时课堂问题发布回调
+  const handleQuestionPublished = (question: any) => {
+    console.log('问题已发布到学生端:', question);
+    // 可以将问题添加到对话历史
+    const newMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'teacher' as const,
+      content: `📢 已推送问题到学生端: ${question.content}`,
+      timestamp: new Date().toLocaleTimeString()
+    };
+    setMessages(prev => [...prev, newMessage]);
+  };
+
+  // 实时课堂答案接收回调
+  const handleAnswersReceived = (answers: any[]) => {
+    console.log('收到学生答案:', answers);
+    // 可以基于答案生成AI分析或下一个问题
+    if (answers.length > 0) {
+      // 提取答案内容用于AI分析
+      const answerSummary = answers.map(a => a.answer).join('; ');
+      setCurrentAIQuestion(`基于学生答案(${answerSummary})，继续引导思考`);
+    }
+  };
+
+  // 推送AI问题到学生端（使用SSE）
+  const pushQuestionToStudents = async () => {
+    if (!classroomSession) {
+      alert('请先创建课堂会话');
+      return;
+    }
+
+    // 获取当前AI问题或最后一条AI消息
+    const questionToPush = currentAIQuestion || messages.filter(m => m.role === 'ai').slice(-1)[0]?.content;
+
+    if (!questionToPush) {
+      alert('没有可推送的问题，请先与AI对话生成问题');
+      return;
+    }
+
+    try {
+      // 调用问题发布API
+      const response = await fetch(`/api/classroom/${classroomSession.code}/question`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: questionToPush,
+          type: 'text', // 简化版只使用文本问题
+          options: []
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // 添加成功消息到对话
+        const newMessage = {
+          id: `msg-${Date.now()}`,
+          role: 'teacher' as const,
+          content: `✅ 问题已推送到学生端: ${questionToPush.substring(0, 50)}${questionToPush.length > 50 ? '...' : ''}`,
+          timestamp: new Date().toLocaleTimeString()
+        };
+        setMessages(prev => [...prev, newMessage]);
+      } else {
+        alert('推送失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('推送问题失败:', error);
+      alert('推送失败，请检查网络连接');
+    }
   };
 
   // 使用建议问题
@@ -435,12 +528,31 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 左侧：对话区域 */}
-        <Card className="p-4">
-          <div className="space-y-4">
-              {/* 消息列表 */}
-              <div className="h-[400px] overflow-y-auto border rounded-lg p-4 space-y-3">
+      {/* 标签页：AI对话 + 实时互动 */}
+      <Tabs defaultValue="dialogue" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="dialogue">
+            <Bot className="w-4 h-4 mr-2" />
+            AI对话引导
+          </TabsTrigger>
+          <TabsTrigger value="realtime">
+            <MessageSquare className="w-4 h-4 mr-2" />
+            实时课堂互动
+          </TabsTrigger>
+          <TabsTrigger value="classroom-code">
+            <QrCode className="w-4 h-4 mr-2" />
+            课堂二维码
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Tab 1: AI对话引导 */}
+        <TabsContent value="dialogue">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 左侧：对话区域 */}
+            <Card className="p-4">
+              <div className="space-y-4">
+                {/* 消息列表 */}
+                <div className="h-[400px] overflow-y-auto border rounded-lg p-4 space-y-3">
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
@@ -552,22 +664,126 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
                   onClick={() => sendMessage(currentInput)}
                   disabled={!isActive || !currentInput.trim()}
                 >
-                  <Send className="w-4 h-4" />
-                </Button>
+                    <Send className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
-          </div>
-        </Card>
+            </Card>
 
-        {/* 右侧：论证树 */}
-        <ArgumentTree
-          nodes={argumentNodes}
-          onNodeClick={(node) => console.log('点击节点:', node)}
-          onAddQuestion={(parentId, question) => {
-            sendMessage(question);
-          }}
-          showEvaluation={true}
-        />
-      </div>
+            {/* 右侧：简化教师控制台 */}
+            <Card className="p-4">
+              <h3 className="font-semibold mb-4 flex items-center">
+                <MessageSquare className="w-5 h-5 mr-2" />
+                课堂互动控制
+              </h3>
+
+              {/* 当前AI问题显示 */}
+              <div className="mb-4">
+                <label className="text-sm font-medium text-gray-700 mb-2 block">
+                  当前AI建议问题：
+                </label>
+                <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg min-h-[80px]">
+                  <p className="text-sm text-gray-800">
+                    {currentAIQuestion || messages.filter(m => m.role === 'ai').slice(-1)[0]?.content || '等待AI生成问题...'}
+                  </p>
+                </div>
+              </div>
+
+              {/* 推送到学生端按钮 */}
+              <Button
+                onClick={pushQuestionToStudents}
+                disabled={!classroomSession || (!currentAIQuestion && messages.filter(m => m.role === 'ai').length === 0)}
+                className="w-full mb-4"
+                size="lg"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                推送问题到学生端
+              </Button>
+
+              {/* 二维码区域 */}
+              {classroomSession && (
+                <div className="border-t pt-4">
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">
+                    课堂二维码：
+                  </label>
+                  <ClassroomCode
+                    code={classroomSession.code}
+                    session={classroomSession}
+                    isTeacher={true}
+                    config={{
+                      showQRCode: true,
+                      allowShare: false,
+                      showStats: false
+                    }}
+                  />
+                  <p className="text-xs text-gray-500 mt-2 text-center">
+                    学生扫码加入课堂
+                  </p>
+                </div>
+              )}
+
+              {!classroomSession && (
+                <div className="border-t pt-4">
+                  <p className="text-sm text-gray-500 text-center">
+                    点击顶部"课堂二维码"按钮创建课堂
+                  </p>
+                </div>
+              )}
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Tab 2: 实时课堂互动 */}
+        <TabsContent value="realtime">
+          {classroomSession ? (
+            <RealtimeClassroomPanel
+              classroomCode={classroomSession.code}
+              suggestedQuestion={currentAIQuestion || suggestedQuestions[0]}
+              onQuestionPublished={handleQuestionPublished}
+              onAnswersReceived={handleAnswersReceived}
+            />
+          ) : (
+            <Card className="p-8 text-center">
+              <h3 className="text-lg font-semibold mb-4">还未创建课堂</h3>
+              <p className="text-gray-600 mb-6">
+                请先创建课堂二维码，学生扫码加入后即可使用实时互动功能
+              </p>
+              <Button onClick={generateClassroomCode}>
+                <QrCode className="w-4 h-4 mr-2" />
+                创建课堂二维码
+              </Button>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Tab 3: 课堂二维码 */}
+        <TabsContent value="classroom-code">
+          {classroomSession ? (
+            <Card className="p-6">
+              <ClassroomCode
+                session={classroomSession}
+                isTeacher={true}
+                config={{
+                  showQRCode: true,
+                  allowShare: true,
+                  showStats: true
+                }}
+              />
+            </Card>
+          ) : (
+            <Card className="p-8 text-center">
+              <h3 className="text-lg font-semibold mb-4">还未创建课堂</h3>
+              <p className="text-gray-600 mb-6">
+                创建课堂二维码，让学生扫码加入课堂
+              </p>
+              <Button onClick={generateClassroomCode}>
+                <QrCode className="w-4 h-4 mr-2" />
+                创建课堂二维码
+              </Button>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* 课堂二维码弹窗 */}
       {showQRCode && classroomSession && (
@@ -586,32 +802,6 @@ export default function TeacherSocratic({ caseData }: TeacherSocraticProps) {
         </div>
       )}
 
-      {/* 底部：案件信息 */}
-      <Card className="mt-6 p-4">
-        <h3 className="font-semibold mb-3">案件要点</h3>
-        <div className="grid grid-cols-3 gap-4 text-sm">
-          <div>
-            <h4 className="font-medium text-gray-600 mb-1">核心事实</h4>
-            <ul className="space-y-1">
-              {caseData.facts.slice(0, 3).map((fact, idx) => (
-                <li key={idx} className="text-gray-700">• {fact}</li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-medium text-gray-600 mb-1">相关法条</h4>
-            <ul className="space-y-1">
-              {caseData.laws.slice(0, 3).map((law, idx) => (
-                <li key={idx} className="text-gray-700">• {law}</li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-medium text-gray-600 mb-1">争议焦点</h4>
-            <p className="text-gray-700">{caseData.dispute}</p>
-          </div>
-        </div>
-      </Card>
     </div>
   );
 }

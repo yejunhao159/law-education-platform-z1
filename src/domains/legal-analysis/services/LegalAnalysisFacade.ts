@@ -37,9 +37,51 @@ const logger = createLogger('LegalAnalysisFacade');
  */
 export interface LegalAnalysisFacadeConfig {
   enableCaching?: boolean;
-  enableFallback?: boolean;
+  // enableFallback已删除 - 不再支持降级处理
   timeout?: number;
 }
+
+/**
+ * 各类分析的参数类型
+ */
+export interface ClaimAnalysisParams {
+  event?: unknown;
+  events?: unknown[];
+  depth?: string;
+  focusAreas?: string[];
+}
+
+export interface DisputeAnalysisParams {
+  caseInfo?: unknown;
+  [key: string]: unknown;
+}
+
+export interface EvidenceAnalysisParams {
+  evidences?: unknown[];
+  claimElements?: unknown[];
+  caseContext?: Record<string, unknown>;
+  config?: Record<string, unknown>;
+}
+
+export interface ExtractionParams {
+  text: string;
+  options?: Record<string, unknown>;
+}
+
+export interface TimelineAnalysisParams {
+  [key: string]: unknown;
+}
+
+/**
+ * 分析参数联合类型
+ */
+export type AnalysisParams =
+  | NarrativeGenerationRequest
+  | ClaimAnalysisParams
+  | DisputeAnalysisParams
+  | EvidenceAnalysisParams
+  | ExtractionParams
+  | TimelineAnalysisParams;
 
 /**
  * 法律分析统一门面服务
@@ -57,7 +99,7 @@ export class LegalAnalysisFacade {
   constructor(config?: Partial<LegalAnalysisFacadeConfig>) {
     this.config = {
       enableCaching: true,
-      enableFallback: true,
+      // enableFallback已删除
       timeout: 30000, // 30秒超时
       ...config
     };
@@ -75,13 +117,13 @@ export class LegalAnalysisFacade {
   /**
    * 统一分析入口 - 根据action路由到专业服务
    */
-  async analyze(action: LegalAnalysisAction, params: any): Promise<LegalAnalysisResponse> {
+  async analyze(action: LegalAnalysisAction, params: AnalysisParams): Promise<LegalAnalysisResponse> {
     const startTime = Date.now();
 
     try {
       logger.info(`开始执行分析`, { action, paramsKeys: Object.keys(params) });
 
-      let result: any;
+      let result: unknown;
 
       switch (action) {
         case 'narrative':
@@ -119,7 +161,7 @@ export class LegalAnalysisFacade {
         data: result,
         metadata: {
           processingTime,
-          source: 'facade' as any, // 类型兼容性修复
+          source: 'hybrid' as const,
         }
       };
 
@@ -133,7 +175,7 @@ export class LegalAnalysisFacade {
           code: 'ANALYSIS_FAILED' as LegalErrorCode,
           message: error instanceof Error ? error.message : '分析失败',
           timestamp: new Date().toISOString(),
-          details: error
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : { error }
         },
         metadata: {
           processingTime
@@ -145,45 +187,58 @@ export class LegalAnalysisFacade {
   /**
    * 智能故事生成
    */
-  private async handleNarrative(params: NarrativeGenerationRequest): Promise<NarrativeGenerationResponse> {
+  private async handleNarrative(params: AnalysisParams): Promise<NarrativeGenerationResponse> {
     logger.info('执行智能故事生成');
+    // 类型守卫：确保params是NarrativeGenerationRequest
+    if (!this.isNarrativeRequest(params)) {
+      throw new Error('Invalid narrative request parameters');
+    }
     return await caseNarrativeService.generateIntelligentNarrative(params);
   }
 
   /**
    * 请求权分析
    */
-  private async handleClaim(params: { event?: any; events?: any[]; depth?: string; focusAreas?: string[] }): Promise<any> {
+  private async handleClaim(params: AnalysisParams): Promise<unknown> {
     logger.info('执行请求权分析');
+
+    // 类型守卫
+    if (!this.isClaimAnalysisParams(params)) {
+      throw new Error('Invalid claim analysis parameters');
+    }
 
     // 兼容单事件和多事件请求
     const events = params.events || (params.event ? [params.event] : []);
+    const depth = params.depth || 'detailed';
+    const focusAreas = params.focusAreas || ['claims', 'timeline', 'burden', 'strategy'];
 
     return await this.claimService.analyzeClaimStructure({
       events,
-      depth: (params.depth || 'detailed') as any,
-      focusAreas: (params.focusAreas || ['claims', 'timeline', 'burden', 'strategy']) as any
+      depth: depth as 'basic' | 'detailed' | 'comprehensive',
+      focusAreas: focusAreas as Array<'claims' | 'timeline' | 'burden' | 'strategy'>
     });
   }
 
   /**
    * 争议焦点分析
    */
-  private async handleDispute(params: any): Promise<any> {
+  private async handleDispute(params: AnalysisParams): Promise<unknown> {
     logger.info('执行争议焦点分析');
+    if (!this.isDisputeAnalysisParams(params)) {
+      throw new Error('Invalid dispute analysis parameters');
+    }
     return await this.disputeService.analyzeDisputes(params.caseInfo || params);
   }
 
   /**
    * 证据质量评估
    */
-  private async handleEvidence(params: {
-    evidences?: any[];
-    claimElements?: any[];
-    caseContext?: any;
-    config?: any;
-  }): Promise<any> {
+  private async handleEvidence(params: AnalysisParams): Promise<unknown> {
     logger.info('执行证据质量评估');
+
+    if (!this.isEvidenceAnalysisParams(params)) {
+      throw new Error('Invalid evidence analysis parameters');
+    }
 
     // Phase B1: 支持多维度问题生成
     if (params.config) {
@@ -205,18 +260,21 @@ export class LegalAnalysisFacade {
   /**
    * 三要素提取
    */
-  private async handleExtraction(params: { text: string; options?: any }): Promise<any> {
+  private async handleExtraction(params: AnalysisParams): Promise<unknown> {
     logger.info('执行三要素提取');
+    if (!this.isExtractionParams(params)) {
+      throw new Error('Invalid extraction parameters');
+    }
     return await this.extractionService.extractLegalElements({
       text: params.text,
-      ...params.options
+      ...(params.options || {})
     });
   }
 
   /**
    * 时间轴分析
    */
-  private async handleTimeline(params: any): Promise<any> {
+  private async handleTimeline(params: AnalysisParams): Promise<unknown> {
     logger.info('执行时间轴分析');
     return await this.timelineService.analyzeTimeline(params);
   }
@@ -224,7 +282,7 @@ export class LegalAnalysisFacade {
   /**
    * 批量分析（未来扩展）
    */
-  async analyzeBatch(requests: Array<{ action: LegalAnalysisAction; params: any }>): Promise<LegalAnalysisResponse[]> {
+  async analyzeBatch(requests: Array<{ action: LegalAnalysisAction; params: AnalysisParams }>): Promise<LegalAnalysisResponse[]> {
     logger.info(`开始批量分析`, { count: requests.length });
 
     const results = await Promise.allSettled(
@@ -235,17 +293,55 @@ export class LegalAnalysisFacade {
       if (result.status === 'fulfilled') {
         return result.value;
       } else {
+        const error = result.reason;
         return {
           success: false,
           error: {
             code: 'ANALYSIS_FAILED' as LegalErrorCode,
             message: `批量分析第${index + 1}项失败`,
             timestamp: new Date().toISOString(),
-            details: result.reason
+            details: error instanceof Error ? { message: error.message } : { error }
           }
         };
       }
     });
+  }
+
+  // ========== 类型守卫函数 ==========
+
+  /**
+   * 检查是否为NarrativeGenerationRequest
+   */
+  private isNarrativeRequest(params: AnalysisParams): params is NarrativeGenerationRequest {
+    return 'caseData' in params && 'narrativeStyle' in params;
+  }
+
+  /**
+   * 检查是否为ClaimAnalysisParams
+   */
+  private isClaimAnalysisParams(params: AnalysisParams): params is ClaimAnalysisParams {
+    return 'event' in params || 'events' in params || 'depth' in params || 'focusAreas' in params;
+  }
+
+  /**
+   * 检查是否为DisputeAnalysisParams
+   */
+  private isDisputeAnalysisParams(params: AnalysisParams): params is DisputeAnalysisParams {
+    return true; // DisputeAnalysisParams接受任意字段
+  }
+
+  /**
+   * 检查是否为EvidenceAnalysisParams
+   */
+  private isEvidenceAnalysisParams(params: AnalysisParams): params is EvidenceAnalysisParams {
+    return 'evidences' in params || 'claimElements' in params || 'config' in params;
+  }
+
+  /**
+   * 检查是否为ExtractionParams
+   */
+  private isExtractionParams(params: AnalysisParams): params is ExtractionParams {
+    return 'text' in params;
   }
 
   /**

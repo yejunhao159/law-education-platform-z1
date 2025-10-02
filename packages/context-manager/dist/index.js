@@ -174,7 +174,14 @@ class ContextFormatter {
      * Escape XML special characters
      */
     static escapeXml(text) {
-        return text
+        // 防御性检查：确保 text 不是 undefined 或 null
+        if (text === undefined || text === null) {
+            console.warn('[ContextFormatter] escapeXml received undefined/null, returning empty string');
+            return '';
+        }
+        // 确保是字符串
+        const str = String(text);
+        return str
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')

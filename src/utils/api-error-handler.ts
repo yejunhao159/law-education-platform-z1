@@ -36,7 +36,7 @@ export interface APIErrorResponse {
     timestamp: string;
     requestId?: string;        // 请求追踪ID
   };
-  fallbackData?: any;          // 降级数据（如果有）
+  // fallbackData已删除 - 错误响应不应包含降级数据
 }
 
 // 错误配置映射
@@ -120,7 +120,6 @@ export function createErrorResponse(
   type: ErrorType,
   originalError?: Error | any,
   customMessage?: string,
-  fallbackData?: any,
   requestId?: string
 ): APIErrorResponse {
   const config = ERROR_CONFIG[type];
@@ -148,8 +147,7 @@ export function createErrorResponse(
       retryable: config.retryable,
       timestamp,
       requestId
-    },
-    ...(fallbackData && { fallbackData })
+    }
   };
 }
 
@@ -159,7 +157,6 @@ export function createErrorResponse(
 export function handleAPIError(
   error: Error | any,
   context: string = 'API调用',
-  fallbackData?: any,
   requestId?: string
 ): APIErrorResponse {
   const errorMessage = error?.message || '未知错误';
@@ -173,7 +170,7 @@ export function handleAPIError(
     errorType = ErrorType.VALIDATION;
   } else if (errorString.includes('404') || errorString.includes('not found')) {
     errorType = ErrorType.AI_SERVICE;
-    customMessage = 'AI服务端点不可用，已启用基础分析模式';
+    customMessage = 'AI服务不可用';
   } else if (errorString.includes('timeout') || errorString.includes('timed out')) {
     errorType = ErrorType.TIMEOUT;
   } else if (errorString.includes('rate limit') || errorString.includes('too many')) {
@@ -182,7 +179,7 @@ export function handleAPIError(
     errorType = ErrorType.NETWORK;
   } else if (errorString.includes('parse') || errorString.includes('json')) {
     errorType = ErrorType.PARSING;
-    customMessage = 'AI返回数据解析失败，已提供基础分析结果';
+    customMessage = 'AI返回数据解析失败';
   } else {
     errorType = ErrorType.INTERNAL;
   }
@@ -194,7 +191,7 @@ export function handleAPIError(
     hasCustomMessage: !!customMessage
   });
 
-  return createErrorResponse(errorType, error, customMessage, fallbackData, requestId);
+  return createErrorResponse(errorType, error, customMessage, requestId);
 }
 
 /**

@@ -7,10 +7,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
 import { SimpleFileUploader } from '@/components/SimpleFileUploader'
 import { FileParser, type ParseProgress } from "@/src/domains/document-processing";
-import { ElementEditor } from '@/components/ElementEditor'
 import { InlineEditor } from '@/components/InlineEditor'
 import { Loader2, FileText, CheckCircle, AlertCircle, Edit, Eye, ArrowRight } from 'lucide-react'
-import { useCurrentCase, useCaseManagementStore, useTeachingStore } from '@/src/domains/stores'
+import { useCaseManagementStore, useTeachingStore } from '@/src/domains/stores'
 import type { LegalCase } from '@/types/legal-case'
 
 interface ExtractedElements {
@@ -41,6 +40,7 @@ interface ExtractedElements {
         type: string
         submittedBy: string
         credibilityScore: number
+        relevanceScore?: number
         accepted: boolean
       }>
     }
@@ -51,6 +51,11 @@ interface ExtractedElements {
         article: string
         application: string
       }>
+      logicChain?: Array<{
+        premise: string
+        inference: string
+        conclusion: string
+      }>
       keyArguments?: string[]
       judgment?: string
     }
@@ -59,6 +64,7 @@ interface ExtractedElements {
     confidence: number
     processingTime: number
     aiModel: string
+    extractionMethod?: 'pure-ai' | 'hybrid' | 'rule-enhanced' | 'manual'
   }
 }
 
@@ -66,7 +72,7 @@ interface ExtractedElements {
 function convertToLegalCase(extracted: ExtractedElements): LegalCase {
   // 构建时间轴数据（从timeline或facts中提取）
   let timeline = extracted.threeElements?.facts?.timeline?.map((item: any, index: number) => ({
-    id: `event-${index + 1}`,
+    id: index + 1,
     date: item.date || new Date().toISOString().split('T')[0],
     event: item.event || item.title || '事件',
     title: item.event || item.title || '事件',
@@ -80,7 +86,7 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
   if (timeline.length === 0) {
     timeline = [
       {
-        id: 'event-1',
+        id: 1,
         date: '2024-01-15',
         event: '签订合同',
         title: '签订合同',
@@ -89,7 +95,7 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
         importance: 'critical' as const
       },
       {
-        id: 'event-2',
+        id: 2,
         date: '2024-02-01',
         event: '逾期交付',
         title: '逾期交付',
@@ -98,7 +104,7 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
         importance: 'critical' as const
       },
       {
-        id: 'event-3',
+        id: 3,
         date: '2024-02-15',
         event: '催告履行',
         title: '催告履行',
@@ -107,7 +113,7 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
         importance: 'important' as const
       },
       {
-        id: 'event-4',
+        id: 4,
         date: '2024-03-01',
         event: '提起诉讼',
         title: '提起诉讼',
@@ -124,16 +130,12 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
       court: extracted.basicInfo?.court || '北京市朝阳区人民法院',
       judgeDate: extracted.basicInfo?.date || '2024-03-15',
       parties: {
-        plaintiff: typeof extracted.basicInfo?.parties?.plaintiff === 'string' 
+        plaintiff: extracted.basicInfo?.parties?.plaintiff
           ? [{ name: extracted.basicInfo.parties.plaintiff, type: '自然人' }]
-          : extracted.basicInfo?.parties?.plaintiff 
-            ? [{ name: extracted.basicInfo.parties.plaintiff.name || '未知', type: '自然人' }]
-            : [{ name: '张三', type: '自然人' }],
-        defendant: typeof extracted.basicInfo?.parties?.defendant === 'string'
+          : [{ name: '张三', type: '自然人' }],
+        defendant: extracted.basicInfo?.parties?.defendant
           ? [{ name: extracted.basicInfo.parties.defendant, type: '自然人' }]
-          : extracted.basicInfo?.parties?.defendant
-            ? [{ name: extracted.basicInfo.parties.defendant.name || '未知', type: '自然人' }]
-            : [{ name: '李四商贸有限公司', type: '法人' }]
+          : [{ name: '李四商贸有限公司', type: '法人' }]
       }
     },
     // 添加timeline到根级别，供时间轴组件使用
@@ -155,34 +157,36 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
         items: extracted.threeElements?.evidence?.items?.map(item => ({
           id: item.name,
           name: item.name,
-          type: item.type,
-          submittedBy: item.submittedBy,
+          type: item.type as '书证' | '物证' | '证人证言' | '鉴定意见' | '勘验笔录' | '视听资料' | '电子数据' | '当事人陈述',
+          submittedBy: item.submittedBy as '原告' | '被告' | '第三人' | '法院调取',
           credibilityScore: item.credibilityScore,
-          relevanceScore: item.credibilityScore || 80, // 如果没有relevanceScore，使用credibilityScore或默认值
-          accepted: item.accepted,
-          content: ''
+          relevanceScore: item.credibilityScore || 80,
+          accepted: item.accepted
         })) || [
           {
             id: 'contract',
             name: '买卖合同',
-            type: '书证',
-            submittedBy: '原告',
+            type: '书证' as const,
+            submittedBy: '原告' as const,
             credibilityScore: 95,
             relevanceScore: 95,
-            accepted: true,
-            content: '双方签订的标准买卖合同'
+            accepted: true
           },
           {
             id: 'invoice',
             name: '发票',
-            type: '书证',
-            submittedBy: '原告',
+            type: '书证' as const,
+            submittedBy: '原告' as const,
             credibilityScore: 90,
             relevanceScore: 85,
-            accepted: true,
-            content: '购货发票及相关凭证'
+            accepted: true
           }
-        ]
+        ],
+        chainAnalysis: {
+          complete: true,
+          missingLinks: [],
+          strength: 'strong' as const
+        }
       },
       reasoning: {
         summary: extracted.threeElements?.reasoning?.summary || '本院认为，买卖双方成立有效的合同关系。被告未按约交付，构成违约，应承担相应责任。',
@@ -191,6 +195,23 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
             law: '《民法典》',
             article: '第577条',
             application: '违约责任的一般规定'
+          }
+        ],
+        logicChain: extracted.threeElements?.reasoning?.logicChain || [
+          {
+            premise: '双方签订买卖合同',
+            inference: '合同关系成立且有效',
+            conclusion: '双方应按约履行义务'
+          },
+          {
+            premise: '被告未按约定时间交付货物',
+            inference: '被告违反合同义务',
+            conclusion: '被告构成违约'
+          },
+          {
+            premise: '被告违约导致原告损失',
+            inference: '原告有权请求赔偿',
+            conclusion: '被告应承担违约责任'
           }
         ],
         keyArguments: extracted.threeElements?.reasoning?.keyArguments || [
@@ -216,9 +237,7 @@ export function ThreeElementsExtractor() {
   const [progress, setProgress] = useState(0)
   const [extractedData, setExtractedData] = useState<ExtractedElements | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [documentText, setDocumentText] = useState<string>('')
   const [mode, setMode] = useState<'preview' | 'edit'>('preview')
-  const [editedData, setEditedData] = useState<ExtractedElements | null>(null)
   const [parseProgress, setParseProgress] = useState<ParseProgress | null>(null)
   
   // Zustand store hooks - 直接使用原始store避免兼容性问题
@@ -240,12 +259,11 @@ export function ThreeElementsExtractor() {
         setProgress(10 + Math.round(parseProgress.progress * 0.3))
       })
 
-      setDocumentText(text)
       setParseProgress(null)
       setProgress(40)
 
-      // Step 2: 调用API提取三要素
-      const response = await fetch('/api/extract-elements', {
+      // Step 2: 调用API提取三要素（新版DDD架构API，兼容旧格式）
+      const response = await fetch('/api/legal-intelligence/extract', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -285,18 +303,6 @@ export function ThreeElementsExtractor() {
 
   const handleEditClick = useCallback(() => {
     setMode('edit')
-    setEditedData(extractedData)
-  }, [extractedData])
-
-  const handleSaveEdit = useCallback((data: ExtractedElements) => {
-    setEditedData(data)
-    setExtractedData(data)
-    setMode('preview')
-  }, [])
-
-  const handleCancelEdit = useCallback(() => {
-    setEditedData(null)
-    setMode('preview')
   }, [])
 
   // 加载演示数据
@@ -367,6 +373,13 @@ export function ThreeElementsExtractor() {
               law: '《民法典》',
               article: '第577条',
               application: '违约责任的一般规定'
+            }
+          ],
+          logicChain: [
+            {
+              premise: '双方签订买卖合同',
+              inference: '合同关系成立且有效',
+              conclusion: '双方应按约履行义务'
             }
           ],
           keyArguments: ['合同成立且有效', '被告构成违约', '违约损害赔偿成立'],
@@ -500,7 +513,7 @@ export function ThreeElementsExtractor() {
       {/* 提取结果展示 */}
       {extractedData && (
         <div className="space-y-4">
-          {/* 编辑模式 */}
+          {/* 编辑模式 - 暂时禁用，使用内联编辑代替 */}
           {mode === 'edit' ? (
             <div className="space-y-4">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -509,16 +522,16 @@ export function ThreeElementsExtractor() {
                   <span className="font-medium text-blue-800">编辑模式</span>
                 </div>
                 <p className="text-sm text-blue-700">
-                  您可以直接编辑AI提取的内容，修改后点击"保存预览"即可保存更改。
+                  请使用下方的内联编辑功能直接修改内容。
                 </p>
+                <Button variant="outline" size="sm" onClick={() => setMode('preview')} className="mt-2">
+                  返回预览
+                </Button>
               </div>
-              <ElementEditor
-                data={editedData || extractedData}
-                onSave={handleSaveEdit}
-                onCancel={handleCancelEdit}
-              />
             </div>
-          ) : (
+          ) : null}
+          {/* 预览模式 */}
+          {(mode === 'preview' || mode === 'edit') && (
             <>
               {/* 预览模式 - 基本信息 */}
               {extractedData.basicInfo && (
@@ -552,12 +565,8 @@ export function ThreeElementsExtractor() {
                   
                   <InlineEditor
                     label="当事人"
-                    value={extractedData.basicInfo?.parties ? 
-                      `原告：${typeof extractedData.basicInfo.parties.plaintiff === 'string' 
-                        ? extractedData.basicInfo.parties.plaintiff 
-                        : extractedData.basicInfo.parties.plaintiff?.name || '未知'} | 被告：${typeof extractedData.basicInfo.parties.defendant === 'string'
-                        ? extractedData.basicInfo.parties.defendant 
-                        : extractedData.basicInfo.parties.defendant?.name || '未知'}` : ''}
+                    value={extractedData.basicInfo?.parties ?
+                      `原告：${extractedData.basicInfo.parties.plaintiff || '未知'} | 被告：${extractedData.basicInfo.parties.defendant || '未知'}` : ''}
                     onSave={(value) => updateBasicInfo('parties', value)}
                     placeholder="格式：原告：姓名 | 被告：姓名"
                     className="col-span-2"
@@ -607,8 +616,8 @@ export function ThreeElementsExtractor() {
                     <div className="space-y-2">
                       {extractedData.threeElements.facts.timeline.slice(0, 3).map((item, index) => (
                         <div key={index} className="text-sm">
-                          <div className="font-medium">{item.date}</div>
-                          <div className="text-muted-foreground">{item.event}</div>
+                          <div className="font-medium">{typeof item.date === 'string' ? item.date : JSON.stringify(item.date)}</div>
+                          <div className="text-muted-foreground">{typeof item.event === 'string' ? item.event : (typeof item === 'object' && 'description' in item ? String((item as any).description) : JSON.stringify(item))}</div>
                         </div>
                       ))}
                     </div>
@@ -726,9 +735,9 @@ export function ThreeElementsExtractor() {
                         <Edit className="w-4 h-4 mr-1" />
                         编辑内容
                       </Button>
-                      <Button 
-                        size="sm" 
-                        onClick={() => setCurrentAct('act1')}
+                      <Button
+                        size="sm"
+                        onClick={() => setCurrentAct('analysis')}
                         className="bg-blue-600 hover:bg-blue-700"
                       >
                         进入要素分析

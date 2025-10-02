@@ -10,18 +10,60 @@
  * - 创建适配层，将证据数据映射到时间轴事件
  */
 
+/**
+ * 证据项接口
+ */
+export interface EvidenceItem {
+  id?: string;
+  name?: string;
+  title?: string;
+  type?: string;
+  content?: string;
+  description?: string;
+  date?: string;
+  relatedEvents?: string[];
+  relatedToEvent?: string;
+  matchType?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * 基本信息接口
+ */
+export interface BasicInfo {
+  caseNumber?: string;
+  court?: string;
+  caseType?: string;
+  level?: string;
+  nature?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * 推理信息接口
+ */
+export interface ReasoningInfo {
+  summary?: string;
+  legalBasis?: unknown[];
+  conclusion?: string;
+  [key: string]: unknown;
+}
+
 export interface TimelineEvent {
   id?: string;
   date: string;
   title: string;
   description: string;
   type?: string;
-  evidence?: any[];
-  [key: string]: any;
+  importance?: string;
+  event?: string;
+  detail?: string;
+  evidence?: EvidenceItem[];
+  [key: string]: unknown;
 }
 
 export interface CaseDataStructure {
-  basicInfo?: any;
+  basicInfo?: BasicInfo;
   threeElements?: {
     facts?: {
       timeline?: TimelineEvent[];
@@ -29,13 +71,14 @@ export interface CaseDataStructure {
       keyFacts?: string[];
     };
     evidence?: {
-      items?: any[];
+      items?: EvidenceItem[];
       summary?: string;
     };
-    reasoning?: any;
+    reasoning?: ReasoningInfo;
   };
   timeline?: TimelineEvent[];
-  evidence?: any[];
+  evidence?: EvidenceItem[];
+  [key: string]: unknown;
 }
 
 /**
@@ -74,7 +117,7 @@ export class CaseDataAdapter {
    * 提取时间轴数据并规范化属性名
    */
   private static extractTimeline(caseData: CaseDataStructure): TimelineEvent[] {
-    let timeline: any[] = [];
+    let timeline: TimelineEvent[] = [];
 
     // 优先从 threeElements.facts.timeline 提取
     if (caseData.threeElements?.facts?.timeline) {
@@ -102,7 +145,7 @@ export class CaseDataAdapter {
   /**
    * 提取证据数据
    */
-  private static extractEvidence(caseData: CaseDataStructure): any[] {
+  private static extractEvidence(caseData: CaseDataStructure): EvidenceItem[] {
     // 优先从 threeElements.evidence.items 提取
     if (caseData.threeElements?.evidence?.items) {
       return caseData.threeElements.evidence.items;
@@ -122,7 +165,7 @@ export class CaseDataAdapter {
    */
   private static enrichTimelineWithEvidence(
     timeline: TimelineEvent[],
-    evidenceItems: any[]
+    evidenceItems: EvidenceItem[]
   ): TimelineEvent[] {
     if (!timeline || timeline.length === 0) return timeline;
     if (!evidenceItems || evidenceItems.length === 0) return timeline;
@@ -146,8 +189,8 @@ export class CaseDataAdapter {
   /**
    * 查找与时间轴事件相关的证据
    */
-  private static findRelatedEvidence(event: TimelineEvent, evidenceItems: any[]): any[] {
-    const relatedEvidence: any[] = [];
+  private static findRelatedEvidence(event: TimelineEvent, evidenceItems: EvidenceItem[]): EvidenceItem[] {
+    const relatedEvidence: EvidenceItem[] = [];
 
     evidenceItems.forEach(evidence => {
       // 基于日期匹配
@@ -203,7 +246,7 @@ export class CaseDataAdapter {
   /**
    * 检查事件和证据是否有关键词匹配
    */
-  private static hasKeywordMatch(event: TimelineEvent, evidence: any): boolean {
+  private static hasKeywordMatch(event: TimelineEvent, evidence: EvidenceItem): boolean {
     const eventText = `${event.title} ${event.description}`.toLowerCase();
     const evidenceText = `${evidence.title || ''} ${evidence.content || ''} ${evidence.description || ''}`.toLowerCase();
 

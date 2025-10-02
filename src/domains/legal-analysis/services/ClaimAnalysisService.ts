@@ -89,14 +89,8 @@ export class ClaimAnalysisService {
     defense: DefenseStructure[]
   }> {
     const prompt = this.buildClaimAnalysisPrompt(events, depth);
-
-    try {
-      const response = await this.callDeepSeekAPI(prompt);
-      return this.parseClaimsResponse(response);
-    } catch (error) {
-      console.error('请求权分析失败:', error);
-      throw error;
-    }
+    const response = await this.callDeepSeekAPI(prompt);
+    return this.parseClaimsResponse(response);
   }
 
   /**
@@ -235,50 +229,24 @@ ${depth === 'comprehensive' ?
 
       console.log('🎯 请求权分析AI响应长度:', content.length);
 
-      // 尝试解析JSON响应
-      try {
-        // 处理可能的markdown包装
-        let jsonContent = content.trim();
-        if (jsonContent.includes('```json')) {
-          const match = jsonContent.match(/```json\s*([\s\S]*?)\s*```/);
-          if (match && match[1]) {
-            jsonContent = match[1];
-          }
-        } else if (jsonContent.includes('```')) {
-          const match = jsonContent.match(/```\s*([\s\S]*?)\s*```/);
-          if (match && match[1]) {
-            jsonContent = match[1];
-          }
+      // 处理可能的markdown包装
+      let jsonContent = content.trim();
+      if (jsonContent.includes('```json')) {
+        const match = jsonContent.match(/```json\s*([\s\S]*?)\s*```/);
+        if (match && match[1]) {
+          jsonContent = match[1];
         }
-
-        return JSON.parse(jsonContent);
-      } catch (parseError) {
-        console.warn('AI响应解析失败，尝试修复JSON:', parseError);
-        // 尝试修复常见的JSON错误
-        let fixedContent = content
-          .replace(/,\s*}/g, '}')  // 移除尾随逗号
-          .replace(/,\s*]/g, ']')  // 移除数组尾随逗号
-          .replace(/'/g, '"');     // 单引号改双引号
-
-        try {
-          return JSON.parse(fixedContent);
-        } catch {
-          console.error('无法解析AI响应为JSON，返回空结构');
-          return {
-            primary: [],
-            alternative: [],
-            defense: []
-          };
+      } else if (jsonContent.includes('```')) {
+        const match = jsonContent.match(/```\s*([\s\S]*?)\s*```/);
+        if (match && match[1]) {
+          jsonContent = match[1];
         }
       }
+
+      return JSON.parse(jsonContent);
     } catch (error) {
       console.error('请求权AI分析失败:', error);
-      // 返回基础结构而不是抛出错误
-      return {
-        primary: [],
-        alternative: [],
-        defense: []
-      };
+      throw error;
     }
   }
 
@@ -344,7 +312,7 @@ ${events.map((e, i) => `${i + 1}. ${e.date}: ${e.title || e.description}`).join(
 
       return JSON.parse(jsonContent);
     } catch (error) {
-      console.warn('时间轴AI分析失败:', error);
+      console.error('时间轴AI分析失败:', error);
       throw error;
     }
   }
@@ -391,7 +359,7 @@ ${events.map((e, i) => `${i + 1}. ${e.date}: ${e.title || e.description}`).join(
 
       return JSON.parse(jsonContent);
     } catch (error) {
-      console.warn('举证责任AI分析失败:', error);
+      console.error('举证责任AI分析失败:', error);
       throw error;
     }
   }
@@ -440,7 +408,7 @@ ${events.map((e, i) => `${i + 1}. ${e.date}: ${e.title || e.description}`).join(
 
       return JSON.parse(jsonContent);
     } catch (error) {
-      console.warn('法律关系AI分析失败:', error);
+      console.error('法律关系AI分析失败:', error);
       throw error;
     }
   }
@@ -517,7 +485,7 @@ ${events.map((e, i) => `${i + 1}. ${e.date}: ${e.title || e.description}`).join(
 
       return JSON.parse(jsonContent);
     } catch (error) {
-      console.warn('策略生成AI分析失败:', error);
+      console.error('策略生成AI分析失败:', error);
       throw error;
     }
   }

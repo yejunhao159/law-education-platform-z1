@@ -1,73 +1,65 @@
 /**
- * 法律智能提取API - 重构版
- * 职责：仅处理HTTP请求/响应，业务逻辑移至Application Service
- * DeepPractice Standards Compliant
+ * 法律智能提取API - 使用旧系统（稳定版）
+ * 临时回退：新系统JSON解析不稳定，暂时使用旧的DeepSeekLegalAgent
+ * TODO: 等新系统稳定后再切换回来
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { LegalExtractionApplicationService } from '../../../../src/domains/legal-analysis/services/LegalExtractionApplicationService';
-import type { ExtractionRequest } from '../../../../src/domains/legal-analysis/services/types/ExtractionTypes';
+import { DeepSeekLegalAgent } from '../../../../lib/ai-legal-agent';
 
-// 创建服务实例
-const extractionService = new LegalExtractionApplicationService();
+// 使用旧系统（稳定且有完整的教学三要素）
+const legalAgent = new DeepSeekLegalAgent();
 
 /**
  * 法律智能提取API
+ * 使用旧系统的DeepSeekLegalAgent（稳定且完整）
  */
 export async function POST(req: NextRequest) {
+  const startTime = Date.now();
+
   try {
+    console.log('📊 使用旧系统DeepSeekLegalAgent提取判决书...');
+
     // 解析请求
-    const request = await parseRequest(req);
+    const body = await req.json();
 
-    // 执行业务逻辑
-    const result = await extractionService.extractLegalElements(request);
-
-    // 返回响应
-    if (result.success) {
-      return NextResponse.json(result);
-    } else {
+    if (!body.text || typeof body.text !== 'string') {
       return NextResponse.json(
-        {
-          error: result.error || '提取过程中发生错误',
-          message: result.error
-        },
-        { status: 500 }
+        { error: '请提供要分析的文本' },
+        { status: 400 }
       );
     }
+
+    // 调用旧系统的完整提取方法
+    const result = await legalAgent.extractThreeElements(body.text);
+
+    // 转换为前端期望的格式
+    const responseData = {
+      basicInfo: result.basicInfo,
+      threeElements: {
+        facts: result.facts,
+        evidence: result.evidence,
+        reasoning: result.reasoning
+      },
+      metadata: {
+        confidence: result.metadata.confidence,
+        processingTime: result.metadata.processingTime,
+        aiModel: result.metadata.aiModel
+      }
+    };
+
+    console.log('✅ 旧系统提取完成，耗时:', Date.now() - startTime, 'ms');
+
+    return NextResponse.json({
+      success: true,
+      method: 'ai-deepseek',
+      data: responseData,
+      confidence: result.metadata.confidence
+    }, { status: 200 });
 
   } catch (error) {
     console.error('❌ API层错误:', error);
     return handleError(error);
-  }
-}
-
-/**
- * 解析请求数据
- */
-async function parseRequest(req: NextRequest): Promise<ExtractionRequest> {
-  try {
-    const body = await req.json();
-
-    // 基本验证
-    if (!body.text) {
-      throw new Error('请提供要分析的文本');
-    }
-
-    // 构建标准请求对象
-    const request: ExtractionRequest = {
-      text: body.text,
-      options: {
-        enableAI: body.options?.enableAI ?? true,
-        elementType: body.options?.elementType ?? 'all',
-        enhanceWithProvisions: body.options?.enhanceWithProvisions ?? true,
-        cacheEnabled: body.options?.cacheEnabled ?? true
-      }
-    };
-
-    return request;
-
-  } catch (error) {
-    throw new Error('请求数据格式错误');
   }
 }
 
@@ -77,14 +69,12 @@ async function parseRequest(req: NextRequest): Promise<ExtractionRequest> {
 function handleError(error: unknown): NextResponse {
   const message = error instanceof Error ? error.message : '未知错误';
 
-  // 根据错误类型返回不同状态码
-  const status = message.includes('请提供') || message.includes('格式错误') ? 400 : 500;
-
   return NextResponse.json(
     {
+      success: false,
       error: '提取过程中发生错误',
       message: message
     },
-    { status }
+    { status: 500 }
   );
 }

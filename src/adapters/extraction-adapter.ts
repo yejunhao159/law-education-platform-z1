@@ -65,21 +65,21 @@ export class ExtractionAdapter {
       threeElements: {
         facts: {
           summary: data.facts?.summary || this.generateFactsSummary(data),
-          timeline: data.timeline || [],
+          timeline: this.convertDatesToTimeline(data.dates, data.timeline),
           keyFacts: data.facts?.keyPoints || [],
           disputedFacts: data.disputes?.map(d => d.description) || [],
           undisputedFacts: data.facts?.undisputedFacts || []
         },
         evidence: {
           summary: this.generateEvidenceSummary(data.evidence),
-          items: this.normalizeEvidenceItems(data.evidence)
+          items: this.normalizeEvidenceItems(data.evidence) // 现在会映射真实的EvidenceElement数据
         },
         reasoning: {
-          summary: data.analysis?.legalReasoning || '法官说理分析',
-          legalBasis: data.legalProvisions || [],
-          logicChain: data.analysis?.logicChain || [],
-          keyArguments: data.analysis?.keyPoints || [],
-          judgment: data.analysis?.conclusion || ''
+          summary: data.reasoning?.summary || '法官说理分析',
+          legalBasis: this.normalizeLegalBasis(data.reasoning?.legalBasis),
+          logicChain: this.normalizeLogicChain(data.reasoning?.logicChain),
+          keyArguments: data.reasoning?.keyArguments || [],
+          judgment: data.reasoning?.judgment || ''
         }
       },
       metadata: {
@@ -166,9 +166,66 @@ export class ExtractionAdapter {
 
   // ========== 私有辅助方法 ==========
 
-  private static extractFirstDate(dates?: string[]): string {
+  /**
+   * 将 DateElement 数组转换为 timeline 格式
+   */
+  private static convertDatesToTimeline(dates?: any[], existingTimeline?: any[]): any[] {
+    // 如果已经有 timeline，直接返回
+    if (existingTimeline && existingTimeline.length > 0) {
+      return existingTimeline;
+    }
+
+    // 如果没有 dates，返回空数组
+    if (!dates || dates.length === 0) {
+      return [];
+    }
+
+    // 将 DateElement 转换为简单的 timeline 格式
+    return dates.map((dateElement: any) => {
+      // 如果已经是简单格式（只有 date, event, importance），直接返回
+      if (typeof dateElement === 'object' && 'event' in dateElement && !('type' in dateElement)) {
+        return dateElement;
+      }
+
+      // 如果是 DateElement 格式（包含 date, type, description, importance, context, confidence）
+      // 转换为简单格式
+      if (typeof dateElement === 'object' && 'date' in dateElement) {
+        return {
+          date: dateElement.date,
+          event: dateElement.description || dateElement.type || '事件',
+          importance: dateElement.importance || 'normal'
+        };
+      }
+
+      // 如果是字符串，返回默认格式
+      if (typeof dateElement === 'string') {
+        return {
+          date: dateElement,
+          event: '日期',
+          importance: 'normal'
+        };
+      }
+
+      // 其他情况，返回空对象
+      return { date: '', event: '', importance: 'normal' };
+    });
+  }
+
+  private static extractFirstDate(dates?: any[]): string {
     if (!dates || dates.length === 0) return '';
-    return dates[0];
+
+    // 处理 DateElement 对象
+    const firstDate = dates[0];
+    if (typeof firstDate === 'object' && firstDate.date) {
+      return firstDate.date;
+    }
+
+    // 处理字符串
+    if (typeof firstDate === 'string') {
+      return firstDate;
+    }
+
+    return '';
   }
 
   private static extractParties(parties?: Array<{ role: string; name: string }>): {
@@ -205,9 +262,24 @@ export class ExtractionAdapter {
   }
 
   private static normalizeEvidenceItems(evidence?: any[]): any[] {
-    if (!evidence) return [];
+    if (!evidence || evidence.length === 0) return [];
 
+    // 如果evidence是EvidenceElement[]格式（新格式），进行转换
     return evidence.map((item, index) => {
+      // 新格式的EvidenceElement，转换为旧的前端格式
+      if (item.id && item.name && item.credibilityScore !== undefined) {
+        return {
+          name: item.name,
+          type: item.type || 'documentary',
+          submittedBy: item.submittedBy || 'unknown',
+          credibilityScore: item.credibilityScore,
+          accepted: item.accepted !== false,
+          content: item.content || '',
+          purpose: item.purpose || '',
+          judicialAnalysis: item.judicialAnalysis || ''
+        };
+      }
+
       // 如果已经是标准格式，直接返回
       if (item.id && item.type && item.content) {
         return item;
@@ -222,6 +294,36 @@ export class ExtractionAdapter {
         accepted: item.accepted !== false
       };
     });
+  }
+
+  /**
+   * 规范化法律依据（新增）
+   */
+  private static normalizeLegalBasis(legalBasis?: any[]): any[] {
+    if (!legalBasis || legalBasis.length === 0) {
+      return [];
+    }
+
+    return legalBasis.map(item => ({
+      law: item.law || '',
+      article: item.article || '',
+      application: item.application || ''
+    }));
+  }
+
+  /**
+   * 规范化逻辑推理链（新增）
+   */
+  private static normalizeLogicChain(logicChain?: any[]): any[] {
+    if (!logicChain || logicChain.length === 0) {
+      return [];
+    }
+
+    return logicChain.map(step => ({
+      premise: step.premise || '',
+      inference: step.inference || '',
+      conclusion: step.conclusion || ''
+    }));
   }
 
   /**

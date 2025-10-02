@@ -46,21 +46,15 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Dispute analysis error:', error);
-    
+
+    // 服务不可用时返回503状态码
+    // 不提供降级数据,让错误明确暴露
     return NextResponse.json(
-      { 
-        success: false,
-        error: error.message || 'Internal server error',
-        disputes: [],
-        claimBasisMappings: [],
-        metadata: {
-          analysisTime: 0,
-          modelVersion: 'deepseek-chat',
-          confidence: 0,
-          timestamp: new Date().toISOString()
-        }
+      {
+        error: error.message || 'Dispute analysis service unavailable',
+        timestamp: new Date().toISOString()
       },
-      { status: 500 }
+      { status: 503 }
     );
   }
 }

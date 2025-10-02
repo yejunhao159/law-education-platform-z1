@@ -46,3 +46,4 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+packages/context-manager.backup_*/

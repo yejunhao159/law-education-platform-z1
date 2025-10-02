@@ -26,12 +26,12 @@ export async function POST(req: NextRequest) {
       analysisType: AnalysisType.COMPREHENSIVE
     };
 
-    // 执行业务逻辑
+    // 执行业务逻辑（Service成功返回数据，失败抛异常）
     const result = await timelineService.analyzeTimeline(enhancedRequestData);
 
-    // 返回响应
+    // Service成功返回，直接返回200
     return NextResponse.json(result, {
-      status: result.success ? 200 : getErrorStatusCode(result.error?.code),
+      status: 200,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'

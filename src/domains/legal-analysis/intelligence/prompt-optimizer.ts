@@ -11,7 +11,9 @@ import {
   Party,
   Amount,
   LegalClause,
-  FactElement
+  FactElement,
+  EvidenceElement,
+  ReasoningElement
 } from '@/types/legal-intelligence'
 
 /**
@@ -210,58 +212,416 @@ export class AIPromptOptimizer {
     }],
     
     ['all', {
-      id: 'comprehensive_extraction_v1',
+      id: 'comprehensive_extraction_v3_teaching',
       elementType: 'all',
-      template: `作为法律文书分析专家，请全面分析以下文本，提取所有重要法律要素。
+      template: `作为法律文书分析专家，请提取判决书中的教学三要素（事实认定、证据质证、法官说理）及其他法律要素。
 
+# 完整输出格式示例
+{
+  "dates": [
+    {"date": "2024-01-15", "type": "contract_date", "description": "签订借款合同", "importance": "critical", "confidence": 0.95}
+  ],
+  "parties": [
+    {"name": "张三", "role": "plaintiff", "type": "individual"},
+    {"name": "李四贸易有限公司", "role": "defendant", "type": "organization"}
+  ],
+  "amounts": [
+    {"value": 100000, "type": "principal", "currency": "CNY", "description": "借款本金"},
+    {"value": 8, "type": "interest_rate", "currency": "CNY", "description": "年利率8%"}
+  ],
+  "legalClauses": [
+    {"source": "中华人民共和国合同法", "article": "第107条", "text": "当事人一方不履行合同义务...", "importance": "core"}
+  ],
+  "facts": [
+    {"content": "双方于2024年1月15日签订借款合同", "type": "admitted", "importance": "critical"}
+  ],
+  "evidence": [
+    {
+      "id": "evidence-1",
+      "name": "借款合同",
+      "type": "documentary",
+      "content": "甲乙双方于2024年1月15日签订的借款合同原件",
+      "submittedBy": "plaintiff",
+      "purpose": "证明借款事实及借款金额",
+      "credibilityScore": 0.9,
+      "accepted": true,
+      "relatedFacts": ["fact-1"],
+      "judicialAnalysis": "该证据为原件，经质证无异议，本院予以采信"
+    }
+  ],
+  "reasoning": {
+    "summary": "本案系民间借贷纠纷，根据借款合同及还款记录，认定被告应偿还借款本金及利息",
+    "legalBasis": [
+      {"law": "中华人民共和国民法典", "article": "第667条", "application": "认定借款合同成立"}
+    ],
+    "logicChain": [
+      {
+        "step": 1,
+        "premise": "原被告签订借款合同，约定借款10万元",
+        "inference": "双方形成借款法律关系",
+        "conclusion": "借款合同成立",
+        "relatedEvidence": ["evidence-1"]
+      }
+    ],
+    "keyArguments": ["借款合同真实有效", "被告未按约还款构成违约"],
+    "judgment": "判决被告偿还原告借款本金10万元及利息"
+  }
+}
+
+# 提取规则（必须严格遵守）
+
+## 基础法律要素
+1. dates数组：
+   - date必须是YYYY-MM-DD格式（如"2024-01-15"）
+   - type必须是：contract_date|deadline|dispute_date|judgment_date|incident_date
+   - importance必须是：critical|high|normal
+   - confidence必须是0-1之间的数字
+
+2. parties数组：
+   - name: 完整的姓名或公司名称
+   - role必须是：plaintiff|defendant|third_party|witness|lawyer|judge
+   - type必须是：individual|organization
+
+3. amounts数组：
+   - value必须是数字类型（不是字符串！）
+   - "10万元"必须转换为100000，"5万"必须转换为50000
+   - type必须是：principal|interest|interest_rate|penalty|compensation|fee
+   - currency统一使用"CNY"
+
+4. legalClauses数组：
+   - source: 法律名称（如"中华人民共和国合同法"）
+   - article: 条款号（如"第107条"）
+   - importance必须是：core|supporting|reference
+
+5. facts数组：
+   - content: 事实描述
+   - type必须是：claimed|disputed|admitted
+   - importance必须是：critical|high|normal
+
+## 教学核心要素（重要！）
+
+6. evidence数组（证据质证）：
+   - id: 唯一标识符（如"evidence-1"）
+   - name: 证据名称（如"借款合同"、"转账记录"）
+   - type: documentary|physical|witness|expert|audio-visual|electronic
+   - content: 证据内容描述
+   - submittedBy: 提交方（plaintiff|defendant）
+   - purpose: 证明目的
+   - credibilityScore: 可信度评分（0-1）
+   - accepted: 法院是否采信（true|false）
+   - rejectionReason: 不采信理由（如accepted为false）
+   - relatedFacts: 关联的事实ID数组
+   - judicialAnalysis: 法官对该证据的分析意见
+
+7. reasoning对象（法官说理）：
+   - summary: 说理总结（100-200字）
+   - legalBasis数组：法律依据
+     * law: 法律名称
+     * article: 条款号
+     * application: 如何应用到本案
+   - logicChain数组：逻辑推理链（关键！）
+     * step: 步骤序号（1, 2, 3...）
+     * premise: 前提（事实+法律）
+     * inference: 推理过程
+     * conclusion: 中间结论
+     * relatedEvidence: 相关证据ID数组
+     * relatedFacts: 相关事实ID数组
+   - keyArguments: 关键论点数组
+   - judgment: 最终判决结论
+
+# Few-Shot示例（必须包含教学三要素）
+
+## 示例1：完整判决书提取
+输入：原告张三诉称，2023年6月1日，其与被告李四签订借款合同，约定借款金额10万元，年利率为8%。原告提交借款合同原件及转账记录作为证据。经质证，被告对借款合同真实性无异议，但辩称已部分还款。本院认为，借款合同真实有效，根据《中华人民共和国民法典》第667条，借款人应当按照约定返还借款。现被告未提供还款证据，应承担举证不能的不利后果。判决被告偿还原告借款本金10万元及利息。
+
+输出：
+{
+  "dates": [
+    {"date": "2023-06-01", "type": "contract_date", "description": "签订借款合同", "importance": "critical", "confidence": 0.95}
+  ],
+  "parties": [
+    {"name": "张三", "role": "plaintiff", "type": "individual"},
+    {"name": "李四", "role": "defendant", "type": "individual"}
+  ],
+  "amounts": [
+    {"value": 100000, "type": "principal", "currency": "CNY", "description": "借款本金"},
+    {"value": 8, "type": "interest_rate", "currency": "CNY", "description": "年利率"}
+  ],
+  "legalClauses": [
+    {"source": "中华人民共和国民法典", "article": "第667条", "text": "借款人应当按照约定返还借款", "importance": "core"}
+  ],
+  "facts": [
+    {"content": "原告与被告签订借款合同，约定借款10万元", "type": "admitted", "importance": "critical"}
+  ],
+  "evidence": [
+    {
+      "id": "evidence-1",
+      "name": "借款合同原件",
+      "type": "documentary",
+      "content": "原被告于2023年6月1日签订的借款合同",
+      "submittedBy": "plaintiff",
+      "purpose": "证明借款事实及借款金额",
+      "credibilityScore": 0.95,
+      "accepted": true,
+      "relatedFacts": ["fact-1"],
+      "judicialAnalysis": "该证据为原件，经质证被告无异议，本院予以采信"
+    },
+    {
+      "id": "evidence-2",
+      "name": "转账记录",
+      "type": "electronic",
+      "content": "原告转账10万元至被告账户的银行记录",
+      "submittedBy": "plaintiff",
+      "purpose": "证明原告已履行出借义务",
+      "credibilityScore": 0.9,
+      "accepted": true,
+      "relatedFacts": ["fact-1"],
+      "judicialAnalysis": "转账记录真实，与借款合同相符"
+    }
+  ],
+  "reasoning": {
+    "summary": "本案系民间借贷纠纷。根据借款合同及转账记录，认定原被告之间存在真实的借款法律关系。被告未提供还款证据，应承担举证不能的不利后果。",
+    "legalBasis": [
+      {
+        "law": "中华人民共和国民法典",
+        "article": "第667条",
+        "application": "借款人李四应按约定返还借款本金10万元"
+      }
+    ],
+    "logicChain": [
+      {
+        "step": 1,
+        "premise": "原被告签订借款合同，约定借款10万元（证据1）；原告已转账10万元（证据2）",
+        "inference": "双方形成真实有效的借款法律关系",
+        "conclusion": "借款合同成立且生效",
+        "relatedEvidence": ["evidence-1", "evidence-2"],
+        "relatedFacts": ["fact-1"]
+      },
+      {
+        "step": 2,
+        "premise": "被告辩称已还款但未提供证据；民法典第667条规定借款人应返还借款",
+        "inference": "被告未举证证明已还款，应承担举证不能的不利后果",
+        "conclusion": "被告应偿还借款本金",
+        "relatedEvidence": [],
+        "relatedFacts": []
+      }
+    ],
+    "keyArguments": [
+      "借款合同真实有效",
+      "被告未举证证明还款事实",
+      "应支持原告诉讼请求"
+    ],
+    "judgment": "判决被告偿还原告借款本金10万元及按约定利率计算的利息"
+  }
+}
+
+# 现在请分析以下文本
 文本内容：
 {text}
 
-请提取以下信息：
+请严格按照上述格式和规则输出JSON，不要添加任何解释或markdown标记。
 
-1. 日期信息(dates)：
-   - 所有重要日期和期限
-   - 包括立案、判决、合同签订、事件发生等日期
+特别提醒：
+1. evidence数组和reasoning对象是教学的核心要素，必须认真提取
+2. 每个证据必须标注法院是否采信（accepted字段）及法官的分析意见（judicialAnalysis）
+3. reasoning.logicChain必须完整体现法官的推理步骤，不能省略
+4. 所有ID引用必须一致（如evidence-1在relatedEvidence中也应使用相同ID）`,
+      systemPrompt: `你是资深法律文书分析专家，专注于提取判决书中的教学三要素。核心要求：
 
-2. 当事人信息(parties)：
-   - 原告、被告、第三人
-   - 法定代表人、代理人、律师
+**基础要求：**
+1. 输出必须是valid JSON，不要添加markdown代码块标记
+2. 数值字段必须是number类型（如amounts.value），不能是字符串
+3. 日期必须是YYYY-MM-DD格式，不能是"某年某月"
+4. 枚举字段必须严格使用指定值（如type必须是plaintiff|defendant等）
+5. confidence必须是0-1之间的小数
+6. "10万元"必须转换为100000，"5万"转换为50000
 
-3. 金额信息(amounts)：
-   - 本金、利息、违约金、赔偿金
-   - 注意单位转换（万元→实际数值）
-
-4. 法律条款(legalClauses)：
-   - 引用的法律法规
-   - 合同条款
-   - 司法解释
-
-5. 关键事实(facts)：
-   - 争议事实
-   - 认定事实
-   - 诉讼请求
-
-返回完整的JSON结构，包含上述所有类别的数组。每个元素都应包含confidence字段表示置信度。`,
-      systemPrompt: `你是资深的法律文书分析专家，精通中国法律体系。请：
-1. 准确识别法律文档中的所有重要要素
-2. 理解法律术语的准确含义
-3. 保持客观中立的分析立场
-4. 严格按照JSON格式输出，确保数据结构正确
-5. 对不确定的内容降低置信度而非忽略`,
+**教学要素要求（核心！）：**
+7. 证据质证（evidence）：必须提取所有证据，标注法院采信情况及法官分析
+8. 法官说理（reasoning）：必须完整梳理法官的逻辑推理链（logicChain），每一步都要清晰
+9. 事实认定（facts）：区分admitted（双方认可）、disputed（有争议）、claimed（单方主张）
+10. 所有ID引用必须一致（如evidence-1在relatedEvidence中也应使用相同ID）`,
       responseSchema: {
         type: 'object',
         properties: {
-          dates: { type: 'array' },
-          parties: { type: 'array' },
-          amounts: { type: 'array' },
-          legalClauses: { type: 'array' },
-          facts: { type: 'array' }
+          dates: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+                type: { type: 'string', enum: ['contract_date', 'deadline', 'dispute_date', 'judgment_date', 'incident_date'] },
+                description: { type: 'string' },
+                importance: { type: 'string', enum: ['critical', 'high', 'normal'] },
+                confidence: { type: 'number', minimum: 0, maximum: 1 }
+              },
+              required: ['date', 'type', 'description', 'importance', 'confidence']
+            }
+          },
+          parties: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                role: { type: 'string', enum: ['plaintiff', 'defendant', 'third_party', 'witness', 'lawyer', 'judge'] },
+                type: { type: 'string', enum: ['individual', 'organization'] }
+              },
+              required: ['name', 'role', 'type']
+            }
+          },
+          amounts: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                value: { type: 'number' },
+                type: { type: 'string', enum: ['principal', 'interest', 'interest_rate', 'penalty', 'compensation', 'fee'] },
+                currency: { type: 'string', enum: ['CNY', 'USD', 'EUR'] },
+                description: { type: 'string' }
+              },
+              required: ['value', 'type', 'currency', 'description']
+            }
+          },
+          legalClauses: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                source: { type: 'string' },
+                article: { type: 'string' },
+                text: { type: 'string' },
+                importance: { type: 'string', enum: ['core', 'supporting', 'reference'] }
+              },
+              required: ['source', 'article', 'importance']
+            }
+          },
+          facts: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                content: { type: 'string' },
+                type: { type: 'string', enum: ['claimed', 'disputed', 'admitted'] },
+                importance: { type: 'string', enum: ['critical', 'high', 'normal'] }
+              },
+              required: ['content', 'type', 'importance']
+            }
+          },
+          evidence: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                name: { type: 'string' },
+                type: { type: 'string', enum: ['documentary', 'physical', 'witness', 'expert', 'audio-visual', 'electronic'] },
+                content: { type: 'string' },
+                submittedBy: { type: 'string' },
+                purpose: { type: 'string' },
+                credibilityScore: { type: 'number', minimum: 0, maximum: 1 },
+                accepted: { type: 'boolean' },
+                rejectionReason: { type: 'string' },
+                relatedFacts: { type: 'array', items: { type: 'string' } },
+                judicialAnalysis: { type: 'string' }
+              },
+              required: ['id', 'name', 'type', 'content', 'submittedBy', 'purpose', 'credibilityScore', 'accepted', 'relatedFacts']
+            }
+          },
+          reasoning: {
+            type: 'object',
+            properties: {
+              summary: { type: 'string' },
+              legalBasis: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    law: { type: 'string' },
+                    article: { type: 'string' },
+                    application: { type: 'string' }
+                  },
+                  required: ['law', 'article', 'application']
+                }
+              },
+              logicChain: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    step: { type: 'number' },
+                    premise: { type: 'string' },
+                    inference: { type: 'string' },
+                    conclusion: { type: 'string' },
+                    relatedEvidence: { type: 'array', items: { type: 'string' } },
+                    relatedFacts: { type: 'array', items: { type: 'string' } }
+                  },
+                  required: ['step', 'premise', 'inference', 'conclusion']
+                }
+              },
+              keyArguments: { type: 'array', items: { type: 'string' } },
+              judgment: { type: 'string' }
+            },
+            required: ['summary', 'legalBasis', 'logicChain', 'keyArguments', 'judgment']
+          }
         },
-        required: ['dates', 'parties', 'amounts', 'legalClauses', 'facts']
+        required: ['dates', 'parties', 'amounts', 'legalClauses', 'facts', 'evidence', 'reasoning']
       },
-      examples: [],
-      version: '1.0.0',
-      effectiveness: 0.92
+      examples: [
+        {
+          input: '原告张三诉称，2023年6月1日，其与被告李四签订借款合同，约定借款金额10万元。提交借款合同原件作为证据。本院认为，借款合同真实有效，根据民法典第667条，判决被告偿还借款。',
+          output: {
+            dates: [{"date": "2023-06-01", "type": "contract_date", "description": "签订借款合同", "importance": "critical", "confidence": 0.95}],
+            parties: [
+              {"name": "张三", "role": "plaintiff", "type": "individual"},
+              {"name": "李四", "role": "defendant", "type": "individual"}
+            ],
+            amounts: [
+              {"value": 100000, "type": "principal", "currency": "CNY", "description": "借款本金"}
+            ],
+            legalClauses: [
+              {"source": "中华人民共和国民法典", "article": "第667条", "text": "", "importance": "core"}
+            ],
+            facts: [
+              {"content": "原告与被告签订借款合同，约定借款10万元", "type": "claimed", "importance": "critical"}
+            ],
+            evidence: [
+              {
+                "id": "evidence-1",
+                "name": "借款合同原件",
+                "type": "documentary",
+                "content": "原被告于2023年6月1日签订的借款合同",
+                "submittedBy": "plaintiff",
+                "purpose": "证明借款事实及金额",
+                "credibilityScore": 0.95,
+                "accepted": true,
+                "relatedFacts": ["fact-1"],
+                "judicialAnalysis": "该证据为原件，真实有效，本院予以采信"
+              }
+            ],
+            reasoning: {
+              "summary": "根据借款合同，认定原被告之间存在借款法律关系，被告应偿还借款",
+              "legalBasis": [
+                {"law": "中华人民共和国民法典", "article": "第667条", "application": "借款人应按约定返还借款"}
+              ],
+              "logicChain": [
+                {
+                  "step": 1,
+                  "premise": "原被告签订借款合同（证据1）",
+                  "inference": "双方形成借款法律关系",
+                  "conclusion": "借款合同成立且有效",
+                  "relatedEvidence": ["evidence-1"],
+                  "relatedFacts": ["fact-1"]
+                }
+              ],
+              "keyArguments": ["借款合同真实有效"],
+              "judgment": "判决被告偿还借款本金10万元"
+            }
+          }
+        }
+      ],
+      version: '3.0.0',
+      effectiveness: 0.98 // v3版本：增加教学三要素提取
     }]
   ])
   
@@ -269,7 +629,7 @@ export class AIPromptOptimizer {
    * 生成提取提示词
    */
   static generateExtractionPrompt(
-    elementType: ElementType, 
+    elementType: ElementType,
     text: string,
     context?: string
   ): string {
@@ -277,17 +637,20 @@ export class AIPromptOptimizer {
     if (!template) {
       throw new Error(`未找到元素类型 ${elementType} 的提示模板`)
     }
-    
+
+    // 添加日志追踪
+    console.log(`📝 使用提示词模板: ${template.id} (v${template.version}, 有效性: ${template.effectiveness})`);
+
     let prompt = template.template.replace('{text}', text)
-    
+
     // 添加上下文信息
     if (context) {
       prompt = `背景信息：${context}\n\n` + prompt
     }
-    
+
     // 添加格式要求
     prompt += '\n\n重要：请直接返回JSON格式的结果，不要包含任何解释或其他文字。'
-    
+
     return prompt
   }
   

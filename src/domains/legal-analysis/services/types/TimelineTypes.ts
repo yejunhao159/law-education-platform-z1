@@ -17,8 +17,23 @@ export interface TimelineEvent {
   parties?: string[];
   evidence?: string[];
   legalRelevance?: string;
-  claims?: any;  // 请求权相关信息
-  legalRelation?: any;  // 法律关系
+  claims?: ClaimInfo;  // 请求权相关信息
+  legalRelation?: LegalRelationInfo;  // 法律关系
+}
+
+// 请求权信息
+export interface ClaimInfo {
+  type: string;
+  basis?: string;
+  amount?: number;
+  description?: string;
+}
+
+// 法律关系信息
+export interface LegalRelationInfo {
+  type: string;
+  parties: string[];
+  description?: string;
 }
 
 export interface TimelineAnalysis {
@@ -156,7 +171,7 @@ export interface EventConnection {
 export interface TimelineError {
   message: string;
   code: TimelineErrorCode;
-  details?: any;
+  details?: Record<string, unknown>;
 }
 
 export interface TimelineMetadata {
@@ -177,9 +192,53 @@ export interface AITimelineRequest {
   focusAreas?: string[];
 }
 
+// AI分析结果的完整结构
+export interface AITimelineAnalysis {
+  dates?: string[];
+  parties?: string[];
+  amounts?: Array<{ value: number; description: string }>;
+  legalClauses?: string[];
+  facts?: string[];
+  turningPoints?: Array<{
+    eventId?: string;
+    date: string;
+    title: string;
+    legalSignificance: string;
+    impact: string;
+    consequences?: string[];
+    effects?: string[];
+  }>;
+  behaviorPatterns?: Array<{
+    party: string;
+    pattern: string;
+    frequency?: string;
+    legalImplication?: string;
+  }>;
+  evidenceChain?: {
+    completeness: number;
+    logicalConsistency: number;
+    gaps?: string[];
+    strengths?: string[];
+    weaknesses?: string[];
+  };
+  legalRisks?: Array<{
+    type: string;
+    description: string;
+    likelihood: string;
+    impact: string;
+    mitigation?: string;
+  }>;
+  summary?: string;
+  metadata?: {
+    confidence?: number;
+    analysisType?: string;
+  };
+  warnings?: string[];
+}
+
 export interface AITimelineResponse {
-  analysis: any;
-  structuredData?: any;
+  analysis: AITimelineAnalysis | null;
+  structuredData?: AITimelineAnalysis;
   rawContent?: string;
   confidence: number;
   warnings?: string[];
@@ -189,3 +248,20 @@ export interface AITimelineResponse {
 
 // ProcessedDocument 类型已从 @/types/legal-intelligence 导入
 // 如需在此文件使用，请从 @/types/legal-intelligence 导入
+
+// ========== 分析合并类型 ==========
+
+/**
+ * 合并后的分析结果
+ * 包含规则分析和AI分析的综合结果
+ * 继承自MergedData并添加AI增强字段
+ */
+export interface CombinedAnalysisResult {
+  // 继承MergedData的所有字段
+  [key: string]: unknown;  // 索引签名，允许任意字段
+
+  // AI增强数据（可选）
+  aiInsights?: AITimelineAnalysis;
+  rawAIResponse?: string;
+  aiWarnings?: string[];
+}

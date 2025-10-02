@@ -21,7 +21,7 @@ interface AICallProxyConfig {
   maxRetries: number;
   timeout: number;
   enableCostTracking: boolean;
-  enableErrorFallback: boolean;
+  // enableErrorFallback已删除 - 不再支持错误降级
 }
 
 interface DeepSeekAPIRequest {
@@ -102,8 +102,7 @@ export class AICallProxy {
         model: AI_DEFAULTS.model,
         maxRetries: AI_DEFAULTS.maxRetries,
         timeout: AI_DEFAULTS.timeout,
-        enableCostTracking: true,
-        enableErrorFallback: true
+        enableCostTracking: true
       };
 
       console.log('🚀 AICallProxy初始化配置:', {
@@ -153,7 +152,7 @@ export class AICallProxy {
       // 6. 记录调用统计
       this.updateCallStats(aiResult, Date.now() - startTime);
 
-      console.log(`✅ [${callId}] AI调用完成 - 耗时: ${Date.now() - startTime}ms, Tokens: ${aiResult.tokensUsed}`);
+      console.log(`✅ [${callId}] AI调用完成 - 耗时: ${Date.now() - startTime}ms, Tokens: ${aiResult.tokensUsed || 0}, Cost: ${aiResult.cost || 0}`);
 
       // 7. 返回标准Response对象
       return new Response(JSON.stringify(deepSeekResponse), {
@@ -162,8 +161,8 @@ export class AICallProxy {
           'Content-Type': 'application/json',
           'X-AI-Proxy': 'DeeChatAI',
           'X-Call-ID': callId,
-          'X-Tokens-Used': aiResult.tokensUsed.toString(),
-          'X-Cost': aiResult.cost.toString()
+          'X-Tokens-Used': (aiResult.tokensUsed || 0).toString(),
+          'X-Cost': (aiResult.cost || 0).toString()
         }
       });
 
@@ -171,12 +170,9 @@ export class AICallProxy {
       console.error(`❌ [${callId}] AI调用失败:`, error);
       this.callStats.errors++;
 
-      // 错误降级处理
-      if (this.config.enableErrorFallback) {
-        return this.generateFallbackResponse(error as Error, callId);
-      } else {
-        throw error;
-      }
+      // 直接抛出错误，不做降级处理
+      // 让上层调用者明确知道失败，并返回正确的HTTP状态码
+      throw error;
     }
   }
 
@@ -347,19 +343,20 @@ export class AICallProxy {
     aiResult: any,
     originalModel: string
   ): DeepSeekAPIResponse {
+    const tokensUsed = aiResult.tokensUsed || 0;
     return {
       choices: [{
         message: {
-          content: aiResult.content,
+          content: aiResult.content || '',
           role: 'assistant'
         },
         index: 0,
         finish_reason: 'stop'
       }],
       usage: {
-        prompt_tokens: Math.floor(aiResult.tokensUsed * 0.7), // 估算
-        completion_tokens: Math.floor(aiResult.tokensUsed * 0.3),
-        total_tokens: aiResult.tokensUsed
+        prompt_tokens: Math.floor(tokensUsed * 0.7), // 估算
+        completion_tokens: Math.floor(tokensUsed * 0.3),
+        total_tokens: tokensUsed
       },
       model: originalModel || this.config.model,
       id: `chatcmpl-${Date.now()}`,
@@ -382,43 +379,15 @@ export class AICallProxy {
    */
   private updateCallStats(result: any, _duration: number): void {
     this.callStats.totalCalls++;
-    this.callStats.totalTokens += result.tokensUsed;
-    this.callStats.totalCost += result.cost;
+    this.callStats.totalTokens += result.tokensUsed || 0;
+    this.callStats.totalCost += result.cost || 0;
   }
 
   /**
-   * 生成降级响应
+   * 已删除 generateFallbackResponse 方法
+   * 原因：不应该隐藏错误，让问题明确暴露
+   * 所有错误直接抛出，由上层处理并返回正确的HTTP状态码
    */
-  private generateFallbackResponse(error: Error, callId: string): Response {
-    const fallbackResponse: DeepSeekAPIResponse = {
-      choices: [{
-        message: {
-          content: `抱歉，AI分析服务暂时不可用。错误信息：${error.message}。请稍后重试或联系管理员。`,
-          role: 'assistant'
-        },
-        index: 0,
-        finish_reason: 'error'
-      }],
-      usage: {
-        prompt_tokens: 0,
-        completion_tokens: 50,
-        total_tokens: 50
-      },
-      model: this.config.model,
-      id: `fallback-${callId}`,
-      created: Math.floor(Date.now() / 1000)
-    };
-
-    return new Response(JSON.stringify(fallbackResponse), {
-      status: 200, // 返回200但内容表明错误，保持业务逻辑兼容
-      headers: {
-        'Content-Type': 'application/json',
-        'X-AI-Proxy': 'DeeChatAI-Fallback',
-        'X-Call-ID': callId,
-        'X-Error': 'true'
-      }
-    });
-  }
 }
 
 /**
@@ -470,17 +439,10 @@ export async function callUnifiedAIStream(
   ];
 
   try {
-    // 使用DeeChatAIClient的流式方法（如果存在）
+    // 使用DeeChatAIClient的流式方法
     const aiClient = (proxy as any).aiClient;
     if (!aiClient || typeof aiClient.sendCustomMessageStream !== 'function') {
-      // 如果不支持流式，降级到普通调用
-      const result = await callUnifiedAI(systemPrompt, userPrompt, options);
-      // 模拟流式输出
-      return {
-        async *[Symbol.asyncIterator]() {
-          yield result.content;
-        }
-      };
+      throw new Error('AI客户端不支持流式调用');
     }
 
     const streamResponse = await aiClient.sendCustomMessageStream(

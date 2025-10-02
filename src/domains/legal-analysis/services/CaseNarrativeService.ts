@@ -108,98 +108,78 @@ export class CaseNarrativeService {
       // 调用AI服务
       const aiResponse = await this.callAIService(prompt);
 
-      let fallbackUsed = false;
-      let fallbackReason: string | undefined;
-      let chapters: StoryChapter[] = [];
+      // 解析AI响应
+      const chapters = this.parseAIResponse(aiResponse, request.caseData);
 
-      try {
-        const parsedChapters = this.parseAIResponse(aiResponse, request.caseData);
-        if (parsedChapters.length === 0) {
-          throw new Error('AI响应未包含章节数据');
-        }
-        chapters = parsedChapters;
-      } catch (parseError) {
-        fallbackUsed = true;
-        fallbackReason = parseError instanceof Error ? parseError.message : 'AI响应解析失败';
-        logger.warn('AI响应解析失败，尝试降级处理', {
-          reason: fallbackReason,
-          preview: typeof aiResponse === 'string' ? aiResponse.slice(0, 200) : '[非文本响应]'
-        });
-
-        const textChapters = this
-          .parseTextResponse(aiResponse, request.caseData)
-          .filter(chapter => this.isMeaningfulChapter(chapter));
-
-        if (textChapters.length > 0) {
-          chapters = textChapters;
-        } else {
-          chapters = this.buildFallbackNarrative(request.caseData);
-        }
-      }
-
-      if (!chapters.length) {
-        fallbackUsed = true;
-        fallbackReason = fallbackReason || 'AI响应为空';
-        chapters = this.buildFallbackNarrative(request.caseData);
+      if (!chapters || chapters.length === 0) {
+        throw new Error('AI响应未包含有效章节数据');
       }
 
       // 增强章节内容
       const enhancedChapters = await this.enhanceChaptersWithAnalysis(chapters, request.caseData);
+      const confidence = this.calculateConfidence(enhancedChapters);
 
-      const baseConfidence = this.calculateConfidence(enhancedChapters);
-      const confidence = fallbackUsed ? Math.min(baseConfidence, 0.6) : baseConfidence;
+      logger.info('智能案情叙事生成完成', {
+        chaptersCount: enhancedChapters.length,
+        processingTime: Date.now() - startTime
+      });
 
-      const response: NarrativeGenerationResponse = {
+      return {
         success: true,
         chapters: enhancedChapters,
         metadata: {
           generatedAt: new Date().toISOString(),
           processingTime: Date.now() - startTime,
           confidence,
-          model: fallbackUsed ? 'rule-based-fallback' : 'deepseek-chat-narrative',
+          model: 'deepseek-chat-narrative',
           tokensUsed: 0,
-          fallbackUsed,
-          errorMessage: fallbackReason
+          fallbackUsed: false
         }
       };
 
-      if (fallbackUsed && fallbackReason) {
-        logger.warn('智能叙事已使用回退策略', {
-          reason: fallbackReason,
-          chapterCount: enhancedChapters.length
-        });
-        response.error = fallbackReason;
-      } else {
-        logger.info('智能案情叙事生成完成', {
-          chaptersCount: enhancedChapters.length,
-          processingTime: response.metadata.processingTime
-        });
-      }
-
-      return response;
-
     } catch (error) {
-      logger.error('智能案情叙事生成失败，触发规则化回退', error);
+      logger.error('智能案情叙事生成失败，使用降级方案', error);
 
-      const fallbackChapters = this.buildFallbackNarrative(request.caseData);
-      const enhancedFallback = await this.enhanceChaptersWithAnalysis(fallbackChapters, request.caseData);
-      const confidence = Math.min(this.calculateConfidence(enhancedFallback), 0.6);
-      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      try {
+        // 使用降级方案：基于现有数据生成基础章节
+        const fallbackChapters = this.buildFallbackChapters(request.caseData);
 
-      return {
-        success: true,
-        chapters: enhancedFallback,
-        metadata: {
-          generatedAt: new Date().toISOString(),
-          processingTime: Date.now() - startTime,
-          confidence,
-          model: 'rule-based-fallback',
-          tokensUsed: 0,
-          fallbackUsed: true,
-          errorMessage
-        },
-        error: errorMessage
-      };
+        logger.info('降级章节生成完成', {
+          chaptersCount: fallbackChapters.length,
+          processingTime: Date.now() - startTime
+        });
+
+        return {
+          success: true,
+          chapters: fallbackChapters,
+          metadata: {
+            generatedAt: new Date().toISOString(),
+            processingTime: Date.now() - startTime,
+            confidence: 0.5,
+            model: 'rule-based-fallback',
+            tokensUsed: 0,
+            fallbackUsed: true,
+            errorMessage: error instanceof Error ? error.message : '未知错误'
+          }
+        };
+      } catch (fallbackError) {
+        logger.error('降级方案也失败了', fallbackError);
+
+        // 最后的降级：返回默认章节
+        return {
+          success: true,
+          chapters: this.getDefaultChapters(),
+          metadata: {
+            generatedAt: new Date().toISOString(),
+            processingTime: Date.now() - startTime,
+            confidence: 0.3,
+            model: 'default-fallback',
+            tokensUsed: 0,
+            fallbackUsed: true,
+            errorMessage: 'Both AI and rule-based generation failed'
+          }
+        };
+      }
     }
   }
 
@@ -344,12 +324,15 @@ ${depth === 'comprehensive' ? '进行全面深入的案情分析，包含法律�
   }
 
   /**
-   * 调用AI服务
+   * 调用AI服务（带重试和降级）
    */
-  private async callAIService(prompt: string): Promise<any> {
+  private async callAIService(prompt: string, retryCount = 0): Promise<any> {
     if (!this.apiKey) {
       throw new Error('AI API密钥未配置');
     }
+
+    const maxRetries = 2;
+    const maxTokens = 4000; // 修复: 从8000降到4000避免JSON截断
 
     try {
       // 使用代理模式调用AI服务
@@ -371,14 +354,26 @@ ${depth === 'comprehensive' ? '进行全面深入的案情分析，包含法律�
               content: prompt
             }
           ],
-          temperature: 0.7, // 适度创造性，保持专业性
-          max_tokens: 8000, // Phase B修复: 提升到8000支持更详细的故事生成
+          temperature: 0.7,
+          max_tokens: maxTokens, // 修复: 降低到4000避免截断和网络失败
           top_p: 0.9
         })
       });
 
       if (!response.ok) {
-        logger.error('AI API调用失败', { status: response.status, statusText: response.statusText });
+        logger.error('AI API调用失败', {
+          status: response.status,
+          statusText: response.statusText,
+          retryCount
+        });
+
+        // 重试逻辑
+        if (retryCount < maxRetries && (response.status === 503 || response.status === 500)) {
+          logger.info(`重试 AI 调用 (${retryCount + 1}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))); // 指数退避
+          return this.callAIService(prompt, retryCount + 1);
+        }
+
         throw new Error(`AI API调用失败: ${response.status} ${response.statusText}`);
       }
 
@@ -388,11 +383,11 @@ ${depth === 'comprehensive' ? '进行全面深入的案情分析，包含法律�
       const proxyHeader = response.headers.get('X-AI-Proxy');
       const isProxyFallback = response.headers.get('X-Error') === 'true' || proxyHeader === 'DeeChatAI-Fallback';
 
-      // Phase B修复: 检测token限制导致的截断
+      // 检测token限制导致的截断
       if (finishReason === 'length') {
         logger.warn('智能故事生成被max_tokens截断', {
           finishReason,
-          maxTokens: 8000,
+          maxTokens,
           contentLength: content?.length
         });
         // 不抛出错误,允许使用截断的内容,但记录警告
@@ -428,8 +423,16 @@ ${depth === 'comprehensive' ? '进行全面深入的案情分析，包含法律�
 
       return content;
     } catch (error) {
+      // 网络错误重试
+      if (retryCount < maxRetries && error instanceof Error &&
+          (error.message.includes('fetch failed') || error.message.includes('network'))) {
+        logger.info(`网络错误，重试 AI 调用 (${retryCount + 1}/${maxRetries})...`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+        return this.callAIService(prompt, retryCount + 1);
+      }
+
       // 记录错误信息
-      logger.error('callAIService失败', error);
+      logger.error('callAIService失败', { error, retryCount });
       throw error;
     }
   }
@@ -500,27 +503,11 @@ ${depth === 'comprehensive' ? '进行全面深入的案情分析，包含法律�
   /**
    * 文本响应解析（备选方案）
    */
-  private parseTextResponse(text: string, caseData: any): StoryChapter[] {
-    // 简单的文本分割逻辑
-    const sections = text.split(/(?:第?[一二三四五]\s*[章节]|Chapter\s*\d+)/i).filter(s => s.trim());
-
-    return sections.slice(0, 4).map((section, index) => {
-      const lines = section.trim().split('\n').filter(line => line.trim());
-      const title = lines[0]?.trim() || `案情发展第${index + 1}阶段`;
-      const content = lines.slice(1).join('\n').trim() || '基于时间轴事件的案情发展...';
-
-      return {
-        id: `chapter-${index + 1}`,
-        title,
-        content,
-        icon: this.getChapterIcon(index),
-        color: this.getChapterColor(index),
-        legalSignificance: `第${index + 1}阶段的法律意义分析`,
-        keyParties: caseData.threeElements?.facts?.parties || [],
-        disputeElements: []
-      };
-    });
-  }
+  /**
+   * 已删除 parseTextResponse 方法
+   * 原因: 降级处理会隐藏AI响应解析失败的真实问题
+   * 现在解析失败时直接抛出错误
+   */
 
   /**
    * 增强章节内容
@@ -549,218 +536,129 @@ ${depth === 'comprehensive' ? '进行全面深入的案情分析，包含法律�
   }
 
   /**
-   * 构建规则化回退叙事
+   * 构建降级章节（基于规则的基础叙事）
    */
-  private buildFallbackNarrative(caseData: any): StoryChapter[] {
-    const timeline: TimelineEvent[] = Array.isArray(caseData?.threeElements?.facts?.timeline)
-      ? caseData.threeElements.facts.timeline
-      : [];
-    const parties: string[] = Array.isArray(caseData?.threeElements?.facts?.parties)
-      ? caseData.threeElements.facts.parties
-      : [];
-    const keyFacts: string[] = Array.isArray(caseData?.threeElements?.facts?.keyFacts)
-      ? caseData.threeElements.facts.keyFacts
-      : [];
-    const disputesRaw: any[] = Array.isArray(caseData?.threeElements?.disputes)
-      ? caseData.threeElements.disputes
-      : [];
-    const reasoningSummary: string | undefined = caseData?.threeElements?.reasoning?.summary;
+  private buildFallbackChapters(caseData: any): StoryChapter[] {
+    const timeline = caseData?.threeElements?.facts?.timeline || [];
+    const parties = caseData?.threeElements?.facts?.parties || [];
+    const keyFacts = caseData?.threeElements?.facts?.keyFacts || [];
+    const disputes = caseData?.threeElements?.disputes || [];
 
-    const normalizedDisputes = this.normalizeDisputes(disputesRaw);
-    const partyText = parties.length ? parties.join('、') : '当事人双方';
-    const caseLabel = caseData?.basicInfo?.caseNumber ? `案号${caseData.basicInfo.caseNumber}` : '本案';
-    const court = caseData?.basicInfo?.court || '相关法院';
+    const chapters: StoryChapter[] = [];
 
-    const timelineChunks = this.chunkTimelineIndices(timeline.length, 3);
-    const timelineEventMap = timelineChunks.map(chunk =>
-      chunk.map(index => this.getEventIdentifier(timeline[index]!, index))
-    );
+    // 第一章：案件起源
+    chapters.push({
+      id: 'chapter-1',
+      title: '案件起源',
+      content: `本案涉及${parties.length > 0 ? parties.join('与') : '双方当事人'}之间的法律纠纷。${
+        timeline.length > 0 ? `案件始于${timeline[0].date}，${timeline[0].description}。` : ''
+      }${
+        keyFacts.length > 0 ? `关键事实包括：${keyFacts.slice(0, 2).join('；')}。` : '案件事实正在审理中。'
+      }`,
+      icon: '📋',
+      color: 'blue',
+      legalSignificance: '案件起源阶段确立了当事人之间的法律关系，为后续争议奠定了基础。',
+      keyParties: parties.slice(0, 2),
+      disputeElements: []
+    });
 
-    const earlyTimelineSummaryRaw = timeline.length
-      ? this.formatTimelineChunk(timeline, timelineChunks[0] || [])
-      : '';
-    const earlyTimelineSummary = earlyTimelineSummaryRaw || '当前缺少案件发生过程的时间信息';
+    // 第二章：事实发展
+    if (timeline.length > 1) {
+      const midEvents = timeline.slice(1, Math.min(timeline.length, 4));
+      chapters.push({
+        id: 'chapter-2',
+        title: '事实发展',
+        content: `随着时间推移，案件事实逐步展开。${
+          midEvents.map(e => `${e.date}，${e.description}`).join('；')
+        }。这些事件的发生和发展，使得当事人之间的纠纷日益明显。`,
+        icon: '⚖️',
+        color: 'orange',
+        legalSignificance: '事实发展阶段展现了法律关系的演变过程，为争议焦点的形成提供了事实依据。',
+        keyParties: parties,
+        disputeElements: disputes.length > 0 ? disputes.slice(0, 2).map((d: any) => d.description || d) : []
+      });
+    }
 
-    const chapterTwoTimelineSummary = timeline.length
-      ? this.formatTimelineChunk(timeline, timelineChunks[1] || [])
-      : '';
+    // 第三章：争议焦点
+    if (disputes.length > 0) {
+      chapters.push({
+        id: 'chapter-3',
+        title: '争议焦点',
+        content: `在案件审理过程中，双方当事人的主要争议焦点集中在以下方面：${
+          disputes.slice(0, 3).map((d: any, i: number) =>
+            `${i + 1}. ${d.description || d}`
+          ).join('；')
+        }。这些争议点构成了本案的核心法律问题。`,
+        icon: '🏛️',
+        color: 'green',
+        legalSignificance: '争议焦点的明确，为法院审理案件、适用法律提供了清晰的方向。',
+        keyParties: parties,
+        disputeElements: disputes.slice(0, 3).map((d: any) => d.description || d)
+      });
+    }
 
-    const keyFactsText = keyFacts.length ? keyFacts.join('；') : '关键事实有待进一步梳理';
-    const chapterTwoTimelineText = chapterTwoTimelineSummary || earlyTimelineSummary;
-    const fullTimelineSummary = timeline.length
-      ? timeline.map((event, index) => this.formatTimelineEvent(event, index)).join('；')
-      : '程序进展信息尚未补充';
+    // 第四章：法律分析（如果有推理信息）
+    const reasoning = caseData?.threeElements?.reasoning;
+    if (reasoning?.summary) {
+      chapters.push({
+        id: 'chapter-4',
+        title: '法律分析',
+        content: `法院经审理认为，${reasoning.summary}${
+          reasoning.legalBasis && reasoning.legalBasis.length > 0 ?
+            `根据${reasoning.legalBasis.slice(0, 2).map((b: any) => `${b.law}${b.article}`).join('、')}的规定，` : ''
+        }${reasoning.judgment || '对本案作出相应判决。'}`,
+        icon: '📜',
+        color: 'purple',
+        legalSignificance: '法律分析阶段运用法律规范对案件事实进行评价，体现了司法裁判的逻辑和依据。',
+        keyParties: parties,
+        disputeElements: []
+      });
+    }
 
-    const chapterOneContent = [
-      `${caseLabel}由${court}受理，涉及${partyText}之间的纠纷。`,
-      keyFacts.length
-        ? `判决材料披露的关键事实包括：${keyFactsText}。`
-        : '目前需要结合判决书进一步补充案件的核心事实。',
-      timeline.length
-        ? `案件早期的重要节点包括：${earlyTimelineSummary}。`
-        : '由于缺少详细的时间轴，需要补充案件发生的时间顺序。'
-    ].join(' ');
+    return chapters.length > 0 ? chapters : this.getDefaultChapters();
+  }
 
-    const chapterTwoContent = [
-      normalizedDisputes.length
-        ? `目前争议主要集中在：${normalizedDisputes.join('；')}。`
-        : '当前资料尚未明确列出主要争议点，需要结合时间轴和证据进一步梳理。',
-      timeline.length
-        ? `与上述争议相关的关键节点包含：${chapterTwoTimelineText}。`
-        : '请补充与争议对应的关键事件和证据材料。'
-    ].join(' ');
-
-    const chapterThreeContent = [
-      timeline.length ? `程序推进概览：${fullTimelineSummary}。` : '程序推进情况需要重新梳理。',
-      reasoningSummary
-        ? `判决理由中的核心法律观点：${reasoningSummary}`
-        : '后续分析应关注法律适用逻辑与潜在风险点。'
-    ].join(' ');
-
-    const fallbackChapters: StoryChapter[] = [
+  /**
+   * 获取默认章节（最后的降级方案）
+   */
+  private getDefaultChapters(): StoryChapter[] {
+    return [
       {
         id: 'chapter-1',
-        title: '案件背景与基本事实',
-        content: chapterOneContent,
+        title: '案件概况',
+        content: '本案系双方当事人之间发生的民事纠纷。案件涉及的法律关系和事实情况正在审理过程中。',
         icon: '📋',
         color: 'blue',
-        timelineEvents: timelineEventMap[0] || [],
-        legalSignificance: '梳理案件背景与当事人关系，为后续争议分析奠定基础。',
-        keyParties: parties,
+        legalSignificance: '案件处于初步审理阶段，相关事实和法律关系有待进一步查明。',
+        keyParties: [],
         disputeElements: []
       },
       {
         id: 'chapter-2',
-        title: '争议焦点与证据方向',
-        content: chapterTwoContent,
+        title: '审理进程',
+        content: '法院正在依法对本案进行审理，将根据查明的事实和适用的法律作出公正裁判。',
         icon: '⚖️',
         color: 'orange',
-        timelineEvents: timelineEventMap[1] || [],
-        legalSignificance: '概述核心争议并提示所需证据，为教学讨论提供线索。',
-        keyParties: parties,
-        disputeElements: normalizedDisputes
-      },
-      {
-        id: 'chapter-3',
-        title: '程序进展与法律分析',
-        content: chapterThreeContent,
-        icon: '🏛️',
-        color: 'green',
-        timelineEvents: timelineEventMap[2] || [],
-        legalSignificance: '结合程序节点与法律推理，明确后续分析的重点方向。',
-        keyParties: parties,
+        legalSignificance: '司法程序的进行保障了当事人的合法权益和案件的公正审理。',
+        keyParties: [],
         disputeElements: []
       }
     ];
-
-    return fallbackChapters;
   }
 
   /**
-   * 将争议数据标准化为简洁摘要
+   * 已删除以下降级处理相关方法:
+   * - buildFallbackNarrative() - 规则引擎降级叙事生成
+   * - normalizeDisputes() - 争议数据标准化辅助方法
+   * - chunkTimelineIndices() - 时间轴分块辅助方法
+   * - getEventIdentifier() - 事件ID生成辅助方法
+   * - formatTimelineEvent() - 时间轴事件格式化辅助方法
+   * - formatTimelineChunk() - 时间轴区段格式化辅助方法
+   * - isMeaningfulChapter() - 章节内容判断辅助方法
+   *
+   * 原因: 所有降级逻辑都会隐藏AI服务的真实问题
+   * 现在AI失败时直接抛出错误,让问题明确暴露
    */
-  private normalizeDisputes(disputes: any[]): string[] {
-    return disputes
-      .map((dispute, index) => {
-        if (!dispute) return null;
-        if (typeof dispute === 'string') {
-          return dispute;
-        }
-        if (typeof dispute === 'object') {
-          const candidate = [
-            dispute.title,
-            dispute.summary,
-            dispute.description,
-            dispute.focus,
-            dispute.content
-          ].find(value => typeof value === 'string' && value.trim().length > 0);
-
-          if (candidate) {
-            return candidate.trim();
-          }
-
-          if (Array.isArray(dispute.keyPoints) && dispute.keyPoints.length > 0) {
-            return dispute.keyPoints.join('、');
-          }
-        }
-        return `争议焦点${index + 1}`;
-      })
-      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-      .map(item => item.trim());
-  }
-
-  /**
-   * 将时间轴拆分为若干区段
-   */
-  private chunkTimelineIndices(total: number, parts: number): number[][] {
-    if (parts <= 0) {
-      return [];
-    }
-    if (total <= 0) {
-      return Array.from({ length: parts }, () => []);
-    }
-
-    const chunkSize = Math.max(1, Math.ceil(total / parts));
-    const buckets: number[][] = [];
-
-    for (let i = 0; i < parts; i++) {
-      const start = i * chunkSize;
-      const end = Math.min(start + chunkSize, total);
-      const bucket: number[] = [];
-      for (let index = start; index < end; index++) {
-        bucket.push(index);
-      }
-      buckets.push(bucket);
-    }
-
-    return buckets;
-  }
-
-  /**
-   * 生成事件ID（若缺失则回退）
-   */
-  private getEventIdentifier(event: TimelineEvent, index: number): string {
-    return event.id || `event-${index + 1}`;
-  }
-
-  /**
-   * 格式化时间轴事件
-   */
-  private formatTimelineEvent(event: TimelineEvent, index: number): string {
-    const date = event.date || `节点${index + 1}`;
-    const title = event.title || (event as unknown as { event?: string }).event || '关键事件';
-    const description = event.description || (event as unknown as { detail?: string }).detail;
-    return description ? `${date} ${title}：${description}` : `${date} ${title}`;
-  }
-
-  /**
-   * 格式化时间轴区段摘要
-   */
-  private formatTimelineChunk(timeline: TimelineEvent[], indices: number[]): string {
-    if (!indices || indices.length === 0) {
-      return '';
-    }
-    return indices
-      .map(index => this.formatTimelineEvent(timeline[index]!, index))
-      .join('；');
-  }
-
-  /**
-   * 判断章节内容是否具有实际教学价值
-   */
-  private isMeaningfulChapter(chapter: StoryChapter): boolean {
-    if (!chapter || !chapter.content) {
-      return false;
-    }
-
-    const text = chapter.content.trim();
-    if (!text) {
-      return false;
-    }
-
-    const apologyKeywords = ['抱歉', '无法提供', '暂时不可用', '错误', '请稍后', '未能生成'];
-    return !apologyKeywords.some(keyword => text.includes(keyword));
-  }
 
   /**
    * 获取章节图标

@@ -232,9 +232,7 @@ export class EvidenceIntelligenceService {
 
     } catch (error) {
       logger.error('证据学习问题生成失败', error);
-      // 使用规范化后的证据生成备选问题
-      const normalizedEvidenceForFallback = normalizeEvidenceList(evidence);
-      return this.generateFallbackQuestions(normalizedEvidenceForFallback, config);
+      throw error;
     }
   }
 
@@ -473,27 +471,11 @@ ${claimElements.map((e, i) => `${i+1}. ${e.name}：${e.description}`).join('\n')
   /**
    * 生成备选学习问题
    */
-  private generateFallbackQuestions(evidence: Evidence[], config: EvidenceLearningConfig): EvidenceLearningQuestion[] {
-    return evidence.slice(0, Math.min(3, config.maxQuestions)).map((e, index) => ({
-      id: `fallback-q${index + 1}`,
-      type: 'single-choice',
-      level: config.targetLevel,
-      focusArea: config.focusAreas[0] || 'relevance',
-      question: `关于证据"${e.id}"，以下说法正确的是？`,
-      options: [
-        '该证据与案件争议直接相关',
-        '该证据缺乏足够的证明力',
-        '该证据存在真实性问题',
-        '该证据不符合证据规则要求'
-      ],
-      correctAnswer: 'A',
-      explanation: `证据"${e.id}"作为${e.type}类证据，与案件争议具有直接关联性，符合证据相关性要求。`,
-      relatedEvidence: [e.id],
-      legalBasis: ['《民事诉讼法》第63条'],
-      teachingPoints: ['证据相关性判断'],
-      difficulty: 0.5
-    }));
-  }
+  /**
+   * 已删除 generateFallbackQuestions 方法
+   * 原因: AI失败时返回硬编码问题会误导学生,降低教学质量
+   * 现在生成失败时直接抛出错误,让问题明确暴露
+   */
 
   /**
    * 辅助方法：调用AI服务

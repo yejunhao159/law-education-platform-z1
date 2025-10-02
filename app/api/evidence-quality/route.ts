@@ -254,10 +254,13 @@ export async function POST(request: NextRequest) {
 
     logger.info('证据质量评估完成', {
       mode: result.mode,
-      processingTime: result.processingTime
+      processingTime: result.processingTime,
+      success: result.success
     });
 
-    return NextResponse.json(result);
+    // 根据result.success设置正确的HTTP状态码
+    const statusCode = result.success ? 200 : 500;
+    return NextResponse.json(result, { status: statusCode });
 
   } catch (error: any) {
     logger.error('证据质量评估失败', error);

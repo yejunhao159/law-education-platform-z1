@@ -74,7 +74,7 @@ export class LegalExtractionApplicationService {
 
     } catch (error) {
       console.error('❌ 法律智能提取错误:', error);
-      return this.buildErrorResponse(error);
+      throw error;
     }
   }
 
@@ -153,8 +153,10 @@ export class LegalExtractionApplicationService {
       // 映射相关法律条款
       const provisions = ProvisionMapper.mapCaseTypeToProvisions(caseType);
 
-      // 基于事实查找额外条款
-      const factTexts = data.facts.map(f => f.content);
+      // 基于事实查找额外条款（过滤掉没有content的fact）
+      const factTexts = (data.facts || [])
+        .filter(f => f && f.content)
+        .map(f => f.content);
       const additionalProvisions = ProvisionMapper.findRelevantStatutes(factTexts);
 
       // 增强现有法律条款
@@ -190,32 +192,33 @@ export class LegalExtractionApplicationService {
     const suggestions: string[] = [];
 
     // 基于日期的建议
-    const criticalDates = data.dates.filter(d => d.importance === 'critical');
+    const criticalDates = (data.dates || []).filter(d => d?.importance === 'critical');
     if (criticalDates.length > 0) {
-      suggestions.push(`注意关键日期：${criticalDates.map(d => d.description).join('、')}`);
+      suggestions.push(`注意关键日期：${criticalDates.map(d => d.description || '').filter(Boolean).join('、')}`);
     }
 
     // 基于金额的建议
-    const largeAmounts = data.amounts.filter(a => a.value > 100000);
+    const largeAmounts = (data.amounts || []).filter(a => a?.value && a.value > 100000);
     if (largeAmounts.length > 0) {
       suggestions.push(`涉及较大金额，建议重点审查相关证据`);
     }
 
     // 基于当事人的建议
-    if (data.parties.filter(p => p.type === 'defendant').length > 1) {
+    const defendants = (data.parties || []).filter(p => p?.type === 'defendant');
+    if (defendants.length > 1) {
       suggestions.push('多名被告，注意连带责任问题');
     }
 
     // 基于争议事实的建议
-    const disputedFacts = data.facts.filter(f => f.type === 'disputed');
+    const disputedFacts = (data.facts || []).filter(f => f?.type === 'disputed');
     if (disputedFacts.length > 0) {
       suggestions.push(`存在${disputedFacts.length}个争议事实，需要充分举证`);
     }
 
     // 基于法律条款的建议
-    const coreClause = data.legalClauses.filter(c => c.importance === 'core');
-    if (coreClause.length > 0) {
-      suggestions.push(`重点研究核心法律条款：${coreClause[0].source || '相关法律'}`);
+    const coreClause = (data.legalClauses || []).filter(c => c?.importance === 'core');
+    if (coreClause.length > 0 && coreClause[0]?.source) {
+      suggestions.push(`重点研究核心法律条款：${coreClause[0].source}`);
     }
 
     return suggestions;
@@ -279,15 +282,17 @@ export class LegalExtractionApplicationService {
    */
   private detectCaseType(data: ExtractedData): string {
     // 基于提取的数据智能判断案件类型
-    const hasLoan = data.amounts.some(a =>
+    const hasLoan = data.amounts?.some(a =>
       a.type === 'principal' || a.type === 'interest'
-    );
-    const hasContract = data.legalClauses.some(c =>
+    ) || false;
+
+    const hasContract = data.legalClauses?.some(c =>
       c.type === 'contract'
-    );
-    const hasLabor = data.facts.some(f =>
-      f.content.includes('工资') || f.content.includes('劳动')
-    );
+    ) || false;
+
+    const hasLabor = data.facts?.some(f =>
+      f?.content && (f.content.includes('工资') || f.content.includes('劳动'))
+    ) || false;
 
     if (hasLoan) return '民间借贷纠纷';
     if (hasLabor) return '劳动争议';
@@ -328,22 +333,11 @@ export class LegalExtractionApplicationService {
   /**
    * 构建错误响应
    */
-  private buildErrorResponse(error: unknown): ExtractionResult {
-    const errorMessage = error instanceof Error ? error.message : '未知错误';
-
-    return {
-      success: false,
-      data: this.getEmptyExtractedData(),
-      metadata: {
-        documentType: 'unknown',
-        confidence: 0,
-        extractionMethod: 'rule-based',
-        processingTime: new Date().toISOString()
-      },
-      suggestions: [],
-      error: errorMessage
-    };
-  }
+  /**
+   * 已删除 buildErrorResponse 方法
+   * 原因: Service层不应返回错误响应对象,应直接抛出错误
+   * 现在所有错误直接throw,由API层统一处理
+   */
 
   /**
    * 验证请求
@@ -371,23 +365,8 @@ export class LegalExtractionApplicationService {
   }
 
   /**
-   * 获取空的提取数据
+   * 已删除 getEmptyExtractedData 方法
+   * 原因: 错误时不应返回空的结构化数据
+   * 现在所有错误直接throw,不提供任何降级数据
    */
-  private getEmptyExtractedData(): ExtractedData {
-    return {
-      dates: [],
-      parties: [],
-      amounts: [],
-      legalClauses: [],
-      facts: [],
-      metadata: {
-        uploadTime: new Date().toISOString(),
-        documentType: 'unknown',
-        extractionTime: new Date().toISOString(),
-        extractionVersion: '1.0.0'
-      },
-      confidence: 0,
-      source: 'rule'
-    };
-  }
 }
