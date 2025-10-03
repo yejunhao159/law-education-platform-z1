@@ -12,6 +12,17 @@ exports.default = exports.ContextFormatter = void 0;
  */
 class ContextFormatter {
     /**
+     * Build chat completion messages from a named template
+     */
+    static fromTemplateAsMessages(templateName, data, options = {}) {
+        switch (templateName) {
+            case 'standard':
+                return this.buildStandardTemplateMessages(data, options);
+            default:
+                throw new Error(`[ContextFormatter] Unsupported template: ${templateName}`);
+        }
+    }
+    /**
      * Format context data based on specified options
      */
     static format(data, options = {}) {
@@ -25,6 +36,42 @@ class ContextFormatter {
             default:
                 return this.formatAsXML(data, opts);
         }
+    }
+    /**
+     * Build the default DeepPractice chat message structure
+     */
+    static buildStandardTemplateMessages(data, options) {
+        const messages = [];
+        const timestamp = () => new Date().toISOString();
+        const systemContent = this.resolveSystemPrompt(data);
+        if (systemContent) {
+            messages.push({
+                role: 'system',
+                content: systemContent,
+                timestamp: timestamp()
+            });
+        }
+        if (Array.isArray(data.conversation) && data.conversation.length > 0) {
+            const conversationMessages = this.normalizeConversationMessages(data.conversation);
+            conversationMessages.forEach((msg) => messages.push({
+                ...msg,
+                timestamp: timestamp()
+            }));
+        }
+        const userContent = this.buildStandardUserContent(data, options);
+        if (userContent) {
+            const metadata = {
+                template: 'standard',
+                ...(data.metadata || {})
+            };
+            messages.push({
+                role: 'user',
+                content: userContent,
+                timestamp: timestamp(),
+                metadata
+            });
+        }
+        return messages;
     }
     /**
      * Format context as XML
@@ -236,6 +283,85 @@ class ContextFormatter {
             timestamp: new Date().toISOString()
         });
         return messages;
+    }
+    /**
+     * Resolve the system prompt for template driven messages
+     */
+    static resolveSystemPrompt(data) {
+        if (typeof data.systemPrompt === 'string' && data.systemPrompt.trim().length > 0) {
+            return data.systemPrompt.trim();
+        }
+        if (Array.isArray(data.systemPrompt)) {
+            const combined = data.systemPrompt.filter(Boolean).join('\n').trim();
+            if (combined.length > 0) {
+                return combined;
+            }
+        }
+        if (typeof data.role === 'string' && data.role.trim().length > 0) {
+            return data.role.trim();
+        }
+        if (Array.isArray(data.role)) {
+            const combinedRole = data.role.filter(Boolean).join('\n').trim();
+            if (combinedRole.length > 0) {
+                return combinedRole;
+            }
+        }
+        return undefined;
+    }
+    /**
+     * Normalise conversation history into chat messages
+     */
+    static normalizeConversationMessages(history) {
+        const messages = [];
+        let nextRole = 'user';
+        history.forEach((entry) => {
+            if (!entry) {
+                return;
+            }
+            const trimmed = entry.trim();
+            if (!trimmed) {
+                return;
+            }
+            let role = nextRole;
+            let content = trimmed;
+            const labelledMatch = trimmed.match(/^(学生|导师|老师|教师|user|assistant|system|mentor|tutor)[:：]\s*(.*)$/i);
+            if (labelledMatch) {
+                const label = labelledMatch[1].toLowerCase();
+                content = labelledMatch[2].trim();
+                if (['导师', '老师', '教师', 'assistant', 'system', 'mentor', 'tutor'].includes(label)) {
+                    role = 'assistant';
+                }
+                else {
+                    role = 'user';
+                }
+            }
+            messages.push({
+                role,
+                content
+            });
+            nextRole = role === 'user' ? 'assistant' : 'user';
+        });
+        return messages;
+    }
+    /**
+     * Build user message content for the standard template
+     */
+    static buildStandardUserContent(data, options) {
+        const { systemPrompt: _systemPrompt, conversation: _conversation, role: _role, metadata: _metadata, ...rest } = data;
+        const payload = {};
+        Object.entries(rest).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) {
+                payload[key] = value;
+            }
+        });
+        const keys = Object.keys(payload);
+        if (keys.length === 0) {
+            return '';
+        }
+        if (keys.length === 1 && typeof payload.current === 'string') {
+            return payload.current;
+        }
+        return this.format(payload, options).trim();
     }
     /**
      * Parse formatted context back to data object

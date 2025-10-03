@@ -104,11 +104,19 @@ export class SocraticDialogueService {
       // 第1步：构建完整的 System Prompt（包含所有教学知识）
       const systemPrompt = this.buildSystemPrompt(request);
 
-      // 第2步：准备标准输入数据（role = System Prompt）
+      // 第2步：准备标准化输入数据（完整的System Prompt作为system消息）
       const standardInput = {
-        role: systemPrompt,  // 完整的 System Prompt 作为 role
+        systemPrompt,
+        role: 'DeepPractice 苏格拉底教学导师',
         conversation: this.buildConversationHistory(request.messages || []),
-        current: this.buildCurrentContext(request)
+        current: this.buildCurrentContext(request),
+        context: this.buildStructuredContext(request),
+        metadata: {
+          sessionId: request.sessionId || 'enhanced-session',
+          mode: request.mode || 'exploration',
+          level: request.level || 'intermediate',
+          templateVersion: 'standard:v1'
+        }
       };
 
       // 第3步：使用 ContextFormatter 生成完整的 messages 数组（集成！）
@@ -173,9 +181,17 @@ export class SocraticDialogueService {
 
       // 第2步：准备标准输入数据（role = System Prompt）
       const standardInput = {
-        role: systemPrompt,  // 完整的 System Prompt 作为 role
+        systemPrompt,
+        role: 'DeepPractice 苏格拉底教学导师',
         conversation: this.buildConversationHistory(request.messages || []),
-        current: this.buildCurrentContext(request)
+        current: this.buildCurrentContext(request),
+        context: this.buildStructuredContext(request),
+        metadata: {
+          sessionId: request.sessionId || 'enhanced-session',
+          mode: request.mode || 'exploration',
+          level: request.level || 'intermediate',
+          templateVersion: 'standard:v1'
+        }
       };
 
       // 第3步：使用 ContextFormatter 生成完整的 messages 数组（集成！）
@@ -306,7 +322,14 @@ export class SocraticDialogueService {
     const parts = [];
 
     if (request.caseContext) {
-      parts.push(`案例背景：${request.caseContext}`);
+      const caseContextText = typeof request.caseContext === 'string'
+        ? request.caseContext
+        : JSON.stringify(request.caseContext, null, 2);
+      parts.push(`案例背景：${caseContextText}`);
+    }
+
+    if (request.caseInfo) {
+      parts.push(`案例要点：${JSON.stringify(request.caseInfo, null, 2)}`);
     }
 
     if (request.currentTopic) {
@@ -318,7 +341,48 @@ export class SocraticDialogueService {
       parts.push(`学生的最新回答：${lastMessage.content}`);
     }
 
+    if (request.studentInput) {
+      parts.push(`学生的补充输入：${request.studentInput}`);
+    }
+
     return parts.join('\n');
+  }
+
+  /**
+   * 构建结构化的上下文信息，供模板系统使用
+   */
+  private buildStructuredContext(request: SocraticRequest): Record<string, unknown> {
+    const context: Record<string, unknown> = {
+      mode: request.mode || 'exploration',
+      level: request.level || 'intermediate',
+      topic: request.currentTopic || '法学基础讨论'
+    };
+
+    if (request.sessionId) {
+      context.sessionId = request.sessionId;
+    }
+
+    if (request.difficulty) {
+      context.legacyDifficulty = request.difficulty;
+    }
+
+    if (request.caseContext) {
+      context.caseContext = request.caseContext;
+    }
+
+    if (request.caseInfo) {
+      context.caseInfo = request.caseInfo;
+    }
+
+    if (request.context) {
+      context.additionalContext = request.context;
+    }
+
+    if (typeof request.messages?.length === 'number' && request.messages.length > 0) {
+      context.turnCount = request.messages.length;
+    }
+
+    return context;
   }
 
   /**
