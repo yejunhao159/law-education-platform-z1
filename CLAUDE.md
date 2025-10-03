@@ -214,25 +214,47 @@ components/
 └── providers/                 # React上下文提供者
 ```
 
-#### 核心服务层 (lib/)
+#### 基础设施层 + 适配器层 (lib/)
+**定位**：纯技术基础设施 + 前端适配器层（反腐败层）
+
 ```
 lib/
-├── ai-legal-agent.ts              # DeepSeek AI法律分析代理
-├── evidence-mapping-service.ts    # 证据映射服务
-├── services/                      # 业务服务层
-│   ├── deepseek-service.ts       # AI服务封装
-│   ├── dialogue/                 # 对话处理服务
-│   ├── websocket/                # WebSocket实时通信
-│   └── session/                  # 会话管理
-├── types/                         # TypeScript类型定义
-│   └── socratic/                 # 苏格拉底对话类型
-├── utils/                         # 工具函数
-├── config/                        # 配置文件
-├── security/                      # 安全相关（输入验证等）
-├── middleware/                    # 中间件（限流等）
-├── monitoring/                    # 监控和日志
-└── cache/                         # 缓存管理
+├── 🔧 纯技术基础设施
+│   ├── storage.ts                 # localStorage优化封装
+│   ├── redis.ts                   # Redis客户端
+│   ├── utils.ts                   # cn工具函数（Tailwind）
+│   ├── logging/                   # 结构化日志系统
+│   ├── monitoring/                # 性能监控和追踪
+│   ├── security/                  # 输入验证、XSS防护
+│   ├── middleware/                # 限流、CORS等中间件
+│   └── config/                    # 环境配置管理
+│
+├── 🔄 前端适配器层（Anti-Corruption Layer）
+│   ├── types/socratic/            # Domain类型的前端简化版
+│   │   └── classroom.ts          # 将DomainClassroomSession适配为UI友好格式
+│   └── evidence-mapping-service.ts # 基础文本匹配工具（非AI业务逻辑）
+│       ├── 关键词匹配（配置数据，非业务规则）
+│       └── 与EvidenceIntelligenceService（AI智能分析）互补
+│
+└── 🛠️ 服务工具层
+    ├── services/
+    │   ├── deepseek-service.ts    # AI服务基础封装
+    │   ├── dialogue/              # 对话数据处理工具
+    │   ├── websocket/             # WebSocket基础设施
+    │   └── session/               # 会话管理工具
+    ├── hooks/                     # React Hooks工具
+    ├── utils/                     # 辅助函数集合
+    └── cache/                     # 缓存策略实现
 ```
+
+**依赖关系**：
+- ✅ **正确**：lib → src/domains（适配器可以依赖领域层）
+- ❌ **禁止**：src/domains → lib（领域层不应依赖适配器）
+
+**设计模式**：
+- **适配器模式**：lib/types/socratic/ 将复杂domain类型转为UI简化版
+- **门面模式**：evidence-mapping-service 提供基础文本处理能力
+- **反腐败层**：保护UI层不直接依赖复杂的domain模型
 
 #### 包管理 (packages/)
 自研工具包（当前版本）：

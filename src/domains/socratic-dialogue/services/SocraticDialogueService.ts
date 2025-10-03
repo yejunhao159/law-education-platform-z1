@@ -11,7 +11,6 @@
  */
 
 import { DeeChatAIClient, createDeeChatConfig } from './DeeChatAIClient';
-import { ContextFormatter } from '@deepracticex/context-manager';
 import { FullPromptBuilder, type FullPromptContext } from './FullPromptBuilder';
 import {
   SocraticRequest,
@@ -59,7 +58,7 @@ export class SocraticDialogueService {
       apiKey: process.env.DEEPSEEK_API_KEY || '',
       model: 'deepseek-chat',
       temperature: 0.7,
-      maxTokens: 1200,
+      maxTokens: 2500,  // 提高输出限制以支持深度教学引导
       enableXMLStructure: true,
       includeDiagnostics: false, // 默认不包含诊断信息（生产环境）
       ...config
@@ -104,27 +103,30 @@ export class SocraticDialogueService {
       // 第1步：构建完整的 System Prompt（包含所有教学知识）
       const systemPrompt = this.buildSystemPrompt(request);
 
-      // 第2步：准备标准化输入数据（完整的System Prompt作为system消息）
-      const standardInput = {
-        systemPrompt,
-        role: 'DeepPractice 苏格拉底教学导师',
-        conversation: this.buildConversationHistory(request.messages || []),
-        current: this.buildCurrentContext(request),
-        context: this.buildStructuredContext(request),
-        metadata: {
-          sessionId: request.sessionId || 'enhanced-session',
-          mode: request.mode || 'exploration',
-          level: request.level || 'intermediate',
-          templateVersion: 'standard:v1'
+      // 第2步：构建对话历史消息
+      const conversationMessages = this.buildConversationMessages(request.messages || []);
+
+      // 第3步：构建当前用户输入
+      const currentContext = this.buildCurrentContext(request);
+
+      // 第4步：手动构建完整的messages数组（绕过ContextFormatter）
+      const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+        // System Message：完整的教学知识
+        {
+          role: 'system',
+          content: systemPrompt
+        },
+        // 对话历史
+        ...conversationMessages,
+        // 当前用户输入
+        {
+          role: 'user',
+          content: currentContext
         }
-      };
+      ];
 
-      // 第3步：使用 ContextFormatter 生成完整的 messages 数组（集成！）
-      const messages = ContextFormatter.fromTemplateAsMessages('standard', standardInput);
-
-      // 调试：查看生成的消息结构
-      console.log('[集成架构] 生成的 messages 数量:', messages.length);
-      console.log('[集成架构] System Prompt 长度:', messages[0]?.content?.length || 0);
+      // 生产环境最小日志：仅记录关键指标
+      console.log(`[Socratic] Messages构建完成 - 总数:${messages.length}, SystemPrompt:${messages[0]?.content?.length || 0}chars, 对话历史:${conversationMessages.length}轮`);
 
       // 第4步：直接使用生成的 messages 调用 AI
       const aiResponse = await this.callAIWithMessages(messages);
@@ -139,10 +141,10 @@ export class SocraticDialogueService {
           timestamp: new Date().toISOString(),
           sessionId: request.sessionId || 'enhanced-session',
           metadata: {
-            tokensUsed: aiResponse.tokensUsed,
-            cost: aiResponse.cost,
-            model: aiResponse.model,
-            processingTime: aiResponse.duration
+            tokensUsed: (aiResponse as any).tokensUsed,
+            cost: (aiResponse as any).cost,
+            model: (aiResponse as any).model || 'deepseek-chat',
+            processingTime: (aiResponse as any).duration
           }
         }
       };
@@ -179,34 +181,29 @@ export class SocraticDialogueService {
       // 第1步：构建完整的 System Prompt（包含所有教学知识）
       const systemPrompt = this.buildSystemPrompt(request);
 
-      // 第2步：准备标准输入数据（role = System Prompt）
-      const standardInput = {
-        systemPrompt,
-        role: 'DeepPractice 苏格拉底教学导师',
-        conversation: this.buildConversationHistory(request.messages || []),
-        current: this.buildCurrentContext(request),
-        context: this.buildStructuredContext(request),
-        metadata: {
-          sessionId: request.sessionId || 'enhanced-session',
-          mode: request.mode || 'exploration',
-          level: request.level || 'intermediate',
-          templateVersion: 'standard:v1'
+      // 第2步：构建对话历史消息
+      const conversationMessages = this.buildConversationMessages(request.messages || []);
+
+      // 第3步：构建当前用户输入
+      const currentContext = this.buildCurrentContext(request);
+
+      // 第4步：手动构建完整的messages数组（与非流式版本一致）
+      const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+        {
+          role: 'system',
+          content: systemPrompt
+        },
+        ...conversationMessages,
+        {
+          role: 'user',
+          content: currentContext
         }
-      };
+      ];
 
-      // 第3步：使用 ContextFormatter 生成完整的 messages 数组（集成！）
-      const messages = ContextFormatter.fromTemplateAsMessages('standard', standardInput);
-
-      // 第4步：过滤并调用流式 API
-      const filteredMessages = messages
-        .filter(msg => ['system', 'user', 'assistant'].includes(msg.role))
-        .map(msg => ({
-          role: msg.role as 'system' | 'user' | 'assistant',
-          content: msg.content
-        }));
+      console.log(`[Socratic Stream] Messages数:${messages.length}, SystemPrompt:${systemPrompt.length}chars`);
 
       // 直接使用ai-chat的流式迭代器，提取文本内容
-      for await (const chunk of this.aiClient.sendCustomMessageStream(filteredMessages, {
+      for await (const chunk of this.aiClient.sendCustomMessageStream(messages, {
         temperature: this.config.temperature,
         maxTokens: this.config.maxTokens,
         enableCostOptimization: true
@@ -301,16 +298,32 @@ export class SocraticDialogueService {
   }
 
   /**
-   * 构建对话历史上下文
+   * 构建对话历史消息数组（修复Bug2和Bug3）
+   * @returns 标准的messages数组格式
+   */
+  private buildConversationMessages(messages: Message[]): Array<{ role: 'user' | 'assistant'; content: string }> {
+    // ✅ Bug2修复：空历史返回空数组，不返回占位文本
+    if (messages.length === 0) {
+      return [];
+    }
+
+    // ✅ Bug3修复：正确映射角色
+    return messages.map(msg => ({
+      role: msg.role === 'user' || msg.role === 'student' ? 'user' as const : 'assistant' as const,
+      content: msg.content
+    }));
+  }
+
+  /**
+   * @deprecated 已废弃，使用 buildConversationMessages 代替
    */
   private buildConversationHistory(messages: Message[]): string[] {
     if (messages.length === 0) {
-      return ['这是对话的开始，还没有历史消息。'];
+      return [];
     }
 
-    // 保留完整对话历史，让AI能记住所有讨论内容
     return messages.map(msg => {
-      const role = msg.role === 'student' ? '学生' : '导师';
+      const role = msg.role === 'student' || msg.role === 'user' ? '学生' : '导师';
       return `${role}: ${msg.content}`;
     });
   }
