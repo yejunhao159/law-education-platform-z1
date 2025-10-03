@@ -60,7 +60,7 @@ export class SocraticDialogueService {
       temperature: 0.7,
       maxTokens: 2500,  // 提高输出限制以支持深度教学引导
       enableXMLStructure: true,
-      includeDiagnostics: false, // 默认不包含诊断信息（生产环境）
+      includeDiagnostics: process.env.NODE_ENV === 'development', // 开发环境默认开启诊断
       ...config
     };
 
@@ -131,22 +131,35 @@ export class SocraticDialogueService {
       // 第4步：直接使用生成的 messages 调用 AI
       const aiResponse = await this.callAIWithMessages(messages);
 
+      const responseData: any = {
+        question: aiResponse.content,
+        content: aiResponse.content,
+        level: request.level || 'intermediate' as DialogueLevel,
+        mode: request.mode || 'exploration' as DialogueMode,
+        timestamp: new Date().toISOString(),
+        sessionId: request.sessionId || 'enhanced-session',
+        metadata: {
+          tokensUsed: (aiResponse as any).tokensUsed,
+          cost: (aiResponse as any).cost,
+          model: (aiResponse as any).model || 'deepseek-chat',
+          processingTime: (aiResponse as any).duration
+        }
+      };
+
+      // 🔍 开发环境添加诊断信息
+      if (this.config.includeDiagnostics) {
+        responseData.diagnostics = {
+          systemPrompt: systemPrompt,
+          systemPromptLength: systemPrompt.length,
+          systemPromptTokens: Math.floor(systemPrompt.length / 2),
+          messagesCount: messages.length,
+          conversationHistoryLength: conversationMessages.length
+        };
+      }
+
       return {
         success: true,
-        data: {
-          question: aiResponse.content,
-          content: aiResponse.content,
-          level: request.level || 'intermediate' as DialogueLevel,
-          mode: request.mode || 'exploration' as DialogueMode,
-          timestamp: new Date().toISOString(),
-          sessionId: request.sessionId || 'enhanced-session',
-          metadata: {
-            tokensUsed: (aiResponse as any).tokensUsed,
-            cost: (aiResponse as any).cost,
-            model: (aiResponse as any).model || 'deepseek-chat',
-            processingTime: (aiResponse as any).duration
-          }
-        }
+        data: responseData
       };
 
     } catch (error) {
@@ -221,6 +234,91 @@ export class SocraticDialogueService {
   }
 
   /**
+   * 生成初始问题 - 对话启动时使用
+   * AI会先内部分析案件（事实、法律关系、争议焦点），然后生成第一个启发式问题
+   *
+   * @param request - 初始化请求，必须包含 caseContext
+   * @returns 苏格拉底响应，包含生成的初始问题
+   *
+   * @example
+   * ```typescript
+   * const response = await service.generateInitialQuestion({
+   *   caseContext: "甲方支付50万元，但只得到价值5万元的货物...",
+   *   currentTopic: "合同效力分析",
+   *   level: "intermediate"
+   * });
+   * ```
+   */
+  async generateInitialQuestion(request: SocraticRequest): Promise<SocraticResponse> {
+    try {
+      // 验证必须有案例上下文
+      if (!request.caseContext) {
+        return {
+          success: false,
+          error: {
+            code: SocraticErrorCode.INVALID_INPUT,
+            message: '初始问题生成需要提供案例上下文（caseContext）',
+            timestamp: new Date().toISOString()
+          }
+        };
+      }
+
+      // 第1步：构建特殊的 System Prompt（包含初始问题生成指令）
+      const systemPrompt = this.buildInitialQuestionSystemPrompt(request);
+
+      // 第2步：构建案例上下文（作为用户输入）
+      const caseContextMessage = this.buildInitialCaseContext(request);
+
+      // 第3步：构建 messages 数组（无对话历史，因为是第一个问题）
+      const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+        {
+          role: 'system',
+          content: systemPrompt
+        },
+        {
+          role: 'user',
+          content: caseContextMessage
+        }
+      ];
+
+      console.log(`[Socratic Initial] 生成初始问题 - 案例长度:${request.caseContext.length}chars, Topic:${request.currentTopic || '未指定'}`);
+
+      // 第4步：调用 AI 生成初始问题
+      const aiResponse = await this.callAIWithMessages(messages);
+
+      return {
+        success: true,
+        data: {
+          question: aiResponse.content,
+          content: aiResponse.content,
+          level: request.level || 'intermediate' as DialogueLevel,
+          mode: request.mode || 'exploration' as DialogueMode,
+          timestamp: new Date().toISOString(),
+          sessionId: request.sessionId || `initial-session-${Date.now()}`,
+          metadata: {
+            tokensUsed: (aiResponse as any).tokensUsed,
+            cost: (aiResponse as any).cost,
+            model: (aiResponse as any).model || 'deepseek-chat',
+            processingTime: (aiResponse as any).duration,
+            isInitialQuestion: true  // 标记为初始问题
+          }
+        }
+      };
+
+    } catch (error) {
+      console.error('SocraticDialogueService Initial Question Error:', error);
+      return {
+        success: false,
+        error: {
+          code: SocraticErrorCode.AI_SERVICE_ERROR,
+          message: '初始问题生成失败: ' + (error instanceof Error ? error.message : '未知错误'),
+          timestamp: new Date().toISOString()
+        }
+      };
+    }
+  }
+
+  /**
    * 向后兼容方法：generateSocraticQuestion
    * @deprecated 请使用 generateQuestion 代替
    */
@@ -234,6 +332,50 @@ export class SocraticDialogueService {
   private buildSystemPrompt(request: SocraticRequest): string {
     // 🔥 直接使用全量注入，不再保留简化版本
     return this.buildFullSystemPrompt(request);
+  }
+
+  /**
+   * 构建初始问题生成的 System Prompt
+   * 与普通 System Prompt 的区别：设置 isInitialQuestion: true
+   */
+  private buildInitialQuestionSystemPrompt(request: SocraticRequest): string {
+    const context: FullPromptContext = {
+      mode: this.mapToTeachingMode(request.mode || 'exploration'),
+      difficulty: this.mapToModernDifficultyLevel(request.level || 'intermediate'),
+      topic: request.currentTopic,
+      issuePhase: undefined,
+      isInitialQuestion: true,  // 🔥 标记为初始问题生成
+      includeDiagnostics: this.config.includeDiagnostics || false
+    };
+
+    return FullPromptBuilder.buildFullSystemPrompt(context);
+  }
+
+  /**
+   * 构建初始案例上下文（用于初始问题生成）
+   */
+  private buildInitialCaseContext(request: SocraticRequest): string {
+    const parts = [];
+
+    // 案例上下文（必需）
+    const caseContextText = typeof request.caseContext === 'string'
+      ? request.caseContext
+      : JSON.stringify(request.caseContext, null, 2);
+    parts.push(`## 案例信息\n\n${caseContextText}`);
+
+    // 讨论主题（可选）
+    if (request.currentTopic) {
+      parts.push(`\n## 讨论主题\n\n${request.currentTopic}`);
+    }
+
+    // 案例要点（可选）
+    if (request.caseInfo) {
+      parts.push(`\n## 案例要点\n\n${JSON.stringify(request.caseInfo, null, 2)}`);
+    }
+
+    parts.push(`\n---\n\n**请基于以上案例信息，生成你的第一个苏格拉底式问题。**`);
+
+    return parts.join('\n');
   }
 
   /**

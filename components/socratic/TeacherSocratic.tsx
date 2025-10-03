@@ -66,14 +66,8 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
   const [showQRCode, setShowQRCode] = useState(false);
   const [classroomSession, setClassroomSession] = useState<ClassroomSession | null>(null);
   
-  // AI建议的问题
-  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([
-    "本案的核心争议点是什么？",
-    "原告的请求权基础是什么？",
-    "被告可能提出哪些抗辩？",
-    "关键证据的证明力如何？",
-    "如果改变某个事实，结论会改变吗？"
-  ]);
+  // AI建议的问题（默认为空，只有AI响应后才显示）
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
 
   // AI生成的当前问题（用于推送到实时课堂）
   const [currentAIQuestion, setCurrentAIQuestion] = useState<string>('');
@@ -738,7 +732,7 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
           {classroomSession ? (
             <RealtimeClassroomPanel
               classroomCode={classroomSession.code}
-              suggestedQuestion={currentAIQuestion || suggestedQuestions[0]}
+              suggestedQuestion={currentAIQuestion || ''}
               onQuestionPublished={handleQuestionPublished}
               onAnswersReceived={handleAnswersReceived}
             />

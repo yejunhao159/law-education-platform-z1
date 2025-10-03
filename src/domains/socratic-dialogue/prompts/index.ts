@@ -68,14 +68,12 @@ export {
   type TeachingMode
 } from './strategies/ModeStrategies';
 
-// 构建器模块导出
-export {
-  UnifiedPromptBuilder,
-  buildUnifiedSocraticPrompt,
-  buildAPICompatiblePrompt,
-  buildSocraticRolePrompt, // 兼容性导出
-  type PromptBuildConfiguration
-} from './builders';
+// 构建器模块已废弃（使用 FullPromptBuilder 代替）
+// 保留兼容性接口避免破坏现有代码
+export function buildSocraticRolePrompt(mode: string, difficulty: string, maxLength: number): string {
+  // 简化版兼容实现，实际使用 FullPromptBuilder
+  return `[已废弃] 请使用 FullPromptBuilder.buildFullSystemPrompt() 代替`;
+}
 
 // 兼容性导出：保留原有接口
 export {
@@ -113,17 +111,15 @@ export interface DialogueContext {
 
 /**
  * 快速创建标准苏格拉底提示词的工具函数
+ * @deprecated 请使用 FullPromptBuilder.buildFullSystemPrompt() 代替
  */
 export function createStandardSocraticPrompt(options?: {
   mode?: TeachingMode;
   difficulty?: DifficultyLevel;
   maxLength?: number;
 }): string {
-  return buildSocraticRolePrompt(
-    options?.mode || 'EXPLORATION',
-    options?.difficulty || 'MEDIUM',
-    options?.maxLength || PROMPT_CONSTANTS.DEFAULT_MAX_QUESTION_LENGTH
-  );
+  console.warn('[已废弃] createStandardSocraticPrompt 已废弃，请使用 FullPromptBuilder.buildFullSystemPrompt()');
+  return `[已废弃] 请使用 FullPromptBuilder.buildFullSystemPrompt() 代替`;
 }
 
 /**
