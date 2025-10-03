@@ -38,9 +38,17 @@ export interface Message {
 export declare class ContextFormatter {
     private static readonly DEFAULT_OPTIONS;
     /**
+     * Build chat completion messages from a named template
+     */
+    static fromTemplateAsMessages(templateName: string, data: ContextData, options?: FormatterOptions): Message[];
+    /**
      * Format context data based on specified options
      */
     static format(data: ContextData, options?: FormatterOptions): string;
+    /**
+     * Build the default DeepPractice chat message structure
+     */
+    private static buildStandardTemplateMessages;
     /**
      * Format context as XML
      */
@@ -73,6 +81,18 @@ export declare class ContextFormatter {
      * Create message array for chat APIs
      */
     static createMessages(data: ContextData, options?: FormatterOptions): Message[];
+    /**
+     * Resolve the system prompt for template driven messages
+     */
+    private static resolveSystemPrompt;
+    /**
+     * Normalise conversation history into chat messages
+     */
+    private static normalizeConversationMessages;
+    /**
+     * Build user message content for the standard template
+     */
+    private static buildStandardUserContent;
     /**
      * Parse formatted context back to data object
      */
