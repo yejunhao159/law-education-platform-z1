@@ -161,8 +161,8 @@ export const EvidenceItemSchema = z.object({
   ]),
   submittedBy: z.enum(['原告', '被告', '第三人', '法院调取']),
   description: z.string().optional(),
-  credibilityScore: z.number().min(0).max(100),
-  relevanceScore: z.number().min(0).max(100),
+  credibilityScore: z.number().min(0).max(100).optional(), // 可选，新版本不再使用
+  relevanceScore: z.number().min(0).max(100).optional(), // 可选，新版本不再使用
   accepted: z.boolean(),
   courtOpinion: z.string().optional(),
   relatedFacts: z.array(z.string()).optional(),
@@ -189,6 +189,8 @@ export const LegalBasisSchema = z.object({
   law: z.string(),
   article: z.string(),
   clause: z.string().optional(),
+  content: z.string().optional(), // 法条完整内容
+  source: z.enum(['判决书原文', 'AI补充', '待核实']).optional(), // 法条来源
   application: z.string(),
   interpretation: z.string().optional(),
 })
@@ -298,7 +300,7 @@ export function createDefaultCase(): Partial<LegalCase> {
     basicInfo: {
       caseNumber: '',
       court: '',
-      judgeDate: new Date().toISOString().split('T')[0],
+      judgeDate: new Date().toISOString().split('T')[0] || '',
       parties: {
         plaintiff: [],
         defendant: [],

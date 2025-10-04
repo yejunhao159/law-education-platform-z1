@@ -357,23 +357,58 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
           })
         }).then(res => res.ok ? res.json() : Promise.reject(new Error(`Timeline analysis failed: ${res.status}`))),
 
-        // 2. 争议点识别（教学重点）
-        fetch('/api/dispute-analysis', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            documentText,
-            caseType: 'civil',
-            options: {
-              extractClaimBasis: true,
-              analyzeDifficulty: true,
-              generateTeachingNotes: false,
-              maxDisputes: 10,
-              minConfidence: 0.7,
-              language: 'zh-CN'
+        // 2. 争议点识别（教学重点）- 添加重试机制
+        (async () => {
+          const maxRetries = 2;
+          let lastError: Error | null = null;
+
+          for (let i = 0; i <= maxRetries; i++) {
+            try {
+              const res = await fetch('/api/dispute-analysis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  documentText,
+                  caseType: 'civil',
+                  options: {
+                    extractClaimBasis: true,
+                    analyzeDifficulty: true,
+                    generateTeachingNotes: false,
+                    maxDisputes: 10,
+                    minConfidence: 0.7,
+                    language: 'zh-CN'
+                  }
+                })
+              });
+
+              if (res.ok) {
+                return await res.json();
+              }
+
+              // 503/502错误可以重试，其他错误直接失败
+              if (res.status === 503 || res.status === 502) {
+                lastError = new Error(`Dispute analysis failed: ${res.status}`);
+                if (i < maxRetries) {
+                  console.log(`争议焦点分析失败，重试 ${i + 1}/${maxRetries}...`);
+                  await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // 递增延迟
+                  continue;
+                }
+              }
+
+              throw new Error(`Dispute analysis failed: ${res.status}`);
+            } catch (error) {
+              lastError = error instanceof Error ? error : new Error('Unknown error');
+              if (i < maxRetries && (lastError.message.includes('503') || lastError.message.includes('fetch'))) {
+                console.log(`网络错误，重试 ${i + 1}/${maxRetries}...`);
+                await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+                continue;
+              }
+              throw lastError;
             }
-          })
-        }).then(res => res.ok ? res.json() : Promise.reject(new Error(`Dispute analysis failed: ${res.status}`)))
+          }
+
+          throw lastError || new Error('Dispute analysis failed after retries');
+        })()
       ])
 
       // 证据质量评估改为按需加载（当用户需要时才触发）

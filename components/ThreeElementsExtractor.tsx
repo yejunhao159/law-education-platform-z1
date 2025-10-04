@@ -39,9 +39,12 @@ interface ExtractedElements {
         name: string
         type: string
         submittedBy: string
-        credibilityScore: number
+        description?: string
+        credibilityScore?: number
         relevanceScore?: number
         accepted: boolean
+        courtOpinion?: string
+        relatedFacts?: string[]
       }>
     }
     reasoning: {
@@ -239,7 +242,9 @@ export function ThreeElementsExtractor() {
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<'preview' | 'edit'>('preview')
   const [parseProgress, setParseProgress] = useState<ParseProgress | null>(null)
-  
+  const [isTimelineExpanded, setIsTimelineExpanded] = useState(false)
+  const [isEvidenceExpanded, setIsEvidenceExpanded] = useState(false)
+
   // Zustand store hooks - 直接使用原始store避免兼容性问题
   const setCaseData = useCaseManagementStore((state) => state.setCurrentCase)
   const setCurrentAct = useTeachingStore((state) => state.setCurrentAct)
@@ -595,7 +600,7 @@ export function ThreeElementsExtractor() {
                   placeholder="请输入事实摘要..."
                   multiline={true}
                 />
-                
+
                 {extractedData.threeElements?.facts?.keyFacts && extractedData.threeElements.facts.keyFacts.length > 0 && (
                   <div>
                     <h4 className="font-medium mb-1">关键事实</h4>
@@ -607,20 +612,6 @@ export function ThreeElementsExtractor() {
                         </li>
                       ))}
                     </ul>
-                  </div>
-                )}
-
-                {extractedData.threeElements?.facts?.timeline && extractedData.threeElements.facts.timeline.length > 0 && (
-                  <div>
-                    <h4 className="font-medium mb-1">时间线</h4>
-                    <div className="space-y-2">
-                      {extractedData.threeElements.facts.timeline.slice(0, 3).map((item, index) => (
-                        <div key={index} className="text-sm">
-                          <div className="font-medium">{typeof item.date === 'string' ? item.date : JSON.stringify(item.date)}</div>
-                          <div className="text-muted-foreground">{typeof item.event === 'string' ? item.event : (typeof item === 'object' && 'description' in item ? String((item as any).description) : JSON.stringify(item))}</div>
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 )}
               </CardContent>
@@ -645,27 +636,50 @@ export function ThreeElementsExtractor() {
 
                 {extractedData.threeElements?.evidence?.items && extractedData.threeElements.evidence.items.length > 0 && (
                   <div>
-                    <h4 className="font-medium mb-1">主要证据</h4>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-medium">证据列表 ({extractedData.threeElements.evidence.items.length}项)</h4>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsEvidenceExpanded(!isEvidenceExpanded)}
+                        className="text-xs"
+                      >
+                        {isEvidenceExpanded ? '收起 ▲' : '展开 ▼'}
+                      </Button>
+                    </div>
+                    {isEvidenceExpanded && (
                     <div className="space-y-2">
-                      {extractedData.threeElements.evidence.items.slice(0, 3).map((item, index) => (
-                        <div key={index} className="text-sm p-2 bg-muted rounded">
-                          <div className="flex justify-between">
-                            <span className="font-medium">{item.name}</span>
-                            <span className={`text-xs px-2 py-0.5 rounded ${
+                      {extractedData.threeElements.evidence.items.map((item, index) => (
+                        <div key={index} className="text-sm p-3 bg-muted rounded border border-gray-200">
+                          <div className="flex justify-between items-start mb-2">
+                            <span className="font-medium text-base">{item.name}</span>
+                            <span className={`text-xs px-2 py-1 rounded ${
                               item.accepted ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                             }`}>
-                              {item.accepted ? '采纳' : '不采纳'}
+                              {item.accepted ? '✓ 采纳' : '✗ 不采纳'}
                             </span>
                           </div>
-                          <div className="text-muted-foreground mt-1">
-                            {item.type} - 提交方：{item.submittedBy}
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            可信度：{item.credibilityScore}%
+                          <div className="space-y-1">
+                            <div className="text-muted-foreground">
+                              <span className="font-medium">类型：</span>{item.type}
+                              <span className="mx-2">|</span>
+                              <span className="font-medium">提交方：</span>{item.submittedBy}
+                            </div>
+                            {item.description && (
+                              <div className="text-muted-foreground bg-white p-2 rounded text-xs">
+                                <span className="font-medium">内容：</span>{item.description}
+                              </div>
+                            )}
+                            {item.courtOpinion && item.courtOpinion !== '未明确说明' && (
+                              <div className="text-muted-foreground bg-amber-50 p-2 rounded text-xs">
+                                <span className="font-medium">法院意见：</span>{item.courtOpinion}
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
                     </div>
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -713,6 +727,88 @@ export function ThreeElementsExtractor() {
               </CardContent>
             </Card>
           </div>
+          )}
+
+          {/* 独立时间轴卡片 */}
+          {extractedData.threeElements?.facts?.timeline && extractedData.threeElements.facts.timeline.length > 0 && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <CardTitle className="text-lg">
+                      案件时间轴 ({extractedData.threeElements.facts.timeline.length}个事件)
+                    </CardTitle>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsTimelineExpanded(!isTimelineExpanded)}
+                    className="text-xs"
+                  >
+                    {isTimelineExpanded ? '收起 ▲' : '展开 ▼'}
+                  </Button>
+                </div>
+                <CardDescription>
+                  按时间顺序展示案件关键事件和发展过程
+                </CardDescription>
+              </CardHeader>
+              {isTimelineExpanded && (
+              <CardContent>
+                <div className="relative">
+                  {/* 时间线主线 */}
+                  <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-blue-200"></div>
+
+                  {/* 时间事件列表 */}
+                  <div className="space-y-4">
+                    {extractedData.threeElements.facts.timeline.map((item, index) => (
+                      <div key={index} className="relative pl-12">
+                        {/* 时间节点圆点 */}
+                        <div className={`absolute left-2 w-5 h-5 rounded-full border-2 ${
+                          item.importance === 'critical' ? 'bg-red-500 border-red-600' :
+                          item.importance === 'important' ? 'bg-orange-400 border-orange-500' :
+                          'bg-blue-400 border-blue-500'
+                        }`}></div>
+
+                        {/* 时间事件内容 */}
+                        <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-blue-700 text-sm">
+                                {typeof item.date === 'string' ? item.date : JSON.stringify(item.date)}
+                              </span>
+                              {item.importance && (
+                                <span className={`text-xs px-2 py-1 rounded font-medium ${
+                                  item.importance === 'critical' ? 'bg-red-100 text-red-700' :
+                                  item.importance === 'important' ? 'bg-orange-100 text-orange-700' :
+                                  'bg-gray-100 text-gray-600'
+                                }`}>
+                                  {item.importance === 'critical' ? '⚡ 关键' :
+                                   item.importance === 'important' ? '⭐ 重要' : '📌 一般'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-gray-700 text-sm leading-relaxed">
+                            {typeof item.event === 'string' ? item.event :
+                             (typeof item === 'object' && 'description' in item ? String((item as any).description) : JSON.stringify(item))}
+                          </p>
+                          {(item as any).actors && (item as any).actors.length > 0 && (
+                            <div className="mt-2 text-xs text-gray-500">
+                              <span className="font-medium">相关方：</span>
+                              {(item as any).actors.join(', ')}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+              )}
+            </Card>
           )}
 
           {/* 元数据和操作按钮 */}

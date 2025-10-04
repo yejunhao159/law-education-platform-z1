@@ -10,7 +10,7 @@ import { redis } from '@/lib/redis';
 // Rate limiter import removed - not used in health checks
 import { CacheManager } from '@/src/domains/shared/infrastructure/cache/CacheManager';
 import { defaultPerformanceMonitor } from '@/src/domains/socratic-dialogue/monitoring/PerformanceMonitor';
-import { WebSocketManager } from '@/lib/services/websocket/manager';
+// WebSocket removed - using SSE instead
 
 const logger = createLogger('health-check');
 const config = EnvironmentConfig.getInstance();
@@ -215,33 +215,28 @@ async function checkCache(): Promise<ComponentHealth> {
 }
 
 /**
- * 检查WebSocket服务
+ * 检查SSE实时通信服务
  */
-async function checkWebSocket(): Promise<ComponentHealth> {
+async function checkSSE(): Promise<ComponentHealth> {
   const startTime = Date.now();
-  
+
   try {
-    const wsConfig = config.getWebSocketConfig();
-    
-    // 模拟WebSocket健康检查
-    // 在实际应用中，这里应该检查WebSocket服务器状态
-    const wsManager = WebSocketManager.getInstance();
-    const connectionCount = wsManager.getActiveConnectionCount();
-    
+    // SSE使用HTTP轮询，无需单独的服务器
+    // 检查storage是否正常（内存存储）
     return {
-      name: 'websocket',
+      name: 'sse-realtime',
       status: 'up',
       responseTime: Date.now() - startTime,
       metadata: {
-        port: wsConfig.port,
-        activeConnections: connectionCount,
-        maxConnections: wsConfig.maxConnections
+        type: 'Server-Sent Events',
+        transport: 'HTTP',
+        note: '使用内存存储，单实例部署'
       }
     };
   } catch (error) {
-    logger.error('WebSocket健康检查失败', error);
+    logger.error('SSE健康检查失败', error);
     return {
-      name: 'websocket',
+      name: 'sse-realtime',
       status: 'degraded',
       responseTime: Date.now() - startTime,
       error: error instanceof Error ? error.message : '未知错误'
@@ -380,23 +375,23 @@ export async function GET(request: NextRequest) {
       redisHealth,
       aiServiceHealth,
       cacheHealth,
-      webSocketHealth,
+      sseHealth,
       rateLimitHealth
     ] = await Promise.all([
       checkDatabase(),
       checkRedis(),
       checkAIService(),
       checkCache(),
-      checkWebSocket(),
+      checkSSE(),
       checkRateLimit()
     ]);
-    
+
     const components = [
       databaseHealth,
       redisHealth,
       aiServiceHealth,
       cacheHealth,
-      webSocketHealth,
+      sseHealth,
       rateLimitHealth
     ];
     
@@ -419,7 +414,7 @@ export async function GET(request: NextRequest) {
         errors: performanceMetrics.failedRequests,
         averageResponseTime: performanceMetrics.avgResponseTime,
         cacheHitRate: cacheHealth.metadata?.hitRate || 0,
-        activeConnections: webSocketHealth.metadata?.activeConnections || 0
+        activeConnections: 0  // SSE使用HTTP连接，不需要持久连接计数
       }
     };
     

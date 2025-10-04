@@ -240,7 +240,6 @@ lib/
     ├── services/
     │   ├── deepseek-service.ts    # AI服务基础封装
     │   ├── dialogue/              # 对话数据处理工具
-    │   ├── websocket/             # WebSocket基础设施
     │   └── session/               # 会话管理工具
     ├── hooks/                     # React Hooks工具
     ├── utils/                     # 辅助函数集合
@@ -727,6 +726,9 @@ console.log(response.diagnostics);
 - ❌ `/api/classroom/[id]/sse` - 旧的SSE实现
 - ❌ `/api/classroom/[id]/vote` - 旧的投票接口
 - ❌ `/api/classroom/route` - 旧的课堂接口
+
+### 已废弃的基础设施
+- ❌ `lib/services/websocket/` - WebSocket服务器实现（已用SSE替代，Vercel不支持WebSocket长连接）
 
 **迁移指南**：
 - 使用 `/api/classroom/[code]/` 新架构（基于邀请码）

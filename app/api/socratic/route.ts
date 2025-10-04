@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { socraticService } from '../../../src/domains/socratic-dialogue/services';
 import { SocraticErrorCode } from '../../../src/domains/socratic-dialogue/types';
-import { markdownToPlainText } from '../../../src/domains/socratic-dialogue/services/DeeChatAIClient';
+import { cleanMarkdown } from '../../../src/domains/socratic-dialogue/services/DeeChatAIClient';
 
 /**
  * POST /api/socratic - 苏格拉底对话生成
@@ -22,7 +22,8 @@ export async function POST(req: NextRequest) {
       currentTopic: requestData.currentTopic,
       caseContext: requestData.caseContext ? 'present' : 'absent',
       messagesCount: requestData.messages?.length || 0,
-      streaming: requestData.streaming || false
+      streaming: requestData.streaming || false,
+      generateInitial: requestData.generateInitial || false  // 🆕 初始问题生成标记
     });
 
     // 流式输出模式
@@ -30,15 +31,44 @@ export async function POST(req: NextRequest) {
       return handleStreamingRequest(requestData);
     }
 
+    // 🆕 初始问题生成模式（对话启动时）
+    if (requestData.generateInitial) {
+      console.log('🆕 生成初始问题...');
+      const result = await socraticService.generateInitialQuestion(requestData);
+
+      // Markdown清洗（保留结构，去除冗余）
+      if (result.success && 'data' in result && result.data?.content) {
+        result.data.content = cleanMarkdown(result.data.content);
+      }
+      if (result.success && 'data' in result && result.data?.question) {
+        result.data.question = cleanMarkdown(result.data.question);
+      }
+
+      console.log('✅ 初始问题生成响应:', {
+        success: result.success,
+        hasData: result.success && 'data' in result ? !!result.data : false
+      });
+
+      return NextResponse.json(result, {
+        status: getStatusCode(result),
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type'
+        }
+      });
+    }
+
     // 非流式模式（原有逻辑）
     const result = await socraticService.generateQuestion(requestData);
 
-    // Phase B: 转换Markdown为纯文本
+    // Markdown清洗（保留结构，去除冗余）
     if (result.success && 'data' in result && result.data?.content) {
-      result.data.content = markdownToPlainText(result.data.content);
+      result.data.content = cleanMarkdown(result.data.content);
     }
     if (result.success && 'data' in result && result.data?.question) {
-      result.data.question = markdownToPlainText(result.data.question);
+      result.data.question = cleanMarkdown(result.data.question);
     }
 
     console.log('✅ 苏格拉底对话响应:', {
@@ -204,6 +234,7 @@ async function parseRequest(req: NextRequest): Promise<any> {
       sessionId: body.sessionId || `session-${Date.now()}`,
       difficulty: body.difficulty,
       streaming: body.streaming || false,
+      generateInitial: body.generateInitial || false,  // 🆕 初始问题生成标记
       caseContext: body.caseContext || body.context,
       currentTopic: body.currentTopic || body.topic,
       // 兼容老的API格式
@@ -215,6 +246,7 @@ async function parseRequest(req: NextRequest): Promise<any> {
       hasMessages: Array.isArray(requestData.messages) && requestData.messages.length > 0,
       hasCaseContext: !!requestData.caseContext,
       hasCurrentTopic: !!requestData.currentTopic,
+      generateInitial: requestData.generateInitial,  // 🆕 日志
       sessionId: requestData.sessionId
     });
 

@@ -329,8 +329,41 @@ export function createDeeChatConfig(overrides: Partial<DeeChatConfig> = {}): Dee
 }
 
 /**
- * Markdown转纯文本 - 清洗输出格式
+ * 清洗Markdown输出 - 保留结构，去除冗余
+ * 与 markdownToPlainText 不同，此函数保留Markdown格式，只去除冗余符号
+ */
+export function cleanMarkdown(markdown: string): string {
+  let text = markdown;
+
+  // 1. 清理冗余的标题标记（如 #### 标题 #### 这种前后都有的）
+  text = text.replace(/^(#{1,6})\s+(.+?)\s+\1\s*$/gm, '$1 $2');
+
+  // 2. 清理冗余的强调标记（如 **文本** ** 多余的星号）
+  text = text.replace(/\*{3,}/g, '**'); // ***以上 -> **以上
+  text = text.replace(/_{3,}/g, '__'); // ___以上 -> __以上
+
+  // 3. 清理冗余的分隔线（保留一条，删除连续的多条）
+  text = text.replace(/(^[\s]*[-*_]{3,}[\s]*$\n?)+/gm, '---\n');
+
+  // 4. 清理多余的空行（3个以上空行压缩为2个）
+  text = text.replace(/\n{4,}/g, '\n\n\n');
+
+  // 5. 保留选项标记的格式统一（A. B. C. -> 统一用 A. 格式）
+  text = text.replace(/^[\s]*([A-E])[、:：]\s*/gm, '$1. ');
+
+  // 6. 清理行尾多余空格
+  text = text.replace(/[ \t]+$/gm, '');
+
+  // 7. 清理首尾空白
+  text = text.trim();
+
+  return text;
+}
+
+/**
+ * Markdown转纯文本 - 清洗输出格式（旧版，完全去除格式）
  * 保留选项标记(A. B. C. D. E.)用于ISSUE方法论
+ * @deprecated 请使用 cleanMarkdown 以保留Markdown结构
  */
 export function markdownToPlainText(markdown: string): string {
   let text = markdown;
