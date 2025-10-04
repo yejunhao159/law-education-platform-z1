@@ -37,7 +37,9 @@ import { SocraticDialogueService } from './SocraticDialogueService';
  * });
  * ```
  */
-export const socraticService = new SocraticDialogueService();
+export const socraticService = new SocraticDialogueService({
+  includeDiagnostics: true // 🔍 强制启用调试模式，查看完整System Prompt
+});
 
 /**
  * 创建新的服务实例（支持自定义配置）

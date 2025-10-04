@@ -74,14 +74,14 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 自动滚动到底部
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  // 自动滚动到底部 - 已禁用，保持用户当前位置
+  // const scrollToBottom = () => {
+  //   messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  // useEffect(() => {
+  //   scrollToBottom();
+  // }, [messages]);
 
   // 发送消息（使用真实API）
   const sendMessage = async (content: string, isAISuggestion: boolean = false) => {
@@ -103,7 +103,7 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
       type: 'question',
       content,
       speaker: 'teacher',
-      parentId: argumentNodes.length > 0 ? argumentNodes[argumentNodes.length - 1].id : undefined
+      parentId: argumentNodes.length > 0 ? argumentNodes[argumentNodes.length - 1]?.id : undefined
     };
     setArgumentNodes(prev => [...prev, newNode]);
 
@@ -255,10 +255,12 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
     const regex = /([A-E])[)）.、:：]\s*([^\n]+)/g;
     let match;
     while ((match = regex.exec(content)) !== null) {
-      choices.push({
-        id: match[1],
-        content: match[2].trim()
-      });
+      if (match[1] && match[2]) {
+        choices.push({
+          id: match[1],
+          content: match[2].trim()
+        });
+      }
     }
 
     // 如果没有找到选项，尝试更宽松的匹配
@@ -267,7 +269,7 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
       const looseRegex = /^([A-E])\s+([^\n]+)/gm;
       while ((match = looseRegex.exec(content)) !== null) {
         // 确保不是普通句子开头（如 A person...）
-        if (match[2] && !match[2].match(/^(person|man|woman|child|student|teacher)/i)) {
+        if (match[1] && match[2] && !match[2].match(/^(person|man|woman|child|student|teacher)/i)) {
           choices.push({
             id: match[1],
             content: match[2].trim()
@@ -394,16 +396,17 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
     setIsActive(!isActive);
     if (!isActive) {
       // 开始会话时添加初始消息
+      const aiMessageId = `msg-${Date.now()}`;
       const welcomeMessage = {
-        id: `msg-${Date.now()}`,
+        id: aiMessageId,
         role: 'ai' as const,
-        content: `开始苏格拉底式教学。案件：${caseData.title}。正在为您生成引导问题...`,
+        content: `正在分析案件"${caseData.title}"...`,
         timestamp: new Date().toLocaleTimeString(),
         suggestions: []
       };
       setMessages([welcomeMessage]);
 
-      // 获取AI建议的初始问题
+      // 获取AI的详细案件分析 + ISSUE选择题（流式输出）
       try {
         const response = await fetch('/api/socratic', {
           method: 'POST',
@@ -411,18 +414,65 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
+            streaming: true, // 启用流式输出
             messages: [{
               role: 'user',
-              content: '请为这个案件生成初始的引导性问题',
+              content: `你现在要开始第一次苏格拉底对话。请记住你的核心身份：精神助产士，而非知识讲解者。
+
+【核心任务】：生成第一个引导性问题，激发学生思考，而非提供答案。
+
+【关键原则】：
+1. 重在发问，轻在解释（70%问题 + 30%简短铺垫）
+2. 问题要锋利，直击案件核心矛盾，暴露学生可能的思维盲点
+3. 不要告诉学生"应该怎么分析"，而是通过问题引导他们自己发现
+4. 禁止抽象讨论，每个问题都必须锚定具体案件事实
+5. 使用纯文本格式（不要用**、#、-等符号）
+
+【输出结构】：
+
+第一部分：案件核心矛盾点（1-2句话铺垫）
+用一两句话指出案件最让人困惑或矛盾的地方，激发好奇心。
+
+第二部分：连环追问（3-5个问题，层层深入）
+每个问题都要：
+- 基于具体案件事实
+- 追问"为什么"而非"是什么"
+- 暴露逻辑矛盾或思维盲点
+- 引导学生自己发现答案
+
+第三部分：ISSUE选择题（可选，如果适合的话）
+如果某个问题适合用选择题形式，提供A-E选项，每个选项都是一种思路，而非简单对错。
+
+【禁止行为】：
+- 禁止法条逐条讲解（这是教科书，不是苏格拉底对话）
+- 禁止给出"标准答案"或"分析框架"
+- 禁止温柔引导（"咱们一起看看"）
+- 禁止多选题式的罗列（"可能是A/B/C"）
+
+【示例风格】（仅供参考格式，不要照搬内容）：
+
+这个案件最有意思的地方在于：甲方支付了50万，但只得到价值5万的货物，合同还是有效的。
+
+你觉得这合理吗？为什么？
+
+如果你说"不合理"，那请问：
+- 不合理的标准是什么？谁来判断"合理"？
+- 如果每个人都能以"我觉得不合理"来撤销合同，会发生什么？
+
+如果你说"合理"，那请问：
+- 50万买5万的东西，这不是明显的显失公平吗？
+- 法律为什么要保护这种"不公平"？
+
+现在，请基于这个案件生成你的第一个问题。`,
               timestamp: new Date().toISOString()
             }],
             caseContext: `案件：${caseData.title}\n争议：${caseData.dispute}\n事实：${caseData.facts.join('；')}\n法条：${caseData.laws.join('；')}`,
-            currentTopic: '初始引导问题生成',
+            currentTopic: '案件深度分析与教学准备',
             level: 'INTERMEDIATE',
             mode: 'EXPLORATION',
             sessionId: `teacher-init-${Date.now()}`,
             // 保持向后兼容的字段
-            question: '请为这个案件生成初始的引导性问题',
+            question: '案件深度分析与教学准备',
             context: {
               caseTitle: caseData.title,
               facts: caseData.facts,
@@ -433,31 +483,71 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
           })
         });
 
-        const result = await response.json();
-        
-        if (result.success && result.data) {
-          // 更新欢迎消息
+        // 流式SSE处理+实时更新
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let fullContent = '';
+
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') continue;
+
+                try {
+                  const parsed = JSON.parse(data);
+                  if (parsed.content) {
+                    fullContent += parsed.content;
+                    // 实时更新消息内容
+                    setMessages([{
+                      id: aiMessageId,
+                      role: 'ai' as const,
+                      content: fullContent,
+                      timestamp: new Date().toLocaleTimeString(),
+                      suggestions: []
+                    }]);
+                  }
+                } catch (e) {
+                  console.warn('解析SSE失败:', data, e);
+                }
+              }
+            }
+          }
+        }
+
+        // 解析AI响应中的ABCDE选项
+        const extractedChoices = extractChoices(fullContent);
+        if (extractedChoices.length > 0) {
+          setCurrentChoices(extractedChoices);
+          // 更新消息，添加choices字段
           setMessages([{
-            ...welcomeMessage,
-            content: `开始苏格拉底式教学。案件：${caseData.title}。请选择一个问题开始引导。`,
-            suggestions: result.data.followUpQuestions || suggestedQuestions
-          }]);
-          setSuggestedQuestions(result.data.followUpQuestions || suggestedQuestions);
-        } else {
-          // 使用默认问题
-          setMessages([{
-            ...welcomeMessage,
-            content: `开始苏格拉底式教学。案件：${caseData.title}。请选择一个问题开始引导。`,
-            suggestions: suggestedQuestions
+            id: aiMessageId,
+            role: 'ai' as const,
+            content: fullContent,
+            timestamp: new Date().toLocaleTimeString(),
+            choices: extractedChoices
           }]);
         }
+
+        // 更新当前AI问题（用于推送到学生端）
+        setCurrentAIQuestion(fullContent);
+
       } catch (error) {
-        console.error('获取初始问题失败:', error);
-        // 使用默认问题
+        console.error('获取初始分析失败:', error);
+        // 使用默认提示
         setMessages([{
-          ...welcomeMessage,
-          content: `开始苏格拉底式教学。案件：${caseData.title}。请选择一个问题开始引导。`,
-          suggestions: suggestedQuestions
+          id: aiMessageId,
+          role: 'ai' as const,
+          content: `案件分析失败，请稍后重试或手动输入问题开始教学。\n\n案件：${caseData.title}\n争议：${caseData.dispute}`,
+          timestamp: new Date().toLocaleTimeString(),
+          suggestions: []
         }]);
       }
     }
@@ -541,12 +631,12 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
 
         {/* Tab 1: AI对话引导 */}
         <TabsContent value="dialogue">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
             {/* 左侧：对话区域 */}
-            <Card className="p-4">
-              <div className="space-y-4">
+            <Card className="p-4 flex flex-col h-[1100px]">
+              <div className="space-y-4 flex-1 flex flex-col overflow-hidden">
                 {/* 消息列表 */}
-                <div className="h-[400px] overflow-y-auto border rounded-lg p-4 space-y-3">
+                <div className="flex-1 overflow-y-auto border rounded-lg p-4 space-y-3">
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
@@ -579,7 +669,7 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
                           <div className="grid grid-cols-1 gap-2">
                             {msg.choices.map((choice) => (
                               <button
-                                key={choice.id}
+                                key={`${msg.id}-${choice.id}`}
                                 onClick={() => handleChoiceClick(choice)}
                                 className="flex items-start text-left text-xs p-2 rounded-lg border border-blue-200 hover:bg-blue-50 hover:border-blue-400 transition-all"
                               >
@@ -665,7 +755,7 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
             </Card>
 
             {/* 右侧：简化教师控制台 */}
-            <Card className="p-4">
+            <Card className="p-4 flex flex-col h-[1100px] overflow-hidden">
               <h3 className="font-semibold mb-4 flex items-center">
                 <MessageSquare className="w-5 h-5 mr-2" />
                 课堂互动控制
@@ -696,19 +786,21 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
 
               {/* 二维码区域 */}
               {classroomSession && (
-                <div className="border-t pt-4">
+                <div className="border-t pt-4 flex-1 flex flex-col">
                   <label className="text-sm font-medium text-gray-700 mb-2 block">
                     课堂二维码：
                   </label>
-                  <ClassroomCode
-                    session={classroomSession}
-                    isTeacher={true}
-                    config={{
-                      showQRCode: true,
-                      allowShare: false,
-                      showStats: false
-                    }}
-                  />
+                  <div className="flex-1 flex items-center justify-center">
+                    <ClassroomCode
+                      session={classroomSession}
+                      isTeacher={true}
+                      config={{
+                        showQRCode: true,
+                        allowShare: false,
+                        showStats: false
+                      }}
+                    />
+                  </div>
                   <p className="text-xs text-gray-500 mt-2 text-center">
                     学生扫码加入课堂
                   </p>
@@ -716,7 +808,7 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
               )}
 
               {!classroomSession && (
-                <div className="border-t pt-4">
+                <div className="border-t pt-4 flex-1 flex items-center justify-center">
                   <p className="text-sm text-gray-500 text-center">
                     点击顶部"课堂二维码"按钮创建课堂
                   </p>

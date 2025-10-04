@@ -10,11 +10,10 @@ import { Card } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Info } from 'lucide-react'
 import TeacherSocratic from '@/components/socratic/TeacherSocratic'
-import { useCurrentCase, useTeachingStore } from '@/src/domains/stores'
+import { useCurrentCase } from '@/src/domains/stores'
 
 export default function Act5TeacherMode() {
   const caseData = useCurrentCase()
-  const { socraticData } = useTeachingStore()
   const [caseInfo, setCaseInfo] = useState<{
     title: string;
     facts: string[];
@@ -28,14 +27,13 @@ export default function Act5TeacherMode() {
       const facts = caseData.timeline?.map(event => event.event).filter(Boolean) ||
                     ['暂无事实数据'];
 
-      const laws = caseData.verdict?.liability?.map(l => l.legalBasis).filter(Boolean) ||
-                   ['民法典相关条款'];
+      const laws = ['民法典相关条款'];
 
-      const dispute = caseData.basicInfo?.caseNature ||
-                      '案件争议焦点';
+      const dispute = caseData.basicInfo?.caseType
+                      ? `${caseData.basicInfo.caseType}案件`
+                      : '案件争议焦点';
 
-      const title = caseData.title ||
-                    caseData.basicInfo?.caseNumber ||
+      const title = caseData.basicInfo?.caseNumber ||
                     '法律案例分析';
 
       setCaseInfo({

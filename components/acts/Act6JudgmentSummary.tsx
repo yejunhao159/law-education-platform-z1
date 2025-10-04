@@ -9,7 +9,7 @@ export default function Act6JudgmentSummary() {
   const caseData = useCurrentCase()
 
   const mockCase = {
-    title: caseData?.title || "张某诉李某房屋买卖合同纠纷案",
+    title: caseData?.basicInfo?.caseNumber || "张某诉李某房屋买卖合同纠纷案",
     caseNumber: caseData?.basicInfo?.caseNumber || "（2023）京0108民初12345号",
     court: caseData?.basicInfo?.court || "北京市海淀区人民法院",
   }

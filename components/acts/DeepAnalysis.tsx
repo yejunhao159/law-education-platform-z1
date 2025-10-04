@@ -858,9 +858,9 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
                         <div className="text-sm text-green-700">
                           <p className="line-clamp-3">{analysisResult.summary}</p>
                         </div>
-                      ) : analysisResult?.turningPoints?.length > 0 ? (
+                      ) : (analysisResult?.turningPoints?.length ?? 0) > 0 ? (
                         <div className="text-sm text-green-700">
-                          <p>建议重点关注{analysisResult.turningPoints.length}个关键转折点，引导学生理解案件发展脉络。</p>
+                          <p>建议重点关注{analysisResult?.turningPoints?.length ?? 0}个关键转折点，引导学生理解案件发展脉络。</p>
                         </div>
                       ) : (
                         <div className="text-sm text-gray-500 italic">分析完成后显示教学建议</div>

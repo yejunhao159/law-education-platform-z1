@@ -214,6 +214,14 @@ export class SocraticDialogueService {
       ];
 
       console.log(`[Socratic Stream] Messages数:${messages.length}, SystemPrompt:${systemPrompt.length}chars`);
+      console.log(`🔍 [DEBUG] includeDiagnostics配置: ${this.config.includeDiagnostics}`);
+
+      // 🔍 强制输出完整的System Prompt（帮助验证提示词注入）
+      console.log('\n========== 📋 完整System Prompt ==========');
+      console.log(systemPrompt);
+      console.log('========== 📋 用户输入 ==========');
+      console.log(currentContext);
+      console.log('========================================\n');
 
       // 直接使用ai-chat的流式迭代器，提取文本内容
       for await (const chunk of this.aiClient.sendCustomMessageStream(messages, {

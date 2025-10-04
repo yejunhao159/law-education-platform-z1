@@ -164,10 +164,12 @@ export function EvidenceQuizSection({
   };
 
   const handleSubmitQuiz = (quizIndex: number) => {
-    if (!session || currentAnswers[quizIndex] === -1) return;
+    if (!session || currentAnswers[quizIndex] === -1 || currentAnswers[quizIndex] === undefined) return;
 
     const quiz = session.quizzes[quizIndex];
-    const selectedAnswer = currentAnswers[quizIndex];
+    if (!quiz) return;
+
+    const selectedAnswer = currentAnswers[quizIndex]!; // 已经检查过不是undefined
     const isCorrect = selectedAnswer === quiz.correctAnswer;
     const timeSpent = Date.now() - startTime;
 
@@ -646,6 +648,8 @@ function generateFallbackQuizzes(evidences: Evidence[], count: number, startInde
     const evidence = evidences[i];
     const template = questionTemplates[i % questionTemplates.length];
 
+    if (!evidence || !template) continue;
+
     const quiz: EvidenceQuiz = {
       id: `fallback_quiz_${startIndex + i}_${evidence.id}`,
       evidenceId: evidence.id,
@@ -656,13 +660,7 @@ function generateFallbackQuizzes(evidences: Evidence[], count: number, startInde
       correctAnswer: template.correctAnswer,
       explanation: `关于证据"${evidence.title}"的专业分析：${getExplanationForType(template.type)}`,
       points: template.difficulty === 'beginner' ? 5 : template.difficulty === 'intermediate' ? 10 : 15,
-      difficulty: template.difficulty,
-      metadata: {
-        evidenceTitle: evidence.title,
-        evidenceType: evidence.type || 'document',
-        timeGenerated: new Date().toISOString(),
-        source: 'fallback-generated'
-      }
+      difficulty: template.difficulty
     };
 
     quizzes.push(quiz);
@@ -702,7 +700,8 @@ function mapAILevelToQuizLevel(level: string): EvidenceQuiz['difficulty'] {
 function getCorrectAnswerIndex(correctAnswer: string | string[], options: string[]): number {
   if (Array.isArray(correctAnswer)) {
     // 多选题处理（暂时返回第一个选项）
-    return options.indexOf(correctAnswer[0]) !== -1 ? options.indexOf(correctAnswer[0]) : 0;
+    const first = correctAnswer[0];
+    return first ? options.indexOf(first) !== -1 ? options.indexOf(first) : 0 : 0;
   }
 
   const index = options.indexOf(correctAnswer);

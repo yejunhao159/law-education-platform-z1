@@ -44,6 +44,15 @@ export function StoryView() {
   }
 
   const chapter = storyChapters[currentChapter]
+
+  if (!chapter) {
+    return (
+      <Card className="p-6">
+        <div className="text-center text-gray-500">章节不存在</div>
+      </Card>
+    )
+  }
+
   const Icon = iconMap[chapter.icon as keyof typeof iconMap] || BookOpen
 
   const handleEdit = () => {
@@ -80,14 +89,14 @@ export function StoryView() {
 
       {/* 当前章节内容 */}
       <Card className="relative overflow-hidden">
-        <div 
-          className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-${chapter.color}-500 to-${chapter.color}-600`}
+        <div
+          className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-${chapter.color || 'blue'}-500 to-${chapter.color || 'blue'}-600`}
         />
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg bg-${chapter.color}-100`}>
-                <Icon className={`w-6 h-6 text-${chapter.color}-600`} />
+              <div className={`p-2 rounded-lg bg-${chapter.color || 'blue'}-100`}>
+                <Icon className={`w-6 h-6 text-${chapter.color || 'blue'}-600`} />
               </div>
               <div>
                 <CardTitle className="text-xl">{chapter.title}</CardTitle>

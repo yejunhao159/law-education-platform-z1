@@ -165,20 +165,26 @@ export function CaseOverview() {
       setAIGenerationError(errorMessage);
 
       // 提供备选方案：基础故事结构
+      const parties = [
+        ...(caseData.basicInfo?.parties?.plaintiff?.map(p => p.name) || []),
+        ...(caseData.basicInfo?.parties?.defendant?.map(p => p.name) || [])
+      ];
       const fallbackChapters = [
         {
           id: 'chapter-fallback-1',
           title: '案件基本情况',
-          content: `${caseData.basicInfo?.caseNumber || '本案'} 涉及 ${caseData.threeElements?.facts?.parties?.join('、') || '相关当事人'} 之间的法律纠纷。`,
+          content: `${caseData.basicInfo?.caseNumber || '本案'} 涉及 ${parties.join('、') || '相关当事人'} 之间的法律纠纷。`,
           icon: '📋',
-          color: 'blue' as const
+          color: 'blue',
+          order: 0
         },
         {
           id: 'chapter-fallback-2',
           title: '争议与分歧',
           content: '双方当事人在事实认定和法律适用方面存在分歧，需要通过法律程序解决。',
           icon: '⚖️',
-          color: 'orange' as const
+          color: 'orange',
+          order: 1
         }
       ];
 
@@ -193,7 +199,7 @@ export function CaseOverview() {
     // 检查是否有真正的AI生成内容（不是fallback）
     return storyChapters.length > 0 &&
            !storyChapters[0]?.id?.includes('fallback') &&
-           storyChapters[0]?.content?.length > 200; // AI内容通常较长
+           (storyChapters[0]?.content?.length ?? 0) > 200; // AI内容通常较长
   }, [storyChapters]);
 
   // 计算是否需要生成故事
@@ -395,9 +401,9 @@ export function CaseOverview() {
                     案件状态
                   </h4>
                   <div className="text-sm text-gray-600 space-y-1">
-                    <p>审级: {caseData.basicInfo.level || '一审'}</p>
-                    <p>案件性质: {caseData.basicInfo.nature || '民事纠纷'}</p>
-                    <p>审理程序: {caseData.basicInfo.procedure || '普通程序'}</p>
+                    <p>案件类型: {caseData.basicInfo.caseType || '民事'}</p>
+                    <p>法院: {caseData.basicInfo.court}</p>
+                    <p>判决日期: {caseData.basicInfo.judgeDate}</p>
                   </div>
                 </div>
 
@@ -408,13 +414,12 @@ export function CaseOverview() {
                     当事人
                   </h4>
                   <div className="text-sm text-gray-600 space-y-1">
-                    {caseData.threeElements?.facts?.parties ? (
-                      caseData.threeElements.facts.parties.slice(0, 3).map((party, index) => (
-                        <p key={index}>{party}</p>
-                      ))
-                    ) : (
-                      <p>暂无当事人信息</p>
-                    )}
+                    {caseData.basicInfo.parties.plaintiff.map((party, index) => (
+                      <p key={`plaintiff-${index}`}>原告: {party.name}</p>
+                    ))}
+                    {caseData.basicInfo.parties.defendant.map((party, index) => (
+                      <p key={`defendant-${index}`}>被告: {party.name}</p>
+                    ))}
                   </div>
                 </div>
               </div>
