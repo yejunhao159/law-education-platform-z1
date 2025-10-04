@@ -701,7 +701,6 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
                     课堂二维码：
                   </label>
                   <ClassroomCode
-                    code={classroomSession.code}
                     session={classroomSession}
                     isTeacher={true}
                     config={{

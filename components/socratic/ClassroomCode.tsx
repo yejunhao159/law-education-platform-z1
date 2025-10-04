@@ -212,8 +212,27 @@ export const ClassroomCode: React.FC<ClassroomCodeProps> = ({
     if (session?.code && codeStatus === 'active') {
       const generateQRCode = async () => {
         try {
-          // 生成包含课堂码和页面URL的二维码
-          const qrContent = `${window.location.origin}${window.location.pathname}?code=${session.code}`
+          // 智能生成二维码URL：优先使用环境变量，其次替换localhost为局域网IP
+          let baseUrl = window.location.origin
+
+          // 如果是localhost，尝试获取真实的访问地址
+          if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {
+            // 优先使用环境变量配置的公网地址
+            const publicUrl = process.env.NEXT_PUBLIC_BASE_URL
+            if (publicUrl) {
+              baseUrl = publicUrl
+            } else {
+              // 如果没有配置，提示用户使用局域网IP访问
+              console.warn('⚠️ 检测到localhost访问，手机扫码可能无法使用')
+              console.warn('💡 请使用局域网IP访问（如 http://192.168.x.x:3000）或配置 NEXT_PUBLIC_BASE_URL 环境变量')
+            }
+          }
+
+          // 教师端生成的二维码应该指向学生加入页面，而不是教师页面
+          const studentPath = `/classroom/${session.code}/join`
+          const qrContent = `${baseUrl}${studentPath}`
+          console.log('📱 二维码URL:', qrContent)
+
           const dataURL = await QRCode.toDataURL(qrContent, {
             width: 200,
             margin: 2,
@@ -338,6 +357,12 @@ export const ClassroomCode: React.FC<ClassroomCodeProps> = ({
                 <p className="text-xs text-muted-foreground text-center">
                   扫描二维码快速加入课堂
                 </p>
+                <Alert className="mt-2">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    💡 <strong>扫码失败？</strong>手机浏览器访问 <span className="font-mono font-semibold">{window.location.host}</span> 并输入课堂码即可
+                  </AlertDescription>
+                </Alert>
               </div>
             </>
           )}
