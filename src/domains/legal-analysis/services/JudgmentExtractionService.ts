@@ -20,6 +20,7 @@ import type {
   Reasoning,
   Metadata,
 } from '@/types/legal-case';
+import { DeeChatAIClient, createDeeChatConfig } from '@/src/domains/socratic-dialogue/services/DeeChatAIClient';
 
 const logger = createLogger('JudgmentExtractionService');
 
@@ -55,6 +56,7 @@ export class JudgmentExtractionService {
   private model: string;
   private temperature: number;
   private maxTokens: number;
+  private aiClient: DeeChatAIClient;  // 🔧 使用已修复的AI客户端
 
   constructor(config?: JudgmentExtractionConfig) {
     this.apiKey = config?.apiKey || process.env.DEEPSEEK_API_KEY || '';
@@ -62,6 +64,19 @@ export class JudgmentExtractionService {
     this.model = config?.model || 'deepseek-chat';
     this.temperature = config?.temperature || 0.3;
     this.maxTokens = config?.maxTokens || 4000; // 增加到4000，支持更详细的输出
+
+    // 初始化AI客户端（使用已修复的DeeChatAIClient）
+    const aiConfig = createDeeChatConfig({
+      provider: 'deepseek',
+      apiKey: this.apiKey,
+      apiUrl: this.apiUrl,
+      model: this.model,
+      temperature: this.temperature,
+      maxContextTokens: this.maxTokens
+    });
+    this.aiClient = new DeeChatAIClient(aiConfig);
+
+    console.log('✅ JudgmentExtractionService初始化完成，使用DeeChatAIClient');
   }
 
   /**
@@ -73,13 +88,12 @@ export class JudgmentExtractionService {
     try {
       logger.info('开始使用AI进行判决书深度分析...');
 
-      // 并行执行四个专门的提取任务
-      const [basicInfo, facts, evidence, reasoning] = await Promise.all([
-        this.extractBasicInfo(documentText),
-        this.extractFacts(documentText),
-        this.extractEvidence(documentText),
-        this.extractReasoning(documentText)
-      ]);
+      // 🔧 WSL2修复：改为顺序执行,避免并发API调用触发undici连接池问题
+      // 之前的Promise.all并行会导致4个fetch同时发起,在WSL2+Node20环境下触发连接超时
+      const basicInfo = await this.extractBasicInfo(documentText);
+      const facts = await this.extractFacts(documentText);
+      const evidence = await this.extractEvidence(documentText);
+      const reasoning = await this.extractReasoning(documentText);
 
       const processingTime = Date.now() - startTime;
 
@@ -600,89 +614,39 @@ ${reasoningSection}`;
    */
   private async callDeepSeekAPI(prompt: string): Promise<any> {
     try {
-      // 检查API Key
-      if (!this.apiKey) {
-        throw new Error('DeepSeek API Key未配置');
+      logger.info('调用DeepSeek API (通过DeeChatAIClient)...');
+
+      // 🔧 使用已修复的DeeChatAIClient（内部使用keepalive: false的HttpClient）
+      const response = await this.aiClient.sendCustomMessage([
+        {
+          role: 'system',
+          content: '你是一位专业的中国法律文书分析专家，精通判决书分析。请始终以JSON格式返回结果。'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ], {
+        temperature: this.temperature,
+        maxTokens: this.maxTokens
+      });
+
+      const content = response.content;
+
+      if (!content) {
+        throw new Error('DeepSeek返回内容为空');
       }
 
-      logger.info('调用DeepSeek API...');
-
-      // 确保API URL正确
-      const apiEndpoint = this.apiUrl.includes('/chat/completions')
-        ? this.apiUrl
-        : `${this.apiUrl}/chat/completions`;
-
-      // 添加超时控制
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
-
-      try {
-        const response = await fetch(apiEndpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.apiKey}`
-          },
-          body: JSON.stringify({
-            model: this.model,
-            messages: [
-              {
-                role: 'system',
-                content: '你是一位专业的中国法律文书分析专家，精通判决书分析。请始终以JSON格式返回结果。'
-              },
-              {
-                role: 'user',
-                content: prompt
-              }
-            ],
-            temperature: this.temperature,
-            max_tokens: this.maxTokens
-          }),
-          signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-          try {
-            const errorData = await response.json();
-            errorMessage = errorData.error?.message || errorData.message || errorMessage;
-          } catch (e) {
-            // 如果无法解析错误响应，使用默认错误消息
-          }
-          throw new Error(`DeepSeek API错误: ${errorMessage}`);
-        }
-
-        const data = await response.json();
-        const content = data.choices[0]?.message?.content;
-
-        if (!content) {
-          throw new Error('DeepSeek返回内容为空');
-        }
-
-        // 处理DeepSeek返回的markdown代码块格式
-        let jsonContent = content;
-        if (content.includes('```json')) {
-          const match = content.match(/```json\n([\s\S]*?)\n```/);
-          if (match && match[1]) {
-            jsonContent = match[1];
-          }
-        }
-
-        return JSON.parse(jsonContent);
-
-      } catch (networkError: any) {
-        clearTimeout(timeoutId);
-
-        if (networkError.name === 'AbortError') {
-          throw new Error('DeepSeek API调用超时，请检查网络连接');
-        } else if (networkError.code === 'ECONNRESET' || networkError.code === 'ENOTFOUND') {
-          throw new Error('DeepSeek API网络连接失败，可能是网络环境限制');
-        } else {
-          throw networkError;
+      // 处理DeepSeek返回的markdown代码块格式
+      let jsonContent = content;
+      if (content.includes('```json')) {
+        const match = content.match(/```json\n([\s\S]*?)\n```/);
+        if (match && match[1]) {
+          jsonContent = match[1];
         }
       }
+
+      return JSON.parse(jsonContent);
 
     } catch (error) {
       logger.error('调用DeepSeek API失败', error);

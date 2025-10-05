@@ -4,6 +4,18 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 
+// CORS 头部配置
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+// 处理 CORS preflight 请求
+export async function OPTIONS() {
+  return new NextResponse(null, { headers: corsHeaders });
+}
+
 // 简单的内存存储（生产环境应使用数据库或Redis）
 const activeClassrooms = new Set<string>();
 
@@ -29,7 +41,7 @@ export async function GET(
         active: true,
         timestamp: new Date().toISOString(),
       },
-    });
+    }, { headers: corsHeaders });
   }
 
   return NextResponse.json(
@@ -37,7 +49,7 @@ export async function GET(
       success: false,
       error: '课堂不存在或已结束',
     },
-    { status: 404 }
+    { status: 404, headers: corsHeaders }
   );
 }
 

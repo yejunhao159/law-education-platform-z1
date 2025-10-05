@@ -1,8 +1,19 @@
 /**
  * SSE流式API - 推送教师问题到学生端
  */
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { storage } from '../storage';
+
+// 处理 CORS preflight 请求
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
+}
 
 export async function GET(
   request: NextRequest,
@@ -56,6 +67,10 @@ export async function GET(
       'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no', // 禁用nginx缓冲
+      // CORS配置 - 允许局域网访问
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
     },
   });
 }

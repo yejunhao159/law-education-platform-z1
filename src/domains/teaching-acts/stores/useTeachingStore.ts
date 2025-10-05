@@ -15,6 +15,7 @@ import type {
   StoryChapter,
   DeepAnalysisResult,
   LearningReport,
+  CaseLearningReport,
 } from '@/src/types';
 
 // ========== 接口定义 ==========
@@ -43,7 +44,8 @@ interface TeachingState {
   };
 
   summaryData: {
-    report: LearningReport | null;
+    report: LearningReport | CaseLearningReport | null;
+    caseLearningReport: CaseLearningReport | null;
     isGenerating: boolean;
   };
 
@@ -93,6 +95,7 @@ interface TeachingActions {
 
   // 第四幕：总结提升
   setLearningReport: (report: LearningReport) => void;
+  setCaseLearningReport: (report: CaseLearningReport) => void;
   setGeneratingReport: (generating: boolean) => void;
 
   // 通用操作
@@ -128,6 +131,7 @@ const initialState: TeachingState = {
 
   summaryData: {
     report: null,
+    caseLearningReport: null,
     isGenerating: false,
   },
 
@@ -316,6 +320,12 @@ export const useTeachingStore = create<TeachingStore>()(
       setLearningReport: (report) =>
         set((state) => {
           state.summaryData.report = report;
+          state.summaryData.isGenerating = false;
+        }),
+        
+      setCaseLearningReport: (report) =>
+        set((state) => {
+          state.summaryData.caseLearningReport = report;
           state.summaryData.isGenerating = false;
         }),
 

@@ -31,8 +31,8 @@ const DeepAnalysis = lazy(() =>
 const Act5TeacherMode = lazy(() =>
   import('@/components/acts/Act5TeacherMode').then(mod => ({ default: mod.default }))
 );
-const Act6JudgmentSummary = lazy(() =>
-  import('@/components/acts/Act6JudgmentSummary').then(mod => ({ default: mod.default }))
+const ActFour = lazy(() =>
+  import('@/components/acts/ActFour').then(mod => ({ default: mod.ActFour }))
 );
 
 // ========== 图标映射 ==========
@@ -158,7 +158,7 @@ export const MainPagePresentation: React.FC<MainPagePresentationProps> = ({
                 );
 
               case 'summary':
-                return <Act6JudgmentSummary />;
+                return <ActFour />;
 
               default:
                 return (

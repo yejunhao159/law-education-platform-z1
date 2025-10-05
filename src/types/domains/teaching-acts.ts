@@ -93,6 +93,36 @@ export const LearningReportSchema = z.object({
   generatedAt: z.string().datetime(),
 });
 
+// ========== 案件学习报告（MVP版） ==========
+export const CaseLearningReportSchema = z.object({
+  caseOverview: z.object({
+    title: z.string(),
+    oneLineSummary: z.string(),
+    keyDispute: z.string(),
+    judgmentResult: z.string(),
+  }),
+  learningPoints: z.object({
+    factualInsights: z.array(z.string()).max(3),
+    legalPrinciples: z.array(z.string()).max(3),
+    evidenceHandling: z.array(z.string()).max(3),
+  }),
+  socraticHighlights: z.object({
+    keyQuestions: z.array(z.string()).max(3),
+    studentInsights: z.array(z.string()).max(3),
+    criticalThinking: z.array(z.string()).max(3),
+  }),
+  practicalTakeaways: z.object({
+    similarCases: z.string(),
+    cautionPoints: z.array(z.string()).max(3),
+    checkList: z.array(z.string()).max(3),
+  }),
+  metadata: z.object({
+    studyDuration: z.number(),
+    completionDate: z.string().datetime(),
+    difficultyLevel: z.enum(['简单', '中等', '困难']),
+  }),
+});
+
 // ========== 教学会话 ==========
 export const TeachingSessionSchema = BaseEntitySchema.extend({
   title: z.string(),
@@ -123,6 +153,7 @@ export type TeachingProgress = z.infer<typeof TeachingProgressSchema>;
 export type StoryChapter = z.infer<typeof StoryChapterSchema>;
 export type DeepAnalysisResult = z.infer<typeof DeepAnalysisResultSchema>;
 export type LearningReport = z.infer<typeof LearningReportSchema>;
+export type CaseLearningReport = z.infer<typeof CaseLearningReportSchema>;
 export type TeachingSession = z.infer<typeof TeachingSessionSchema>;
 
 // ========== 四幕定义常量 ==========

@@ -83,6 +83,39 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
   //   scrollToBottom();
   // }, [messages]);
 
+  // 从AI响应内容中提取建议问题
+  const extractSuggestedQuestions = (content: string): string[] => {
+    const questions: string[] = [];
+    
+    // 匹配"建议问题："或类似的标记
+    const suggestionsMatch = content.match(/(?:建议问题|后续问题|推荐问题|可以继续探讨)[：:]\s*([^]+?)(?=\n\n|$)/);
+    if (suggestionsMatch) {
+      // 提取问题列表
+      const questionsText = suggestionsMatch[1];
+      const lines = questionsText.split('\n').filter(line => line.trim());
+      
+      lines.forEach(line => {
+        // 匹配各种格式的问题标记
+        const questionMatch = line.match(/^[\d•\-*]\.?\s*(.+)/);
+        if (questionMatch) {
+          questions.push(questionMatch[1].trim());
+        }
+      });
+    }
+    
+    // 如果没有找到明确的建议问题部分，尝试从内容中提取问句
+    if (questions.length === 0) {
+      const questionRegex = /[^。！\n]*[？?]/g;
+      const matches = content.match(questionRegex);
+      if (matches) {
+        // 只取前3个问题
+        questions.push(...matches.slice(0, 3).map(q => q.trim()));
+      }
+    }
+    
+    return questions;
+  };
+
   // 发送消息（使用真实API）
   const sendMessage = async (content: string, isAISuggestion: boolean = false) => {
     if (!content.trim()) return;
@@ -197,11 +230,20 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
       const extractedChoices = extractChoices(fullContent);
       if (extractedChoices.length > 0) {
         setCurrentChoices(extractedChoices);
-        // 更新消息，添加choices字段
-        setMessages(prev => prev.map(msg =>
-          msg.id === aiMessageId ? { ...msg, choices: extractedChoices } : msg
-        ));
       }
+
+      // 提取建议问题
+      const extractedQuestions = extractSuggestedQuestions(fullContent);
+      setSuggestedQuestions(extractedQuestions);
+
+      // 更新消息，添加choices和suggestions字段
+      setMessages(prev => prev.map(msg =>
+        msg.id === aiMessageId ? { 
+          ...msg, 
+          choices: extractedChoices,
+          suggestions: extractedQuestions 
+        } : msg
+      ));
 
       // 添加AI回答到论证树
       const aiNode: ArgumentNode = {
@@ -222,7 +264,7 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
     } catch (error) {
       console.error('调用API时出错:', error);
       // 使用备用响应
-      const fallbackResponse = generateAIResponse(content);
+      const fallbackResponse = generateAIResponse();
       const aiMessage = {
         id: `msg-${Date.now() + 1}`,
         role: 'ai' as const,
@@ -235,9 +277,8 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
     }
   };
 
-  // 生成AI响应（简化版）
-  // 简化后的AI响应生成 - 移除难度级别
-  const generateAIResponse = (question: string) => {
+  // 生成AI响应（备用方案）
+  const generateAIResponse = () => {
     return {
       answer: "这个问题需要结合案件事实进行法律分析。建议引导学生从法条要件、案件事实和法律推理等角度深入思考。",
       followUpQuestions: [
