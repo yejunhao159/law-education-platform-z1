@@ -4,9 +4,8 @@ import { GeistMono } from 'geist/font/mono'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.app',
+  title: '法学AI教学系统 | Legal Education Platform',
+  description: 'AI-powered legal education platform with Socratic teaching methodology - 基于AI的法学教育平台，采用苏格拉底式教学法',
 }
 
 export default function RootLayout({

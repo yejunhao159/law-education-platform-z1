@@ -178,7 +178,90 @@ npm run precommit          # lint-staged预提交检查
 
 ---
 
+### ADR-006: 为什么建立独立的基础设施层？
+
+**决策**：创建 `src/infrastructure/` 作为独立的基础设施层
+
+**背景矛盾**：
+- **对立面A**：业务逻辑（domains/）需要纯净，不应混入技术细节
+- **对立面B**：AI调用、API客户端等技术设施需要统一管理
+- **旧问题**：之前把技术设施放在 lib/ 导致职责不清
+
+**解决方案**：三层清晰分离
+```
+src/infrastructure/     # 基础设施层（纯技术）
+├── ai/
+│   └── AICallProxy.ts  # 统一AI调用代理
+├── api/
+│   └── clients/        # API客户端基类
+└── compatibility/      # 兼容性桥接
+
+src/domains/            # 领域层（业务核心）
+├── legal-analysis/
+├── socratic-dialogue/
+└── ...
+
+lib/                    # 适配器层 + 工具层
+├── types/              # 前端适配类型
+├── hooks/              # React hooks
+└── utils/              # 辅助函数
+```
+
+**关键原则**：
+- ✅ **依赖方向**：domains/ 可以依赖 infrastructure/，但不依赖 lib/
+- ✅ **职责单一**：infrastructure/ 只做技术支撑，不含业务逻辑
+- ✅ **可替换性**：AICallProxy 可以轻松切换不同的AI Provider
+
+**架构优势**：
+- domains/ 更纯净，专注业务逻辑
+- infrastructure/ 统一技术设施，便于监控和优化
+- lib/ 聚焦前端适配和工具函数
+
+**何时重新评估**：如果发现 infrastructure/ 开始包含业务逻辑，需要重新划分
+
+---
+
 ### 项目结构
+
+#### 三层架构总览
+
+```
+law-education-platform/
+├── src/
+│   ├── domains/            # 领域层（业务核心）
+│   │   ├── legal-analysis/
+│   │   ├── socratic-dialogue/
+│   │   ├── case-management/
+│   │   ├── teaching-acts/
+│   │   ├── document-processing/
+│   │   └── shared/
+│   │
+│   ├── infrastructure/     # 基础设施层（技术支撑）
+│   │   ├── ai/
+│   │   │   └── AICallProxy.ts
+│   │   ├── api/
+│   │   │   └── clients/
+│   │   └── compatibility/
+│   │
+│   └── config/             # 配置管理
+│
+├── lib/                    # 适配器层 + 工具层
+│   ├── types/              # 前端适配类型
+│   ├── hooks/              # React hooks
+│   ├── services/           # 前端服务
+│   ├── utils/              # 辅助函数
+│   └── ...                 # 其他前端工具
+│
+├── components/             # UI组件层
+├── app/                    # Next.js路由和页面
+└── ...
+```
+
+**依赖关系图**：
+```
+components/  →  lib/  →  src/domains/  →  src/infrastructure/
+   (UI)        (适配)      (业务)            (技术)
+```
 
 #### 领域驱动设计 (src/domains/)
 项目采用DDD架构，按业务领域组织代码：
@@ -186,11 +269,28 @@ npm run precommit          # lint-staged预提交检查
 ```
 src/domains/
 ├── case-management/        # 案例管理域
-├── legal-analysis/        # 法律分析域
-├── socratic-dialogue/     # 苏格拉底对话域
+│   ├── services/          # 案例CRUD、版本管理
+│   └── stores/            # Zustand状态管理
+├── legal-analysis/        # 法律分析域 ⭐核心
+│   ├── services/          # 7大分析服务（见详细列表）
+│   ├── stores/
+│   ├── types/
+│   └── validators/
+├── socratic-dialogue/     # 苏格拉底对话域 ⭐核心
+│   ├── services/          # 对话服务、AI客户端
+│   ├── prompts/           # 模块化提示词库
+│   ├── stores/
+│   └── types/
 ├── teaching-acts/         # 四幕教学域
+│   ├── services/          # 教学流程编排
+│   └── stores/
 ├── document-processing/   # 文档处理域
+│   ├── services/          # PDF/Word解析
+│   └── types/
 └── shared/               # 共享组件和服务
+    ├── components/
+    ├── infrastructure/
+    └── containers/
 ```
 
 #### 组件架构 (components/)
@@ -464,7 +564,54 @@ const result = await callUnifiedAI(
 
 ## 📍 项目演进历史
 
-### 最近重大变更 (2025-10-02)
+### 架构稳定期 (2025-10-06 当前)
+
+**状态快照**：经过9-10月的密集重构，架构已进入稳定期
+
+**核心架构成果**：
+1. ✅ **三层架构清晰分离**
+   - domains/ - 领域层（业务核心）
+   - src/infrastructure/ - 基础设施层（技术支撑）
+   - lib/ - 适配器层 + 工具层（前端友好）
+
+2. ✅ **AI调用完全统一**
+   - AICallProxy 作为唯一AI调用入口
+   - DeeChatAIClient 支持多Provider切换
+   - 成本追踪、重试、日志全覆盖
+
+3. ✅ **苏格拉底对话体系成熟**
+   - ISSUE 五阶段协作范式稳定运行
+   - 模块化提示词架构（core/protocols/strategies）
+   - Advice Socratic 标准深度集成
+
+4. ✅ **第二幕分析服务完整**
+   - 7大分析服务全部就绪（见下方详细列表）
+   - LegalAnalysisFacade 统一门面
+   - 智能缓存和并行优化
+
+**第二幕核心服务清单**（`src/domains/legal-analysis/services/`）：
+- `JudgmentExtractionService.ts` - 判决书智能提取（第一幕核心）
+- `LegalAnalysisFacade.ts` - 统一分析门面
+- `CaseNarrativeService.ts` - 案例叙事生成（多风格）
+- `ClaimAnalysisService.ts` - 请求权分析（德国法学方法）
+- `DisputeAnalysisService.ts` - 争议焦点分析
+- `EvidenceIntelligenceService.ts` - 证据智能分析
+- `TimelineAnalysisApplicationService.ts` - 时间轴分析
+
+**主要矛盾已解决**：
+- ❌ 旧矛盾：lib/ 既是工具层又混杂业务逻辑 → ✅ 清晰分层
+- ❌ 旧矛盾：AI调用分散在各处，难以统一管理 → ✅ AICallProxy统一
+- ❌ 旧矛盾：苏格拉底对话质量不稳定 → ✅ ISSUE范式稳定
+- ❌ 旧矛盾：大量废弃代码影响维护 → ✅ 清理完成
+
+**当前主要矛盾**（下一阶段聚焦点）：
+- 测试覆盖率不足 vs 快速迭代需求
+- 性能监控缺失 vs 生产环境稳定性要求
+- 单语言（中文）vs 国际化需求
+
+---
+
+### 重构密集期 (2025-09-23 ~ 2025-10-05)
 
 **架构简化和优化**：
 1. ✅ **清理废弃功能**
@@ -505,8 +652,8 @@ const result = await callUnifiedAI(
 - 优化性能瓶颈
 
 **下一步计划**：
-- [ ] E2E 测试完善
-- [ ] 性能监控仪表板
+- [ ] E2E 测试完善（当前主要矛盾）
+- [ ] 性能监控仪表板（可观测性）
 - [ ] 多语言支持（中英文）
 - [ ] 移动端适配
 
@@ -760,25 +907,46 @@ console.log(response.diagnostics);
 
 ```
 app/api/
-├── classroom/
-│   └── [code]/              # 实时课堂 (新架构)
-│       ├── join/           # 加入课堂
-│       ├── messages/       # 消息管理
-│       └── status/         # 课堂状态
-├── socratic/
-│   ├── route.ts            # 苏格拉底对话主入口
-│   └── stream-test/        # 流式输出测试
-├── legal-analysis/
+├── classroom/              # 实时课堂系统
+│   └── [code]/            # 基于邀请码的课堂（新架构）
+│       ├── answers/       # 学生答案管理
+│       ├── stream/        # SSE实时流
+│       ├── answer/        # 单个答案
+│       ├── check/         # 课堂检查
+│       └── question/      # 问题管理
+│
+├── socratic/              # 苏格拉底对话 ⭐核心
+│   ├── route.ts           # 对话主入口
+│   ├── generate/          # 生成问题
+│   ├── view-prompt/       # 查看提示词（调试）
+│   └── stream-test/       # 流式输出测试
+│
+├── legal-analysis/        # 法律分析 ⭐核心
 │   ├── intelligent-narrative/  # 智能叙事生成
-│   ├── claims/             # 请求权分析（计划中）
-│   └── route.ts.backup     # 旧实现备份
-├── legal-intelligence/
-│   └── extract/            # 法律智能提取
-├── dispute-analysis/       # 争议焦点分析
-├── evidence-quality/       # 证据质量评估
-├── timeline-analysis/      # 时间轴分析
-└── test/                   # 测试接口
+│   ├── stream/            # 流式分析
+│   └── event-claim/       # 事件请求权关联
+│
+├── legal-intelligence/    # 法律智能提取
+│   └── extract/           # 判决书提取
+│
+├── dispute-analysis/      # 争议焦点分析
+├── evidence-quality/      # 证据质量评估
+├── timeline-analysis/     # 时间轴分析
+│
+├── teaching-acts/         # 四幕教学
+│   └── summary/           # 教学总结
+│
+├── health/                # 健康检查
+│   └── socratic/          # 苏格拉底服务健康检查
+│
+└── test/                  # 测试接口
 ```
+
+**路由设计原则**：
+- ✅ RESTful 风格：资源导向
+- ✅ 版本控制：通过 [code] 等动态路由实现
+- ✅ 流式支持：关键接口支持 SSE 流式输出
+- ✅ 健康检查：每个核心服务都有 health 端点
 
 ### API调用示例
 
@@ -993,3 +1161,120 @@ Closes #123
 - **紧急问题**：联系维护者（见 package.json）
 
 记住：**没有蠢问题，只有没问出来的问题**。
+
+---
+
+## 🧠 Sean的架构哲学：用矛盾论理解这个项目
+
+*以下是创始人 Sean（姜山）基于马克思主义矛盾论对本项目架构的思考*
+
+### 主要矛盾：教育的本质是什么？
+
+**矛盾的两个方面**：
+- **对立面A**：知识传递 - 学生需要掌握法律知识和技能
+- **对立面B**：思维训练 - 学生需要学会独立思考和推理
+
+**传统法学教育的问题**：把主要矛盾搞反了
+- 传统做法：拼命灌输知识（A），忽视思维训练（B）
+- 结果：学生记住很多法条，但不会分析案例
+
+**我们的解决方案**：抓住主要矛盾 = 思维训练
+- 用AI处理知识传递（这是AI擅长的）
+- 把时间和精力集中在思维训练上（苏格拉底对话）
+- 结果：学生不仅学会知识，更重要的是学会思考
+
+**技术体现**：
+- 第一幕和第二幕：AI快速完成知识提取和分析（解决次要矛盾）
+- 第三幕：集中所有资源做苏格拉底对话（聚焦主要矛盾）
+- 第四幕：巩固思维模式，形成学习路径
+
+### 架构设计中的矛盾转化
+
+**第一阶段矛盾**（2023-2024）：功能缺失 vs 快速上线
+- 解决方式：快速堆砌功能，先让系统跑起来
+- 结果：功能有了，但代码混乱、难以维护
+
+**第二阶段矛盾**（2024-2025）：技术债务 vs 持续迭代
+- 旧矛盾解决后，产生新矛盾：代码越来越难改
+- 解决方式：DDD重构，清理废弃代码，建立基础设施层
+- 结果：架构清晰了，但测试覆盖率不足
+
+**第三阶段矛盾**（2025-当前）：测试覆盖率 vs 迭代速度
+- 这是当前的主要矛盾
+- 需要在保证质量的前提下，不降低开发速度
+- 解决方向：E2E 测试优先，单元测试补充
+
+**矛盾螺旋上升**的体现：
+- 从"没功能"到"有功能"（质的飞跃）
+- 从"功能混乱"到"架构清晰"（质的飞跃）
+- 从"架构清晰"到"质量保障"（当前阶段）
+- 每次解决旧矛盾，都会在更高层次产生新矛盾
+
+### 为什么用奥卡姆剃刀？
+
+**矛盾**：功能全面 vs 系统简洁
+- 对立面A：教学场景复杂，想加的功能有100个
+- 对立面B：系统越复杂，维护成本越高，用户越困惑
+
+**奥卡姆剃刀的应用**：如无必要，勿增实体
+- 每个功能都要问：不加这个功能会死吗？
+- 如果答案是"不会"，那就不加
+- 结果：核心功能清晰，用户不会被淹没
+
+**技术体现**：
+- 删除了2000+行废弃代码（intelligence目录）
+- 废弃了旧的classroom架构，用更简单的邀请码方案
+- 提示词模块化，只保留核心的 core/protocols/strategies
+
+### 具体问题具体分析
+
+**每个领域的主要矛盾都不同**：
+
+1. **legal-analysis 域的主要矛盾**：准确性 vs 速度
+   - 法律分析需要准确，但用户等不及
+   - 解决：智能缓存 + 并行分析
+
+2. **socratic-dialogue 域的主要矛盾**：启发性 vs 友好度
+   - 传统苏格拉底对话太犀利，学生害怕
+   - 解决：Advice Socratic 标准，既启发又友好
+
+3. **classroom 域的主要矛盾**：实时性 vs 可靠性
+   - WebSocket 实时性好，但 Vercel 不支持
+   - 解决：SSE 妥协方案，牺牲一点实时性换取可靠性
+
+### 预判下一个矛盾
+
+**当前正在解决**：测试覆盖率不足
+**解决后会产生的新矛盾**：性能优化 vs 代码复杂度
+- E2E 测试完善后，会发现性能瓶颈
+- 优化性能会增加代码复杂度
+- 需要找到平衡点：在80%的场景用简单方案，20%的瓶颈场景才做优化
+
+**长期矛盾**：中文市场 vs 国际化
+- 当前聚焦中国法学教育（主要矛盾）
+- 未来可能需要国际化（现在是次要矛盾）
+- 不要现在就做多语言支持，等主要矛盾解决了再说
+
+### 给新贡献者的建议
+
+1. **识别主要矛盾**：
+   - 不要看到问题就改，先分析是不是主要矛盾
+   - 80%的改进来自20%的关键问题
+
+2. **具体问题具体分析**：
+   - 不要套模板，每个domain的矛盾不同
+   - legal-analysis 和 socratic-dialogue 的设计逻辑完全不同
+
+3. **接受矛盾转化**：
+   - 解决了旧问题，一定会产生新问题
+   - 关键是新问题要在更高层次（螺旋上升）
+   - 从"功能缺失"到"测试不足"，这就是进步
+
+4. **用奥卡姆剃刀砍掉复杂性**：
+   - 简洁的坏方案 > 复杂的好方案
+   - 代码要让下一个维护者能看懂
+
+---
+
+*"矛盾无处不在，关键是抓住主要矛盾，其他问题会迎刃而解。"*
+*— Sean, 2025-10-06*
