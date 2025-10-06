@@ -29,11 +29,6 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
-    "test:legal": "npx tsx scripts/test-legal-intelligence.ts",
-    "test:all": "npx tsx scripts/test-all.ts",
-    "demo:deechat": "npx tsx scripts/demo-deechat-integration.ts",
-    "test:deechat": "npx tsx scripts/test-deechat-production.ts",
-    "demo:enhanced-socratic": "npx tsx scripts/demo-enhanced-socratic.ts",
     "clean": "rm -rf .next dist coverage",
     "precommit": "lint-staged",
     "prepare": "husky install"
