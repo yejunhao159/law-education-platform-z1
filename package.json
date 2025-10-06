@@ -93,7 +93,7 @@
     "mammoth": "^1.10.0",
     "next": "^15.5.4",
     "next-themes": "latest",
-    "pdfjs-dist": "^3.11.174",
+    "pdfjs-dist": "^4.2.67",
     "qrcode": "^1.5.4",
     "react": "19.0.0",
     "react-day-picker": "9.8.0",
