@@ -18,6 +18,10 @@ const customJestConfig: Config = {
     '^@/app/(.*)$': '<rootDir>/app/$1',
   },
   testEnvironment: 'jest-environment-jsdom',
+  // 让Jest转换ESM包
+  transformIgnorePatterns: [
+    'node_modules/(?!(@deepracticex)/)',
+  ],
   testMatch: [
     '**/__tests__/**/*.test.ts',
     '**/__tests__/**/*.test.tsx',
