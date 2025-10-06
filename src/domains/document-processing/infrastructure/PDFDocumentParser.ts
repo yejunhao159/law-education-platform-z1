@@ -39,10 +39,10 @@ export class PDFDocumentParser {
   async checkContent(file: File): Promise<{hasText: boolean, pageCount: number}> {
     try {
       // @ts-ignore - pdfjs-dist 缺少类型声明
-      const pdfjs = await import('pdfjs-dist/legacy/build/pdf.min.js');
+      const pdfjs = await import('pdfjs-dist/legacy/build/pdf.min.mjs');
 
       if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-        pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js';
+        pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.mjs';
       }
 
       const arrayBuffer = await file.arrayBuffer();
@@ -122,7 +122,7 @@ export class PDFDocumentParser {
 
       // 动态导入 pdfjs-dist
       // @ts-ignore - pdfjs-dist 缺少类型声明
-      const pdfjs = await import('pdfjs-dist/legacy/build/pdf.min.js');
+      const pdfjs = await import('pdfjs-dist/legacy/build/pdf.min.mjs');
 
       onProgress?.({
         stage: 'configuring',
@@ -132,7 +132,7 @@ export class PDFDocumentParser {
 
       // 配置 worker
       if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-        pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js';
+        pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.mjs';
       }
 
       onProgress?.({
