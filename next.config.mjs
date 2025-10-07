@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Docker 部署优化：生成 standalone 输出
+  output: 'standalone',
+
   eslint: {
     ignoreDuringBuilds: true,
   },

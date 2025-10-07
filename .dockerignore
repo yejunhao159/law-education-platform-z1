@@ -1,0 +1,103 @@
+# =============================================================================
+# Docker 构建排除文件
+# =============================================================================
+# 目的：减小构建上下文体积，加快构建速度
+# =============================================================================
+
+# 依赖目录（会在容器内重新安装）
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js 构建产物（会在容器内重新构建）
+.next
+out
+dist
+build
+
+# 测试相关
+coverage
+.nyc_output
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+__tests__
+__mocks__
+test-results
+playwright-report
+
+# 环境变量（敏感信息，不应打包到镜像）
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# Git 相关
+.git
+.gitignore
+.gitattributes
+.github
+
+# IDE 配置
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 文档
+README.md
+CLAUDE.md
+DEPLOYMENT.md
+docs
+*.md
+
+# CI/CD
+.github/workflows
+
+# 日志文件
+logs
+*.log
+
+# 临时文件
+tmp
+temp
+.tmp
+
+# 备份文件
+*.backup
+*.bak
+context-manager.backup_*
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+.directory
+
+# 包管理器锁文件（会使用 package-lock.json）
+yarn.lock
+pnpm-lock.yaml
+
+# TypeScript 缓存
+*.tsbuildinfo
+
+# Playwright
+.playwright
+
+# 其他
+.dockerignore
+Dockerfile
+docker-compose*.yml

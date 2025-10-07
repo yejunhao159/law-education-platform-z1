@@ -1,0 +1,72 @@
+# =============================================================================
+# Docker Compose 配置 - 本地开发和测试
+# =============================================================================
+# 用途：本地测试 Docker 构建是否正常
+# 使用方法：
+#   构建并启动：docker-compose up --build
+#   后台运行：docker-compose up -d
+#   停止：docker-compose down
+# =============================================================================
+
+version: '3.9'
+
+services:
+  # 主应用服务
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # 构建参数（可选）
+      args:
+        NODE_ENV: production
+
+    image: law-education-platform:latest
+    container_name: law-edu-app-dev
+
+    # 端口映射
+    ports:
+      - "3000:3000"
+
+    # 环境变量（从 .env.local 文件加载）
+    env_file:
+      - .env.local
+
+    # 环境变量（覆盖配置）
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # 重启策略
+    restart: unless-stopped
+
+    # 资源限制（可选，防止本地测试占用过多资源）
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# 网络配置（可选）
+networks:
+  default:
+    name: law-edu-network
+    driver: bridge
