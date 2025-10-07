@@ -68,12 +68,14 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
 # 从构建阶段复制必要文件
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/package.json ./package.json
-
-# 复制 .next 构建产物（使用 standalone 模式）
+# 复制 standalone 输出（包含 server.js 和依赖）
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+
+# 复制静态资源
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# 复制 public 目录（如果存在）
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 # 切换到非 root 用户
 USER nextjs
