@@ -36,8 +36,16 @@ COPY --from=deps /app/node_modules ./node_modules
 # 复制所有源代码
 COPY . .
 
-# 设置环境变量
+# 设置环境变量（构建时需要）
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+
+# 设置占位符环境变量（避免构建时出错）
+# 实际的环境变量会在运行时通过 .env.production 注入
+ENV DEEPSEEK_API_KEY=placeholder
+ENV NEXT_PUBLIC_DEEPSEEK_API_KEY=placeholder
+ENV DEEPSEEK_API_URL=https://api.deepseek.com
+ENV NEXT_PUBLIC_DEEPSEEK_API_URL=https://api.deepseek.com
 
 # 构建 Next.js 应用（会生成 .next/standalone）
 RUN npm run build
