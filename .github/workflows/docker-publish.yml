@@ -5,7 +5,7 @@
 # 功能：
 #   1. 构建 Docker 镜像
 #   2. 推送到 GitHub Container Registry (GHCR)
-#   3. 支持多架构（amd64、arm64）
+#   3. 仅支持 AMD64 架构（ARM64 因 Tailwind CSS 4.x 兼容性问题暂不支持）
 #   4. 自动打标签（latest + 版本号）
 # =============================================================================
 
@@ -73,7 +73,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64  # 多架构支持
+          platforms: linux/amd64  # 仅 AMD64 架构（ARM64 因 lightningcss 兼容性问题暂不支持）
           cache-from: type=gha  # 使用 GitHub Actions 缓存
           cache-to: type=gha,mode=max
 
