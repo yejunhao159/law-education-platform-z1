@@ -7,7 +7,7 @@
 
 import { createLogger } from '@/lib/logging';
 import type { Evidence } from '@/types/evidence';
-import { normalizeEvidenceList } from '@/utils/evidence-adapter';
+import { normalizeEvidenceList } from '@/lib/adapters/evidence-adapter';
 import { callUnifiedAI } from '../../../infrastructure/ai/AICallProxy';
 import type {
   ClaimElement

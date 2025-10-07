@@ -10,7 +10,7 @@
 
 import type { ClaimElement, DisputeFocus } from '@/types/dispute-evidence';
 import type { Evidence } from '@/types/evidence';
-import { normalizeEvidence, toSimpleEvidence, isCompleteEvidence } from '@/utils/evidence-adapter';
+import { normalizeEvidence, toSimpleEvidence, isCompleteEvidence } from '@/lib/adapters/evidence-adapter';
 
 // 重新导出统一的Evidence类型，保持向后兼容
 export type { Evidence };
