@@ -15,11 +15,10 @@ import { Label } from '../ui/label'
 import { Badge } from '../ui/badge'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Separator } from '../ui/separator'
-import { 
+import {
   Copy,
   QrCode,
   Users,
-  Clock,
   CheckCircle2,
   AlertCircle,
   RefreshCw,
@@ -27,7 +26,6 @@ import {
   Link,
   Timer,
   UserPlus,
-  ArrowRight,
   Loader2
 } from 'lucide-react'
 import QRCode from 'qrcode'

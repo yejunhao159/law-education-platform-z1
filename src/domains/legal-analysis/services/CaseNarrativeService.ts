@@ -9,10 +9,6 @@ import { createLogger } from '@/lib/logging';
 import { interceptDeepSeekCall } from '../../../infrastructure/ai/AICallProxy';
 import type {
   TimelineEvent,
-  CaseInfo,
-  StoryChapter,
-  NarrativeGenerationRequest,
-  NarrativeGenerationResponse
 } from '@/types/timeline-claim-analysis';
 
 const logger = createLogger('CaseNarrativeService');
@@ -38,17 +34,7 @@ export interface NarrativeGenerationRequest {
       level?: string;
       nature?: string;
     };
-    threeElements: {
-      facts: {
-        timeline: TimelineEvent[];
-        parties: string[];
-        keyFacts: string[];
-      };
-      disputes: any[];
-      reasoning?: {
-        summary: string;
-      };
-    };
+    threeElements: any; // 第一幕动态生成的数据，结构复杂，使用any简化类型检查
   };
   narrativeStyle: 'story' | 'professional' | 'educational';
   depth: 'basic' | 'detailed' | 'comprehensive';
@@ -208,7 +194,7 @@ export class CaseNarrativeService {
 
     // 构建时间轴摘要
     const timelineSummary = timeline.length > 0 ?
-      timeline.map((event, index) =>
+      timeline.map((event: TimelineEvent, index: number) =>
         `${index + 1}. ${event.date} - ${event.title}: ${event.description}`
       ).join('\n') :
       '暂无时间轴信息';
@@ -220,24 +206,24 @@ export class CaseNarrativeService {
 
     // 构建关键事实
     const keyFactsContext = keyFacts.length > 0 ?
-      keyFacts.map((fact, i) => `${i + 1}. ${fact}`).join('\n') :
+      keyFacts.map((fact: string, i: number) => `${i + 1}. ${fact}`).join('\n') :
       '暂无关键事实';
 
     // 构建争议焦点
     const disputesContext = disputedFacts.length > 0 ?
-      disputedFacts.map((dispute, i) => `${i + 1}. ${dispute}`).join('\n') :
+      disputedFacts.map((dispute: string, i: number) => `${i + 1}. ${dispute}`).join('\n') :
       '暂无争议焦点';
 
     // 构建证据链
     const evidenceContext = evidenceItems.length > 0 ?
-      evidenceItems.slice(0, 5).map((item, i) =>
+      evidenceItems.slice(0, 5).map((item: any, i: number) =>
         `${i + 1}. ${item.name}（${item.type}）- 提交方：${item.submittedBy}`
       ).join('\n') :
       '暂无证据信息';
 
     // 构建法律依据
     const legalBasisContext = legalBasis.length > 0 ?
-      legalBasis.map(basis =>
+      legalBasis.map((basis: any) =>
         `- ${basis.law} ${basis.article}：${basis.application}`
       ).join('\n') :
       '暂无法律依据';
@@ -276,7 +262,7 @@ ${reasoningSummary || '法院经审理认为，双方存在法律关系'}
 ${legalBasisContext}
 
 ### 核心论点
-${keyArguments.length > 0 ? keyArguments.map((arg, i) => `${i + 1}. ${arg}`).join('\n') : '暂无核心论点'}
+${keyArguments.length > 0 ? keyArguments.map((arg: any, i: number) => `${i + 1}. ${arg}`).join('\n') : '暂无核心论点'}
 
 ### 判决结果
 ${judgment || '法院作出相应判决'}
@@ -440,7 +426,7 @@ ${depth === 'comprehensive' ? '进行全面深入的案情分析，包含法律�
   /**
    * 解析AI响应
    */
-  private parseAIResponse(aiResponse: string, caseData: any): StoryChapter[] {
+  private parseAIResponse(aiResponse: string, _caseData: any): StoryChapter[] {
     try {
       // 首先检查是否为降级提示或错误消息
       const lowerResponse = aiResponse.toLowerCase();
@@ -569,7 +555,7 @@ ${depth === 'comprehensive' ? '进行全面深入的案情分析，包含法律�
         id: 'chapter-2',
         title: '事实发展',
         content: `随着时间推移，案件事实逐步展开。${
-          midEvents.map(e => `${e.date}，${e.description}`).join('；')
+          midEvents.map((e: TimelineEvent) => `${e.date}，${e.description}`).join('；')
         }。这些事件的发生和发展，使得当事人之间的纠纷日益明显。`,
         icon: '⚖️',
         color: 'orange',
@@ -695,23 +681,6 @@ ${depth === 'comprehensive' ? '进行全面深入的案情分析，包含法律�
     if (hasLegalAnalysis) confidence += 0.1;
 
     return Math.min(confidence, 1.0);
-  }
-
-  /**
-   * 构建错误响应
-   */
-  private buildErrorResponse(error: any, startTime: number): NarrativeGenerationResponse {
-    return {
-      success: false,
-      chapters: [],
-      metadata: {
-        generatedAt: new Date().toISOString(),
-        processingTime: Date.now() - startTime,
-        confidence: 0,
-        model: 'deepseek-chat-narrative'
-      },
-      error: error instanceof Error ? error.message : '未知错误'
-    };
   }
 
   /**

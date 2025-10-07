@@ -29,6 +29,7 @@ next-env.d.ts
 # testing
 /coverage
 /test-results
+/playwright-report
 /.nyc_output
 
 # cache

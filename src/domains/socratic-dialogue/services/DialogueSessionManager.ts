@@ -222,8 +222,8 @@ export class DialogueSessionManager {
     const session = this.sessions.get(sessionId);
     if (!session) return false;
 
-    session.participants = session.participants.filter(id => id !== participantId);
-    session.state.participants = session.state.participants.filter(id => id !== participantId);
+    session.participants = session.participants.filter((id: string) => id !== participantId);
+    session.state.participants = session.state.participants.filter((id: string) => id !== participantId);
 
     this.updateSessionActivity(sessionId);
     this.persistSessions();
@@ -297,7 +297,7 @@ export class DialogueSessionManager {
     // 更新平均响应时间
     if (session.state.performance.thinkingTime.length > 0) {
       session.metadata.averageResponseTime =
-        session.state.performance.thinkingTime.reduce((sum, time) => sum + time, 0) /
+        session.state.performance.thinkingTime.reduce((sum: number, time: number) => sum + time, 0) /
         session.state.performance.thinkingTime.length;
     }
   }

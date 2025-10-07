@@ -53,7 +53,7 @@ export function adaptClassroomSession(domain: DomainClassroomSession): Classroom
     caseId: domain.caseId,
     statistics: {
       totalParticipants: domain.participants.length,
-      activeParticipants: domain.participants.filter(s => s.status === 'active').length,
+      activeParticipants: domain.participants.filter((s: any) => s.status === 'active').length,
       avgUnderstanding: 75, // 默认值，待扩展
       levelDurations: {} as any // 待扩展
     }
@@ -80,8 +80,8 @@ export function adaptStudentInfo(domain: DomainStudentInfo): StudentInfo {
  */
 export function adaptVoteSession(domain: DomainVoteSession): VoteData {
   // 适配选项列表，计算百分比
-  const totalVotes = domain.options.reduce((sum, opt) => sum + opt.voteCount, 0);
-  const choices: VoteChoice[] = domain.options.map(opt => ({
+  const totalVotes = domain.options.reduce((sum: number, opt: any) => sum + opt.voteCount, 0);
+  const choices: VoteChoice[] = domain.options.map((opt: any) => ({
     id: opt.id,
     text: opt.text,
     count: opt.voteCount,

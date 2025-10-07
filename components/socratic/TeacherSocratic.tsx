@@ -4,10 +4,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 // 移除复杂的标签页系统
-import ArgumentTree, { ArgumentNode } from './ArgumentTree';
+import { ArgumentNode } from './ArgumentTree';
 import { ClassroomCode } from './ClassroomCode';
 import { RealtimeClassroomPanel } from './RealtimeClassroomPanel';
-import { ClassroomSession, DialogueLevel } from '@/lib/types/socratic';
+import { ClassroomSession } from '@/lib/types/socratic';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Send,
@@ -18,7 +18,6 @@ import {
   Pause,
   RotateCcw,
   Download,
-  Settings,
   QrCode,
   MessageSquare
 } from 'lucide-react';
@@ -53,9 +52,6 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
   // 论证树节点
   const [argumentNodes, setArgumentNodes] = useState<ArgumentNode[]>([]);
 
-  // 当前显示的选项（用于投票后继续对话）
-  const [currentChoices, setCurrentChoices] = useState<Array<{ id: string; content: string }>>([]);
-
   // 当前输入
   const [currentInput, setCurrentInput] = useState('');
 
@@ -71,6 +67,9 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
 
   // AI生成的当前问题（用于推送到实时课堂）
   const [currentAIQuestion, setCurrentAIQuestion] = useState<string>('');
+
+  // AI提取的ABCDE选项
+  const [currentChoices, setCurrentChoices] = useState<Array<{ id: string; content: string }>>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -117,7 +116,7 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
   };
 
   // 发送消息（使用真实API）
-  const sendMessage = async (content: string, isAISuggestion: boolean = false) => {
+  const sendMessage = async (content: string, _isAISuggestion: boolean = false) => {
     if (!content.trim()) return;
 
     const newMessage = {
@@ -546,14 +545,13 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
                   const parsed = JSON.parse(data);
                   if (parsed.content) {
                     fullContent += parsed.content;
-                    // 实时更新消息内容
-                    setMessages([{
-                      id: aiMessageId,
-                      role: 'ai' as const,
-                      content: fullContent,
-                      timestamp: new Date().toLocaleTimeString(),
-                      suggestions: []
-                    }]);
+                    // 实时更新消息内容（更新现有消息，而非替换整个数组）
+                    setMessages(prev => prev.map(msg =>
+                      msg.id === aiMessageId ? {
+                        ...msg,
+                        content: fullContent
+                      } : msg
+                    ));
                   }
                 } catch (e) {
                   console.warn('解析SSE失败:', data, e);
@@ -567,15 +565,23 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
         const extractedChoices = extractChoices(fullContent);
         if (extractedChoices.length > 0) {
           setCurrentChoices(extractedChoices);
-          // 更新消息，添加choices字段
-          setMessages([{
-            id: aiMessageId,
-            role: 'ai' as const,
-            content: fullContent,
-            timestamp: new Date().toLocaleTimeString(),
-            choices: extractedChoices
-          }]);
         }
+
+        // 解析AI响应中的建议问题
+        const extractedQuestions = extractSuggestedQuestions(fullContent);
+        if (extractedQuestions.length > 0) {
+          setSuggestedQuestions(extractedQuestions);
+        }
+
+        // 更新消息，添加choices和suggestions字段（使用map更新，而非替换整个数组）
+        setMessages(prev => prev.map(msg =>
+          msg.id === aiMessageId ? {
+            ...msg,
+            content: fullContent,
+            choices: extractedChoices,
+            suggestions: extractedQuestions
+          } : msg
+        ));
 
         // 更新当前AI问题（用于推送到学生端）
         setCurrentAIQuestion(fullContent);

@@ -91,7 +91,7 @@ async function parseRequest(req: NextRequest) {
 /**
  * 获取错误状态码
  */
-function getErrorStatusCode(errorCode?: TimelineErrorCode): number {
+function _getErrorStatusCode(errorCode?: TimelineErrorCode): number {
   switch (errorCode) {
     case TimelineErrorCode.INVALID_EVENTS:
     case TimelineErrorCode.MISSING_DATA:
@@ -109,7 +109,7 @@ function getErrorStatusCode(errorCode?: TimelineErrorCode): number {
  * 统一错误处理
  */
 function handleError(error: unknown): NextResponse {
-  const message = error instanceof Error ? error.message : '未知错误';
+  const _message = error instanceof Error ? error.message : '未知错误';
 
   return NextResponse.json({
     success: false,

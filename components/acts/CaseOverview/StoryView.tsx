@@ -5,15 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useCaseStore, useCurrentCase } from '@/src/domains/stores'
-import { 
-  BookOpen, 
-  Users, 
-  AlertCircle, 
-  Gavel, 
-  ChevronRight, 
+import {
+  BookOpen,
+  Users,
+  AlertCircle,
+  Gavel,
+  ChevronRight,
   ChevronLeft,
-  Clock,
-  Calendar
+  Clock
 } from 'lucide-react'
 
 const iconMap = {

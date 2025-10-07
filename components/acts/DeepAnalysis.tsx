@@ -16,7 +16,6 @@ import {
   AlertTriangle,
   AlertCircle,
   Circle,
-  Star,
   TrendingUp,
   FileText,
   Loader2

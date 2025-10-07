@@ -5,6 +5,7 @@
 
 // ========== 共享基础类型 ==========
 export * from './shared/base';
+import type { ApiResponse, ViewPerspective } from './shared/base';
 
 // ========== 域类型 ==========
 export * from './domains/case-management';
@@ -43,6 +44,23 @@ export type {
   TeachingSession,
   ActState,
   ActType,
+  TeachingProgress,
+} from './domains/teaching-acts';
+
+// ========== 内部使用的类型导入 ==========
+// 用于本文件后续定义中使用的类型
+import type { LegalCase } from '../../types/legal-case';
+import type {
+  ThreeElements,
+  TimelineAnalysis,
+} from './domains/legal-analysis';
+import type {
+  DialogueSession,
+  SocraticRequest,
+  SocraticResponse,
+} from './domains/socratic-dialogue';
+import type {
+  TeachingSession,
   TeachingProgress,
 } from './domains/teaching-acts';
 

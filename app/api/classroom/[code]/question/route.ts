@@ -51,7 +51,7 @@ export async function POST(
 
 // GET: 获取当前问题
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ code: string }> }
 ) {
   const { code } = await params;

@@ -71,11 +71,11 @@ export const useAnalysisActions = () => {
 // ========== 组合Store Hook ==========
 // 提供一个组合多个域状态的Hook，用于需要跨域数据的组件
 export const useAppState = () => {
-  const currentCase = useCaseManagementStore((state) => state.currentCase);
-  const currentSession = useTeachingStore((state) => state.currentSession);
-  const currentDialogue = useSocraticStore((state) => state.currentDialogueSession);
-  const analysisComplete = useAnalysisStore((state) => state.analysisComplete);
-  const currentAct = useTeachingStore((state) => state.currentAct);
+  const currentCase = useCaseManagementStore((state: any) => state.currentCase);
+  const currentSession = useTeachingStore((state: any) => state.currentSession);
+  const currentDialogue = useSocraticStore((state: any) => state.currentDialogueSession);
+  const analysisComplete = useAnalysisStore((state: any) => state.analysisComplete);
+  const currentAct = useTeachingStore((state: any) => state.currentAct);
 
   return {
     case: currentCase,
@@ -100,12 +100,12 @@ export const useGlobalActions = () => {
     setCurrentAct: state.setCurrentAct,
     toggleStoryMode: state.toggleStoryMode,
   }));
-  const socraticActions = useSocraticStore((state) => ({
+  const socraticActions = useSocraticStore((state: any) => ({
     reset: state.reset,
     startNewDialogue: state.startNewDialogue,
     sendMessage: state.sendMessage,
   }));
-  const analysisActions = useAnalysisStore((state) => ({
+  const analysisActions = useAnalysisStore((state: any) => ({
     reset: state.reset,
     setThreeElements: state.setThreeElements,
     selectTimelineNode: state.selectTimelineNode,

@@ -1,16 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { 
-  ChevronDown, 
-  ChevronRight, 
-  Plus, 
+import {
+  ChevronDown,
+  ChevronRight,
+  Plus,
   MessageSquare,
   AlertTriangle,
   CheckCircle,
-  XCircle,
   Lightbulb,
   Target
 } from 'lucide-react';

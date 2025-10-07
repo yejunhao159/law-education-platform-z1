@@ -20,7 +20,7 @@ export async function OPTIONS() {
 const activeClassrooms = new Set<string>();
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ code: string }> }
 ) {
   const { code } = await params;
