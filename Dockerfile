@@ -21,13 +21,10 @@ WORKDIR /app
 # 复制依赖配置文件
 COPY package.json package-lock.json ./
 
-# 安装生产依赖（使用 ci 保证一致性）
+# 安装所有依赖（用于构建）
 # 使用 --legacy-peer-deps 解决依赖冲突
-RUN npm ci --legacy-peer-deps --only=production && \
+RUN npm ci --legacy-peer-deps && \
     npm cache clean --force
-
-# 安装所有依赖（包括开发依赖，用于构建）
-RUN npm ci --legacy-peer-deps
 
 # -----------------------------------------------------------------------------
 # Stage 2: 构建阶段
