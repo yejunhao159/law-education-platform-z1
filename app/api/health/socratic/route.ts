@@ -353,7 +353,7 @@ function calculateOverallHealth(components: ComponentHealth[]): {
  * GET /api/health/socratic
  * 健康检查端点
  */
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   const startTime = Date.now();
   
   try {
@@ -454,7 +454,7 @@ export async function GET(request: NextRequest) {
  * HEAD /api/health/socratic
  * 简单的健康检查（仅返回状态码）
  */
-export async function HEAD(request: NextRequest) {
+export async function HEAD(_request: NextRequest) {
   try {
     // 快速检查关键服务
     const criticalChecks = await Promise.all([

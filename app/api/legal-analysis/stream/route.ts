@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
           });
 
           // 处理流式响应
-          for await (const chunk of aiStream) {
+          for await (const _chunk of aiStream) {
             // onChunk回调已处理，这里可以做额外处理
           }
 

@@ -4,7 +4,7 @@
  */
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -16,7 +16,6 @@ import {
   Send,
   Users,
   MessageSquare,
-  BarChart3,
   RefreshCw,
   AlertCircle,
   CheckCircle2,
@@ -61,7 +60,6 @@ export function RealtimeClassroomPanel({
   const [isPublishing, setIsPublishing] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [answers, setAnswers] = useState<Answer[]>([]);
-  const [isLoadingAnswers, setIsLoadingAnswers] = useState(false);
 
   // 使用AI建议的问题
   useEffect(() => {

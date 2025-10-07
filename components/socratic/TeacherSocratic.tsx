@@ -545,14 +545,13 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
                   const parsed = JSON.parse(data);
                   if (parsed.content) {
                     fullContent += parsed.content;
-                    // 实时更新消息内容
-                    setMessages([{
-                      id: aiMessageId,
-                      role: 'ai' as const,
-                      content: fullContent,
-                      timestamp: new Date().toLocaleTimeString(),
-                      suggestions: []
-                    }]);
+                    // 实时更新消息内容（更新现有消息，而非替换整个数组）
+                    setMessages(prev => prev.map(msg =>
+                      msg.id === aiMessageId ? {
+                        ...msg,
+                        content: fullContent
+                      } : msg
+                    ));
                   }
                 } catch (e) {
                   console.warn('解析SSE失败:', data, e);
@@ -566,15 +565,23 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
         const extractedChoices = extractChoices(fullContent);
         if (extractedChoices.length > 0) {
           setCurrentChoices(extractedChoices);
-          // 更新消息，添加choices字段
-          setMessages([{
-            id: aiMessageId,
-            role: 'ai' as const,
-            content: fullContent,
-            timestamp: new Date().toLocaleTimeString(),
-            choices: extractedChoices
-          }]);
         }
+
+        // 解析AI响应中的建议问题
+        const extractedQuestions = extractSuggestedQuestions(fullContent);
+        if (extractedQuestions.length > 0) {
+          setSuggestedQuestions(extractedQuestions);
+        }
+
+        // 更新消息，添加choices和suggestions字段（使用map更新，而非替换整个数组）
+        setMessages(prev => prev.map(msg =>
+          msg.id === aiMessageId ? {
+            ...msg,
+            content: fullContent,
+            choices: extractedChoices,
+            suggestions: extractedQuestions
+          } : msg
+        ));
 
         // 更新当前AI问题（用于推送到学生端）
         setCurrentAIQuestion(fullContent);

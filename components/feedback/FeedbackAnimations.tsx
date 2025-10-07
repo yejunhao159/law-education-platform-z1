@@ -7,16 +7,15 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence, Variants } from 'framer-motion';
-import { 
-  CheckCircle, 
-  XCircle, 
-  AlertCircle, 
+import {
+  CheckCircle,
+  XCircle,
+  AlertCircle,
   Sparkles,
   Trophy,
   Star,
   Zap,
-  Heart,
-  ThumbsUp
+  Heart
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
