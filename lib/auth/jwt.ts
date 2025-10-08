@@ -67,9 +67,16 @@ export const jwtUtils = {
    */
   async setTokenCookie(token: string): Promise<void> {
     const cookieStore = await cookies();
+
+    // 智能判断是否使用 secure cookie
+    // 只有在生产环境且使用HTTPS时才启用secure
+    // 这样可以兼容HTTP的生产环境（如内网部署）
+    const isProduction = process.env.NODE_ENV === 'production';
+    const useHttps = process.env.FORCE_HTTPS === 'true' || process.env.HTTPS === 'true';
+
     cookieStore.set('auth-token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isProduction && useHttps, // 生产环境 + HTTPS 才启用
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: '/',
