@@ -81,6 +81,22 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 RUN mkdir -p ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/tiktoken ./node_modules/tiktoken
 
+# 修复 Socket.IO 依赖问题
+# standalone 模式只打包 Next.js 应用依赖，不包含 Socket.IO 服务器的依赖
+# 需要手动复制 socket.io 及其运行时依赖
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/socket.io ./node_modules/socket.io
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/socket.io-parser ./node_modules/socket.io-parser
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/engine.io ./node_modules/engine.io
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/engine.io-parser ./node_modules/engine.io-parser
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/ws ./node_modules/ws
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@socket.io ./node_modules/@socket.io
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/debug ./node_modules/debug
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/ms ./node_modules/ms
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/accepts ./node_modules/accepts
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/base64id ./node_modules/base64id
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/cookie ./node_modules/cookie
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/cors ./node_modules/cors
+
 # 复制Socket.IO服务器和PM2配置
 COPY --from=builder --chown=nextjs:nodejs /app/server ./server
 COPY --from=builder --chown=nextjs:nodejs /app/ecosystem.config.js ./ecosystem.config.js
