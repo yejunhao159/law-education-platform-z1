@@ -74,9 +74,12 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-# 修复 tiktoken WebAssembly 文件缺失问题
-# standalone 模式不会自动复制 .wasm 文件，需要手动复制
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/tiktoken/tiktoken_bg.wasm ./node_modules/tiktoken/tiktoken_bg.wasm
+# 修复 tiktoken 依赖问题
+# 由于 tiktoken 在 next.config.mjs 中被标记为外部依赖（externals）
+# standalone 模式不会自动复制，需要手动复制整个 tiktoken 目录
+# 这样可以确保所有运行时依赖（WASM文件、类型定义、辅助文件）都完整
+RUN mkdir -p ./node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/tiktoken ./node_modules/tiktoken
 
 # 复制Socket.IO服务器和PM2配置
 COPY --from=builder --chown=nextjs:nodejs /app/server ./server
