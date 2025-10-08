@@ -24,7 +24,6 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-tsconfig.tsbuildinfo
 next-env.d.ts
 
 # testing
@@ -54,3 +53,9 @@ packages/context-manager.backup_*/
 socratic-prompt-*.txt
 socratic-prompt-*.json
 test-report-*.md
+
+# database
+/data
+*.db
+*.db-shm
+*.db-wal

@@ -1,13 +1,15 @@
 /**
  * 学生端课堂视图
- * 实时接收教师问题，投票/输入答案
+ * 通过Socket.IO实时接收教师问题并提交答案
+ * @description 使用WebSocket替代SSE，消除轮询刷新bug
  */
 'use client';
 
-import { use, useEffect, useState, useRef } from 'react';
+import { use, useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { io, Socket } from 'socket.io-client';
 
 interface PageProps {
   params: Promise<{
@@ -30,46 +32,65 @@ export default function StudentClassroomPage({ params }: PageProps) {
   const [selectedOption, setSelectedOption] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
 
-  // 连接SSE接收教师问题
+  // ✅ Socket.IO连接（替代SSE）
   useEffect(() => {
-    const eventSource = new EventSource(`/api/classroom/${code}/stream`);
-    eventSourceRef.current = eventSource;
+    // 根据环境选择Socket.IO服务器地址
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL ||
+                      (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001');
 
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
+    console.log('🔌 连接Socket.IO服务器:', socketUrl);
 
-        if (data.type === 'question') {
-          setQuestion(data.question);
-          setAnswer('');
-          setSelectedOption('');
-          setHasSubmitted(false);
-        }
-      } catch (error) {
-        console.error('解析SSE数据失败:', error);
-      }
-    };
+    const newSocket = io(socketUrl, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      timeout: 20000
+    });
 
-    eventSource.onerror = (error) => {
-      console.error('SSE连接错误:', error);
-      eventSource.close();
+    newSocket.on('connect', () => {
+      console.log('✅ Socket.IO已连接 ID:', newSocket.id);
+      setIsConnected(true);
+      // 加入课堂房间
+      newSocket.emit('join-classroom', code);
+    });
 
-      // 3秒后重连
-      setTimeout(() => {
-        window.location.reload();
-      }, 3000);
-    };
+    newSocket.on('joined', (data) => {
+      console.log('📚 已加入课堂:', data);
+    });
+
+    // ✅ 实时接收教师问题（不再轮询刷新！）
+    newSocket.on('new-question', (newQuestion) => {
+      console.log('📝 收到新问题:', newQuestion);
+      setQuestion(newQuestion);
+      setAnswer('');
+      setSelectedOption('');
+      setHasSubmitted(false);
+    });
+
+    newSocket.on('disconnect', () => {
+      console.log('❌ Socket.IO断开连接');
+      setIsConnected(false);
+    });
+
+    newSocket.on('connect_error', (error) => {
+      console.error('⚠️ Socket.IO连接错误:', error);
+    });
+
+    setSocket(newSocket);
 
     return () => {
-      eventSource.close();
+      console.log('🔌 断开Socket.IO连接');
+      newSocket.disconnect();
     };
   }, [code]);
 
-  // 提交答案
-  const handleSubmit = async () => {
-    if (!question) return;
+  // ✅ 提交答案（通过Socket.IO发送）
+  const handleSubmit = () => {
+    if (!question || !socket) return;
 
     const finalAnswer = question.type === 'vote' ? selectedOption : answer;
     if (!finalAnswer.trim()) {
@@ -79,30 +100,30 @@ export default function StudentClassroomPage({ params }: PageProps) {
 
     setIsSubmitting(true);
 
-    try {
-      const response = await fetch(`/api/classroom/${code}/answer`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          questionId: question.id,
-          answer: finalAnswer,
-          timestamp: new Date().toISOString(),
-        }),
-      });
-
-      if (response.ok) {
-        setHasSubmitted(true);
-      } else {
-        alert('提交失败，请重试');
+    // 通过Socket.IO实时发送答案
+    socket.emit('submit-answer', {
+      code,
+      answer: {
+        questionId: question.id,
+        answer: finalAnswer,
+        timestamp: new Date().toISOString(),
       }
-    } catch (error) {
-      console.error('提交答案失败:', error);
-      alert('提交失败，请检查网络');
-    } finally {
+    });
+
+    // 监听提交确认
+    socket.once('answer-submitted', (data) => {
+      console.log('✅ 答案已提交:', data);
+      setHasSubmitted(true);
       setIsSubmitting(false);
-    }
+    });
+
+    // 设置超时
+    setTimeout(() => {
+      if (isSubmitting) {
+        setIsSubmitting(false);
+        alert('提交超时，请重试');
+      }
+    }, 5000);
   };
 
   return (
@@ -112,13 +133,13 @@ export default function StudentClassroomPage({ params }: PageProps) {
         <Card className="p-4 bg-white/80 backdrop-blur">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+              <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
               <span className="text-sm font-medium text-gray-700">
                 课堂: {code}
               </span>
             </div>
             <span className="text-xs text-gray-500">
-              实时连接中
+              {isConnected ? 'Socket.IO 已连接' : '连接中...'}
             </span>
           </div>
         </Card>

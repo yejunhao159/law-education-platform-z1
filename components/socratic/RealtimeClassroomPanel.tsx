@@ -1,10 +1,11 @@
 /**
  * 实时课堂互动面板
- * 集成到苏格拉底对话教师端,实现实时问答互动
+ * 通过Socket.IO实现教师端实时互动
+ * @description 去除轮询逻辑，改用WebSocket实时推送
  */
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -21,6 +22,7 @@ import {
   CheckCircle2,
   Clock
 } from 'lucide-react';
+import { io, Socket } from 'socket.io-client';
 
 interface Answer {
   questionId: string;
@@ -43,9 +45,9 @@ interface RealtimeClassroomPanelProps {
   /** AI生成的建议问题 */
   suggestedQuestion?: string;
   /** 问题发布成功回调 */
-  onQuestionPublished?: (question: Question) => void;
+  onQuestionPublished?: (_question: Question) => void;
   /** 收到答案回调 */
-  onAnswersReceived?: (answers: Answer[]) => void;
+  onAnswersReceived?: (_answers: Answer[]) => void;
 }
 
 export function RealtimeClassroomPanel({
@@ -60,75 +62,104 @@ export function RealtimeClassroomPanel({
   const [isPublishing, setIsPublishing] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [answers, setAnswers] = useState<Answer[]>([]);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
 
   // 使用AI建议的问题
   useEffect(() => {
     if (suggestedQuestion && !questionContent) {
       setQuestionContent(suggestedQuestion);
     }
-  }, [suggestedQuestion]);
+  }, [suggestedQuestion, questionContent]);
 
-  // 定时获取学生答案
+  // ✅ Socket.IO连接（替代轮询）
   useEffect(() => {
-    if (!currentQuestion) return;
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL ||
+                      (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001');
 
-    const fetchAnswers = async () => {
-      try {
-        const response = await fetch(`/api/classroom/${classroomCode}/answers`);
-        if (response.ok) {
-          const data = await response.json();
-          setAnswers(data.answers || []);
-          onAnswersReceived?.(data.answers || []);
-        }
-      } catch (error) {
-        console.error('获取答案失败:', error);
-      }
+    console.log('🔌 [教师端] 连接Socket.IO:', socketUrl);
+
+    const newSocket = io(socketUrl, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000
+    });
+
+    newSocket.on('connect', () => {
+      console.log('✅ [教师端] Socket.IO已连接');
+      setIsConnected(true);
+      newSocket.emit('join-classroom', classroomCode);
+    });
+
+    // ✅ 实时接收学生答案（不再轮询！）
+    newSocket.on('new-answer', (answer) => {
+      console.log('💬 [教师端] 收到学生答案:', answer);
+      setAnswers(prev => {
+        const newAnswers = [...prev, answer];
+        onAnswersReceived?.(newAnswers);
+        return newAnswers;
+      });
+    });
+
+    newSocket.on('disconnect', () => {
+      console.log('❌ [教师端] Socket.IO断开');
+      setIsConnected(false);
+    });
+
+    setSocket(newSocket);
+
+    return () => {
+      newSocket.disconnect();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classroomCode]);
 
-    // 立即获取一次
-    fetchAnswers();
-
-    // 每3秒刷新
-    const interval = setInterval(fetchAnswers, 3000);
-    return () => clearInterval(interval);
-  }, [currentQuestion, classroomCode, onAnswersReceived]);
-
-  // 发布问题到实时流
-  const handlePublishQuestion = async () => {
+  // ✅ 发布问题（通过Socket.IO）
+  const handlePublishQuestion = () => {
     if (!questionContent.trim()) {
       alert('请输入问题内容');
       return;
     }
 
-    setIsPublishing(true);
-    try {
-      const response = await fetch(`/api/classroom/${classroomCode}/question`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: questionContent,
-          type: questionType,
-          options: questionType === 'vote' ? options : []
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setCurrentQuestion(data.question);
-        setAnswers([]); // 清空之前的答案
-        onQuestionPublished?.(data.question);
-
-        // 发布成功后清空输入
-        setQuestionContent('');
-      } else {
-        alert('发布失败,请重试');
-      }
-    } catch (error) {
-      console.error('发布问题失败:', error);
-      alert('发布失败,请检查网络');
-    } finally {
-      setIsPublishing(false);
+    if (!socket || !isConnected) {
+      alert('Socket.IO未连接，请稍后重试');
+      return;
     }
+
+    setIsPublishing(true);
+
+    const question: Question = {
+      id: Date.now().toString(),
+      content: questionContent,
+      type: questionType,
+      options: questionType === 'vote' ? options : undefined,
+      timestamp: new Date().toISOString()
+    };
+
+    // 通过Socket.IO实时发布
+    socket.emit('publish-question', {
+      code: classroomCode,
+      question
+    });
+
+    // 监听发布确认
+    socket.once('question-published', (data) => {
+      console.log('✅ [教师端] 问题已发布:', data);
+      setCurrentQuestion(question);
+      setAnswers([]); // 清空之前的答案
+      onQuestionPublished?.(question);
+      setQuestionContent('');
+      setIsPublishing(false);
+    });
+
+    // 设置超时
+    setTimeout(() => {
+      if (isPublishing) {
+        setIsPublishing(false);
+        alert('发布超时，请重试');
+      }
+    }, 5000);
   };
 
   // 统计答案分布
@@ -161,6 +192,7 @@ export function RealtimeClassroomPanel({
           <CardTitle className="flex items-center gap-2">
             <MessageSquare className="h-5 w-5" />
             实时课堂互动
+            {isConnected && <span className="ml-2 w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>}
           </CardTitle>
           <Badge variant="outline" className="flex items-center gap-1">
             <Users className="h-3 w-3" />
@@ -168,7 +200,7 @@ export function RealtimeClassroomPanel({
           </Badge>
         </div>
         <CardDescription>
-          向学生端实时推送问题并收集答案
+          {isConnected ? 'Socket.IO 已连接 - 实时推送' : '连接中...'}
         </CardDescription>
       </CardHeader>
 
@@ -194,7 +226,7 @@ export function RealtimeClassroomPanel({
                 <AlertDescription className="space-y-2">
                   <div className="text-sm font-medium">AI建议的问题:</div>
                   <div className="text-sm text-muted-foreground italic">
-                    "{suggestedQuestion}"
+                    &ldquo;{suggestedQuestion}&rdquo;
                   </div>
                   <Button
                     size="sm"

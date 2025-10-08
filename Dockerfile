@@ -66,6 +66,9 @@ ENV HOSTNAME="0.0.0.0"
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
+# 安装PM2进程管理器（用于同时运行Next.js和Socket.IO）
+RUN npm install -g pm2
+
 # 复制必要的文件
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
@@ -75,14 +78,25 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 # standalone 模式不会自动复制 .wasm 文件，需要手动复制
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/tiktoken/tiktoken_bg.wasm ./node_modules/tiktoken/tiktoken_bg.wasm
 
+# 复制Socket.IO服务器和PM2配置
+COPY --from=builder --chown=nextjs:nodejs /app/server ./server
+COPY --from=builder --chown=nextjs:nodejs /app/ecosystem.config.js ./ecosystem.config.js
+
+# 创建日志目录
+RUN mkdir -p /app/logs && chown -R nextjs:nodejs /app/logs
+
+# 创建数据目录（用于SQLite数据库）
+RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
+
 # 切换到非 root 用户
 USER nextjs
 
-EXPOSE 3000
+# 暴露端口（3000=Next.js, 3001=Socket.IO）
+EXPOSE 3000 3001
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"
 
-# 启动命令
-CMD ["node", "server.js"]
+# 启动命令（使用PM2管理两个进程）
+CMD ["pm2-runtime", "ecosystem.config.js"]

@@ -35,6 +35,8 @@ services:
     volumes:
       # 日志持久化
       - ./logs:/app/logs
+      # 数据库持久化
+      - ./data:/app/data
       # 用户上传文件持久化（如果有）
       # - ./uploads:/app/uploads
 
