@@ -12,19 +12,13 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  webpack: (config, { isServer }) => {
+  webpack: (config) => {
     // 配置pdf.js worker
     config.resolve.alias.canvas = false;
     config.resolve.alias.encoding = false;
 
-    // 修复 tiktoken WebAssembly 文件加载问题
-    if (isServer) {
-      // 确保 tiktoken 正确解析
-      config.resolve.alias = {
-        ...config.resolve.alias,
-        'tiktoken': require.resolve('tiktoken'),
-      };
-    }
+    // 注意：tiktoken WebAssembly 文件已在 Dockerfile 中手动复制
+    // 无需在此处配置 alias
 
     return config;
   },
