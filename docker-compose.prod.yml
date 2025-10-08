@@ -55,11 +55,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4'
-          memory: 4G
+          cpus: '2'
+          memory: 2G
         reservations:
-          cpus: '1'
-          memory: 1G
+          cpus: '0.5'
+          memory: 512M
 
     # 日志配置
     logging:
@@ -73,3 +73,4 @@ networks:
   default:
     name: law-edu-prod-network
     driver: bridge
+    external: true
