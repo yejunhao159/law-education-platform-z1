@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 // 移除复杂的标签页系统
 import { ArgumentNode } from './ArgumentTree';
@@ -625,54 +625,59 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
 
   return (
     <div className="max-w-7xl mx-auto p-6">
-      {/* 头部控制栏 */}
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">苏格拉底教学法 - 教师控制台</h2>
-          <p className="text-gray-600 mt-1">案件: {caseData.title}</p>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          {/* 控制按钮 */}
-          <Button
-            onClick={toggleSession}
-            variant={isActive ? "destructive" : "default"}
-          >
-            {isActive ? <Pause className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
-            {isActive ? '暂停' : '开始'}
-          </Button>
+      {/* 头部控制栏 - 优化设计 */}
+      <div className="mb-8 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-100 rounded-xl p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+              苏格拉底教学法 - 教师控制台
+            </h2>
+            <p className="text-gray-600 mt-2 text-base">
+              案件: <span className="font-semibold">{caseData.title}</span>
+            </p>
+          </div>
 
-          <Button onClick={resetSession} variant="outline">
-            <RotateCcw className="w-4 h-4 mr-2" />
-            重置
-          </Button>
+          <div className="flex items-center gap-3">
+            {/* 主要操作：开始/暂停 */}
+            <Button
+              onClick={toggleSession}
+              variant={isActive ? "destructive" : "default"}
+              size="lg"
+              className="shadow-md"
+            >
+              {isActive ? <Pause className="w-5 h-5 mr-2" /> : <Play className="w-5 h-5 mr-2" />}
+              {isActive ? '暂停会话' : '开始会话'}
+            </Button>
 
-          <Button onClick={generateClassroomCode} variant="outline">
-            <QrCode className="w-4 h-4 mr-2" />
-            课堂二维码
-          </Button>
+            {/* 次要操作 */}
+            <Button onClick={resetSession} variant="outline" size="lg">
+              <RotateCcw className="w-4 h-4 mr-2" />
+              重置
+            </Button>
 
-          <Button onClick={exportSession} variant="outline">
-            <Download className="w-4 h-4 mr-2" />
-            导出
-          </Button>
+            <Button onClick={generateClassroomCode} variant="outline" size="lg">
+              <QrCode className="w-4 h-4 mr-2" />
+              课堂二维码
+            </Button>
+
+            <Button onClick={exportSession} variant="outline" size="lg">
+              <Download className="w-4 h-4 mr-2" />
+              导出
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* 标签页：AI对话 + 实时互动 */}
       <Tabs defaultValue="dialogue" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="dialogue">
-            <Bot className="w-4 h-4 mr-2" />
+            <Bot className="w-5 h-5 mr-2" />
             AI对话引导
           </TabsTrigger>
           <TabsTrigger value="realtime">
-            <MessageSquare className="w-4 h-4 mr-2" />
+            <MessageSquare className="w-5 h-5 mr-2" />
             实时课堂互动
-          </TabsTrigger>
-          <TabsTrigger value="classroom-code">
-            <QrCode className="w-4 h-4 mr-2" />
-            课堂二维码
           </TabsTrigger>
         </TabsList>
 
@@ -866,55 +871,41 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
         </TabsContent>
 
         {/* Tab 2: 实时课堂互动 */}
-        <TabsContent value="realtime">
+        <TabsContent value="realtime" className="mt-6">
           {classroomSession ? (
-            <RealtimeClassroomPanel
-              classroomCode={classroomSession.code}
-              suggestedQuestion={currentAIQuestion || ''}
-              onQuestionPublished={handleQuestionPublished}
-              onAnswersReceived={handleAnswersReceived}
-            />
+            <div className="max-w-5xl mx-auto">
+              <RealtimeClassroomPanel
+                classroomCode={classroomSession.code}
+                suggestedQuestion={currentAIQuestion || ''}
+                onQuestionPublished={handleQuestionPublished}
+                onAnswersReceived={handleAnswersReceived}
+              />
+            </div>
           ) : (
-            <Card className="p-8 text-center">
-              <h3 className="text-lg font-semibold mb-4">还未创建课堂</h3>
-              <p className="text-gray-600 mb-6">
-                请先创建课堂二维码，学生扫码加入后即可使用实时互动功能
-              </p>
-              <Button onClick={generateClassroomCode}>
-                <QrCode className="w-4 h-4 mr-2" />
-                创建课堂二维码
-              </Button>
-            </Card>
+            <div className="max-w-2xl mx-auto">
+              <Card className="border-2 border-dashed border-gray-300 bg-gradient-to-br from-gray-50 to-blue-50">
+                <CardContent className="p-12 text-center">
+                  <div className="mb-6">
+                    <div className="w-20 h-20 mx-auto bg-gradient-to-br from-purple-100 to-blue-100 rounded-full flex items-center justify-center">
+                      <QrCode className="w-10 h-10 text-purple-600" />
+                    </div>
+                  </div>
+                  <h3 className="text-2xl font-bold mb-3 bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+                    还未创建课堂
+                  </h3>
+                  <p className="text-gray-600 mb-8 text-lg">
+                    创建课堂后，学生可以扫码加入并实时互动
+                  </p>
+                  <Button onClick={generateClassroomCode} size="lg" className="shadow-lg">
+                    <QrCode className="w-5 h-5 mr-2" />
+                    创建课堂二维码
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
           )}
         </TabsContent>
 
-        {/* Tab 3: 课堂二维码 */}
-        <TabsContent value="classroom-code">
-          {classroomSession ? (
-            <Card className="p-6">
-              <ClassroomCode
-                session={classroomSession}
-                isTeacher={true}
-                config={{
-                  showQRCode: true,
-                  allowShare: true,
-                  showStats: true
-                }}
-              />
-            </Card>
-          ) : (
-            <Card className="p-8 text-center">
-              <h3 className="text-lg font-semibold mb-4">还未创建课堂</h3>
-              <p className="text-gray-600 mb-6">
-                创建课堂二维码，让学生扫码加入课堂
-              </p>
-              <Button onClick={generateClassroomCode}>
-                <QrCode className="w-4 h-4 mr-2" />
-                创建课堂二维码
-              </Button>
-            </Card>
-          )}
-        </TabsContent>
       </Tabs>
 
       {/* 课堂二维码弹窗 */}

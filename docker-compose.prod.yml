@@ -19,7 +19,8 @@ services:
 
     # 端口映射
     ports:
-      - "3000:3000"
+      - "3000:3000"  # Next.js应用
+      - "3001:3001"  # Socket.IO服务器
 
     # 环境变量（从 .env.production 文件加载）
     env_file:

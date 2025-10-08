@@ -186,21 +186,30 @@ export function RealtimeClassroomPanel({
     : [];
 
   return (
-    <Card className="w-full">
-      <CardHeader>
+    <Card className="w-full shadow-lg border-2">
+      <CardHeader className="bg-gradient-to-r from-purple-50 to-blue-50 border-b">
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5" />
-            实时课堂互动
-            {isConnected && <span className="ml-2 w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>}
+          <CardTitle className="flex items-center gap-3 text-xl">
+            <div className="p-2 bg-white rounded-lg shadow-sm">
+              <MessageSquare className="h-6 w-6 text-purple-600" />
+            </div>
+            <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+              实时课堂互动
+            </span>
+            {isConnected && (
+              <span className="flex items-center gap-2 text-sm font-normal text-green-600">
+                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                已连接
+              </span>
+            )}
           </CardTitle>
-          <Badge variant="outline" className="flex items-center gap-1">
-            <Users className="h-3 w-3" />
-            {answers.length} 人已回答
+          <Badge variant="outline" className="flex items-center gap-2 px-3 py-1.5 text-sm border-2">
+            <Users className="h-4 w-4" />
+            <span className="font-semibold">{answers.length}</span> 人已回答
           </Badge>
         </div>
-        <CardDescription>
-          {isConnected ? 'Socket.IO 已连接 - 实时推送' : '连接中...'}
+        <CardDescription className="mt-2 text-base">
+          {isConnected ? '🚀 Socket.IO 实时推送 - 学生答案即时显示' : '⏳ 正在连接...'}
         </CardDescription>
       </CardHeader>
 
