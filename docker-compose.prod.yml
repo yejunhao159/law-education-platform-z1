@@ -9,8 +9,6 @@
 #   查看日志：docker-compose -f docker-compose.prod.yml logs -f
 # =============================================================================
 
-version: '3.9'
-
 services:
   # 主应用服务
   app:
@@ -52,14 +50,15 @@ services:
     restart: always
 
     # 资源限制（根据服务器配置调整）
+    # 修改原因：服务器配置为2核，原配置4核超出硬件限制
     deploy:
       resources:
         limits:
-          cpus: '4'
-          memory: 4G
+          cpus: '2'       # 修改：从4核改为2核，匹配服务器配置
+          memory: 2G      # 修改：从4G改为2G，匹配2核服务器的合理配置
         reservations:
-          cpus: '1'
-          memory: 1G
+          cpus: '0.5'     # 修改：从1核改为0.5核，保证最低资源
+          memory: 512M    # 修改：从1G改为512M，保证最低资源
 
     # 日志配置
     logging:

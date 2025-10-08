@@ -117,8 +117,17 @@ npm run start
 
 MIT License
 
-## 🔗 相关链接
+## 📖 文档
 
-- [项目文档](./docs/)
-- [API文档](./docs/api/)
-- [部署指南](./DEPLOYMENT.md)
+### 核心文档
+- **[架构指南](./docs/CLAUDE.md)** - 项目架构、DDD设计、开发规范（⭐ 新贡献者必读）
+- **[部署文档](./docs/DEPLOYMENT.md)** - 生产环境部署完整指南
+
+### 技术文档
+- [文档索引](./docs/README.md) - 所有技术文档的导航
+- [实现概览](./docs/implementation-overview.md) - 技术栈和实现细节
+- [苏格拉底对话增强](./docs/socratic-enhancements-20251004.md) - AI对话系统设计
+
+### 专项指南
+- [京东云部署](./docs/DEPLOY_JD_CLOUD.md)
+- [Tiktoken修复方案](./docs/TIKTOKEN_FIX_DEPLOYMENT.md)

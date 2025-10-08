@@ -71,6 +71,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
+# 修复 tiktoken WebAssembly 文件缺失问题
+# standalone 模式不会自动复制 .wasm 文件，需要手动复制
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/tiktoken/tiktoken_bg.wasm ./node_modules/tiktoken/tiktoken_bg.wasm
+
 # 切换到非 root 用户
 USER nextjs
 
