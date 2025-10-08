@@ -56,11 +56,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'       # 修改：从4核改为2核，匹配服务器配置
-          memory: 2G      # 修改：从4G改为2G，匹配2核服务器的合理配置
+          cpus: '2'
+          memory: 2G
         reservations:
-          cpus: '0.5'     # 修改：从1核改为0.5核，保证最低资源
-          memory: 512M    # 修改：从1G改为512M，保证最低资源
+          cpus: '0.5'
+          memory: 512M
 
     # 日志配置
     logging:
@@ -74,3 +74,4 @@ networks:
   default:
     name: law-edu-prod-network
     driver: bridge
+    external: true

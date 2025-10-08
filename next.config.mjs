@@ -17,8 +17,18 @@ const nextConfig = {
     config.resolve.alias.canvas = false;
     config.resolve.alias.encoding = false;
 
-    // 注意：tiktoken WebAssembly 文件已在 Dockerfile 中手动复制
-    // 无需在此处配置 alias
+    // 配置WASM文件支持
+    config.experiments = {
+      ...config.experiments,
+      asyncWebAssembly: true,
+      syncWebAssembly: true,
+    };
+
+    // 确保WASM文件被正确处理
+    config.module.rules.push({
+      test: /\.wasm$/,
+      type: 'webassembly/async',
+    });
 
     return config;
   },
