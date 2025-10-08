@@ -24,8 +24,13 @@ const storage = {
 // 创建Socket.IO服务器
 const io = new Server(3001, {
   cors: {
-    origin: '*', // 生产环境应该限制具体域名
-    methods: ['GET', 'POST']
+    // 开发环境：允许所有来源（方便调试）
+    // 生产环境：限制为具体域名（安全）
+    origin: process.env.NODE_ENV === 'production'
+      ? ['http://115.29.191.180:3000', 'https://115.29.191.180:3000']
+      : '*',
+    methods: ['GET', 'POST'],
+    credentials: true
   },
   // 连接配置
   pingTimeout: 60000,

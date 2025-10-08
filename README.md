@@ -29,9 +29,20 @@ DEEPSEEK_API_URL=your_api_url
 ```
 
 ### 启动开发服务器
+
+**方式一：仅启动 Next.js（不包含实时课堂功能）**
 ```bash
 npm run dev
 ```
+
+**方式二：启动完整服务（推荐 - 包含实时课堂互动）**
+```bash
+npm run dev:all
+```
+此命令会同时启动：
+- Next.js 开发服务器（端口 3000）
+- Socket.IO 实时通信服务器（端口 3001）
+
 访问 http://localhost:3000
 
 ## 🏗️ 技术架构
