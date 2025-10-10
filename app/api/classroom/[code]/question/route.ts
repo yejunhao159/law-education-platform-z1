@@ -73,7 +73,7 @@ export async function POST(
         meta: {
           classroomCode: code,
           questionCount: classroomQuestions.get(code)!.length,
-          socketIOUrl: process.env.NEXT_PUBLIC_SOCKET_URL || 'ws://localhost:3001',
+          socketIOUrl: process.env.NEXT_PUBLIC_SOCKET_URL || 'ws://localhost:3000',
         },
       },
       { headers: corsHeaders }

@@ -37,13 +37,14 @@ export default function StudentClassroomPage({ params }: PageProps) {
 
   // ✅ Socket.IO连接（替代SSE）
   useEffect(() => {
-    // 根据环境选择Socket.IO服务器地址
+    // 使用相对路径通过Nginx代理连接Socket.IO（修复硬编码端口3001问题）
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL ||
-                      (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001');
+                      (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
 
     console.log('🔌 连接Socket.IO服务器:', socketUrl);
 
     const newSocket = io(socketUrl, {
+      path: '/socket.io',
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 5,
