@@ -27,7 +27,14 @@ const io = new Server(3001, {
     // 开发环境：允许所有来源（方便调试）
     // 生产环境：限制为具体域名（安全）
     origin: process.env.NODE_ENV === 'production'
-      ? ['http://115.29.191.180:3000', 'https://115.29.191.180:3000']
+      ? [
+          'http://115.29.191.180:3000',
+          'https://115.29.191.180:3000',
+          'http://legal-education.deepracticex.com',
+          'https://legal-education.deepracticex.com',
+          'http://deepractice.ai',
+          'https://deepractice.ai'
+        ]
       : '*',
     methods: ['GET', 'POST'],
     credentials: true
