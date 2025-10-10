@@ -14,7 +14,7 @@ services:
   app:
     # 使用 GitHub Container Registry 的镜像
     # 格式：ghcr.io/<用户名>/<仓库名>:<版本>
-    image: ghcr.io/yejunhao159/law-education-platform-z1:v1.1.5
+    image: ghcr.io/yejunhao159/law-education-platform-z1:v1.1.6
     container_name: law-edu-app-prod
 
     # 端口映射
