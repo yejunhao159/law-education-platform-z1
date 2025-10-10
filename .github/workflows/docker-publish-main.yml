@@ -1,0 +1,110 @@
+# =============================================================================
+# GitHub Actions - 主分支自动构建Docker镜像
+# =============================================================================
+# 触发条件：推送到main分支
+# 功能：
+#   1. 自动构建 Docker 镜像
+#   2. 推送到 GitHub Container Registry (GHCR)
+#   3. 标签：latest + commit SHA
+#   4. 验证Socket.IO依赖完整性
+# =============================================================================
+
+name: Build Docker Image on Main Push
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/**'
+      - '!.github/workflows/**'
+
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Image (Main)
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=main-
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify Socket.IO dependencies in image
+        run: |
+          echo "🔍 Verifying Socket.IO dependencies..."
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          
+          # 检查关键依赖是否存在
+          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            sh -c '
+              echo "Checking Socket.IO dependencies..."
+              test -d /app/node_modules/socket.io && echo "✅ socket.io found" || exit 1
+              test -d /app/node_modules/negotiator && echo "✅ negotiator found" || exit 1
+              test -d /app/node_modules/accepts && echo "✅ accepts found" || exit 1
+              test -d /app/node_modules/cors && echo "✅ cors found" || exit 1
+              test -d /app/node_modules/mime-types && echo "✅ mime-types found" || exit 1
+              test -d /app/server && echo "✅ Socket.IO server found" || exit 1
+              echo "✅ All Socket.IO dependencies verified!"
+            '
+
+      - name: Create deployment summary
+        run: |
+          echo "## 🚀 Docker Image Built from Main" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Registry:** ${{ env.REGISTRY }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Verified Dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "- Socket.IO core modules" >> $GITHUB_STEP_SUMMARY
+          echo "- negotiator (Issue #49, #50 fix)" >> $GITHUB_STEP_SUMMARY
+          echo "- accepts, cors, mime-types" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 部署命令" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo "docker-compose -f docker-compose.prod.yml up -d" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

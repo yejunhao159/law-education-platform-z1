@@ -97,6 +97,15 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/base64id ./node_modu
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/cookie ./node_modules/cookie
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/cors ./node_modules/cors
 
+# 修复 Socket.IO 传递依赖缺失问题（Issue #49, #50）
+# 这些是 accepts、cors 等模块的依赖，在 standalone 模式下不会自动打包
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/negotiator ./node_modules/negotiator
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/mime-types ./node_modules/mime-types
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/mime-db ./node_modules/mime-db
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/vary ./node_modules/vary
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/object-inspect ./node_modules/object-inspect
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/side-channel ./node_modules/side-channel
+
 # 复制Socket.IO服务器和PM2配置
 COPY --from=builder --chown=nextjs:nodejs /app/server ./server
 COPY --from=builder --chown=nextjs:nodejs /app/ecosystem.config.js ./ecosystem.config.js
