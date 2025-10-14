@@ -480,35 +480,212 @@ export class SocraticDialogueService {
 
   /**
    * 构建当前问题上下文
+   * 支持完整的 LegalCase 对象，结构化输出所有案件信息
    */
   private buildCurrentContext(request: SocraticRequest): string {
     const parts = [];
 
+    // 处理案件上下文
     if (request.caseContext) {
-      const caseContextText = typeof request.caseContext === 'string'
-        ? request.caseContext
-        : JSON.stringify(request.caseContext, null, 2);
-      parts.push(`案例背景：${caseContextText}`);
+      if (typeof request.caseContext === 'object' && request.caseContext !== null) {
+        // 🔥 处理完整的 LegalCase 对象
+        parts.push(this.formatLegalCase(request.caseContext));
+      } else if (typeof request.caseContext === 'string') {
+        // 兼容旧版本字符串格式
+        parts.push(`## 案例背景\n${request.caseContext}`);
+      }
     }
 
+    // 其他上下文信息
     if (request.caseInfo) {
-      parts.push(`案例要点：${JSON.stringify(request.caseInfo, null, 2)}`);
+      parts.push(`\n## 案例要点\n${JSON.stringify(request.caseInfo, null, 2)}`);
     }
 
     if (request.currentTopic) {
-      parts.push(`当前讨论主题：${request.currentTopic}`);
+      parts.push(`\n## 当前讨论主题\n${request.currentTopic}`);
     }
 
     const lastMessage = request.messages?.[request.messages.length - 1];
     if (lastMessage && lastMessage.role === 'user') {
-      parts.push(`学生的最新回答：${lastMessage.content}`);
+      parts.push(`\n## 学生的最新回答\n${lastMessage.content}`);
     }
 
     if (request.studentInput) {
-      parts.push(`学生的补充输入：${request.studentInput}`);
+      parts.push(`\n## 学生的补充输入\n${request.studentInput}`);
     }
 
     return parts.join('\n');
+  }
+
+  /**
+   * 格式化完整的 LegalCase 对象为结构化文本
+   */
+  private formatLegalCase(caseData: any): string {
+    const sections = [];
+
+    // 1. 基本信息
+    if (caseData.basicInfo) {
+      sections.push('## 案件基本信息');
+      const info = caseData.basicInfo;
+      if (info.caseNumber) sections.push(`案号：${info.caseNumber}`);
+      if (info.court) sections.push(`法院：${info.court}`);
+      if (info.judgeDate) sections.push(`判决日期：${info.judgeDate}`);
+      if (info.caseType) sections.push(`案件类型：${info.caseType}`);
+
+      // 当事人信息
+      if (info.parties) {
+        sections.push('\n### 当事人');
+        if (info.parties.plaintiff?.length > 0) {
+          sections.push(`原告：${info.parties.plaintiff.map((p: any) => p.name).join('、')}`);
+        }
+        if (info.parties.defendant?.length > 0) {
+          sections.push(`被告：${info.parties.defendant.map((p: any) => p.name).join('、')}`);
+        }
+        if (info.parties.thirdParty?.length > 0) {
+          sections.push(`第三人：${info.parties.thirdParty.map((p: any) => p.name).join('、')}`);
+        }
+      }
+    }
+
+    // 2. 事实认定
+    if (caseData.threeElements?.facts) {
+      sections.push('\n## 事实认定');
+      const facts = caseData.threeElements.facts;
+
+      if (facts.summary) {
+        sections.push(`\n事实摘要：${facts.summary}`);
+      }
+
+      if (facts.keyFacts?.length > 0) {
+        sections.push('\n### 关键事实');
+        facts.keyFacts.forEach((fact: string, i: number) => {
+          sections.push(`${i + 1}. ${fact}`);
+        });
+      }
+
+      if (facts.disputedFacts?.length > 0) {
+        sections.push('\n### 争议事实');
+        facts.disputedFacts.forEach((fact: string, i: number) => {
+          sections.push(`${i + 1}. ${fact}`);
+        });
+      }
+
+      if (facts.undisputedFacts?.length > 0) {
+        sections.push('\n### 无争议事实');
+        facts.undisputedFacts.forEach((fact: string, i: number) => {
+          sections.push(`${i + 1}. ${fact}`);
+        });
+      }
+    }
+
+    // 3. 证据
+    if (caseData.threeElements?.evidence) {
+      sections.push('\n## 证据');
+      const evidence = caseData.threeElements.evidence;
+
+      if (evidence.summary) {
+        sections.push(`\n证据摘要：${evidence.summary}`);
+      }
+
+      if (evidence.items?.length > 0) {
+        sections.push('\n### 证据列表');
+        evidence.items.forEach((item: any, i: number) => {
+          sections.push(`${i + 1}. ${item.name}（${item.type}，${item.submittedBy}提交）`);
+          if (item.description) {
+            sections.push(`   - 证明目的：${item.description}`);
+          }
+          if (item.courtOpinion) {
+            sections.push(`   - 法院意见：${item.courtOpinion}`);
+          }
+          if (item.accepted !== undefined) {
+            sections.push(`   - 是否采纳：${item.accepted ? '是' : '否'}`);
+          }
+        });
+      }
+
+      if (evidence.chainAnalysis) {
+        sections.push('\n### 证据链分析');
+        const chain = evidence.chainAnalysis;
+        sections.push(`- 完整性：${chain.complete ? '完整' : '不完整'}`);
+        sections.push(`- 强度：${chain.strength}`);
+        if (chain.missingLinks?.length > 0) {
+          sections.push(`- 缺失环节：${chain.missingLinks.join('、')}`);
+        }
+        if (chain.analysis) {
+          sections.push(`- 分析：${chain.analysis}`);
+        }
+      }
+    }
+
+    // 4. 法律依据
+    if (caseData.threeElements?.reasoning?.legalBasis?.length > 0) {
+      sections.push('\n## 法律依据');
+      caseData.threeElements.reasoning.legalBasis.forEach((basis: any, i: number) => {
+        sections.push(`\n${i + 1}. ${basis.law} ${basis.article}${basis.clause ? ` ${basis.clause}` : ''}`);
+        if (basis.content) {
+          sections.push(`   - 条文：${basis.content}`);
+        }
+        if (basis.application) {
+          sections.push(`   - 适用：${basis.application}`);
+        }
+        if (basis.interpretation) {
+          sections.push(`   - 解释：${basis.interpretation}`);
+        }
+      });
+    }
+
+    // 5. 逻辑推理链
+    if (caseData.threeElements?.reasoning?.logicChain?.length > 0) {
+      sections.push('\n## 逻辑推理链');
+      caseData.threeElements.reasoning.logicChain.forEach((step: any, i: number) => {
+        sections.push(`\n${i + 1}. 推理步骤`);
+        sections.push(`   - 前提：${step.premise}`);
+        sections.push(`   - 推理：${step.inference}`);
+        sections.push(`   - 结论：${step.conclusion}`);
+        if (step.supportingEvidence?.length > 0) {
+          sections.push(`   - 支持证据：${step.supportingEvidence.join('、')}`);
+        }
+      });
+    }
+
+    // 6. 关键论点
+    if (caseData.threeElements?.reasoning?.keyArguments?.length > 0) {
+      sections.push('\n## 关键论点');
+      caseData.threeElements.reasoning.keyArguments.forEach((arg: string, i: number) => {
+        sections.push(`${i + 1}. ${arg}`);
+      });
+    }
+
+    // 7. 判决结论
+    if (caseData.threeElements?.reasoning?.judgment) {
+      sections.push('\n## 判决结论');
+      sections.push(caseData.threeElements.reasoning.judgment);
+    }
+
+    // 8. 时间线（如果有详细时间线且与facts.timeline不重复）
+    if (caseData.timeline?.length > 0) {
+      sections.push('\n## 时间线');
+      caseData.timeline.forEach((event: any, i: number) => {
+        let eventLine = `${i + 1}. ${event.date}: ${event.event || event.title || ''}`;
+        if (event.actors?.length > 0) {
+          eventLine += ` （涉及：${event.actors.join('、')}）`;
+        }
+        if (event.location) {
+          eventLine += ` [${event.location}]`;
+        }
+        if (event.importance) {
+          const importanceMap: Record<string, string> = {
+            critical: '关键',
+            important: '重要',
+            normal: '一般'
+          };
+          eventLine += ` 【${importanceMap[event.importance] || event.importance}】`;
+        }
+        sections.push(eventLine);
+      });
+    }
+
+    return sections.join('\n');
   }
 
   /**

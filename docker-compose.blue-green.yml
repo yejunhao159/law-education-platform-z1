@@ -1,0 +1,143 @@
+# =============================================================================
+# Docker Compose 配置 - 蓝绿部署
+# =============================================================================
+# 用途：零停机部署（Blue-Green Deployment）
+# 使用方法：
+#   1. 部署绿色环境：docker-compose -f docker-compose.blue-green.yml up -d app-green
+#   2. 验证绿色环境：curl http://localhost:3002/api/health
+#   3. 切换流量（通过 nginx 或负载均衡器）
+#   4. 停止蓝色环境：docker-compose -f docker-compose.blue-green.yml stop app-blue
+# =============================================================================
+
+services:
+  # 蓝色环境（当前生产环境）
+  app-blue:
+    image: ghcr.io/yejunhao159/law-education-platform-z1:v1.1.6
+    container_name: law-edu-app-blue
+    ports:
+      - "3000:3000"  # Next.js
+      - "3001:3001"  # Socket.IO
+    env_file:
+      - .env.production
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - DEPLOYMENT_SLOT=blue
+    volumes:
+      - ./logs-blue:/app/logs
+      - ./data:/app/data
+      - ./backups:/app/backups
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - |
+          node -e "
+          const http = require('http');
+          Promise.all([
+            new Promise((resolve) => {
+              http.get('http://localhost:3000/api/health', (r) => {
+                resolve(r.statusCode === 200);
+              }).on('error', () => resolve(false));
+            }),
+            new Promise((resolve) => {
+              http.get('http://localhost:3001/socket.io/', (r) => {
+                resolve(r.statusCode === 200 || r.statusCode === 400);
+              }).on('error', () => resolve(false));
+            })
+          ]).then(([nextjs, socket]) => {
+            process.exit(nextjs && socket ? 0 : 1);
+          });
+          "
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "10"
+    networks:
+      - app-network
+
+  # 绿色环境（新版本部署）
+  app-green:
+    image: ghcr.io/yejunhao159/law-education-platform-z1:latest
+    container_name: law-edu-app-green
+    ports:
+      - "3002:3000"  # Next.js (不同端口)
+      - "3003:3001"  # Socket.IO (不同端口)
+    env_file:
+      - .env.production
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - DEPLOYMENT_SLOT=green
+    volumes:
+      - ./logs-green:/app/logs
+      - ./data:/app/data
+      - ./backups:/app/backups
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - |
+          node -e "
+          const http = require('http');
+          Promise.all([
+            new Promise((resolve) => {
+              http.get('http://localhost:3000/api/health', (r) => {
+                resolve(r.statusCode === 200);
+              }).on('error', () => resolve(false));
+            }),
+            new Promise((resolve) => {
+              http.get('http://localhost:3001/socket.io/', (r) => {
+                resolve(r.statusCode === 200 || r.statusCode === 400);
+              }).on('error', () => resolve(false));
+            })
+          ]).then(([nextjs, socket]) => {
+            process.exit(nextjs && socket ? 0 : 1);
+          });
+          "
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "10"
+    networks:
+      - app-network
+    profiles:
+      - green  # 默认不启动，需要显式指定
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  data:
+    driver: local
+  backups:
+    driver: local

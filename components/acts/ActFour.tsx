@@ -4,7 +4,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Download, FileText, Scale, Shield, MessageCircle, Lightbulb, CheckCircle, Quote, Clock, Target } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Download, FileText, Scale, Shield, MessageCircle, Lightbulb, CheckCircle, Quote, Clock, Target, Presentation } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,14 +15,15 @@ import { useTeachingStore } from '@/src/domains/teaching-acts/stores/useTeaching
 import type { CaseLearningReport } from '@/src/types';
 
 export function ActFour() {
-  const { 
-    summaryData, 
-    setGeneratingReport, 
+  const router = useRouter();
+  const {
+    summaryData,
+    setGeneratingReport,
     setCaseLearningReport,
     setCurrentAct,
-    markActComplete 
+    markActComplete
   } = useTeachingStore();
-  
+
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -35,12 +37,31 @@ export function ActFour() {
     try {
       setError(null);
       setGeneratingReport(true);
-      
+
+      // 🔧 修复：从客户端Store读取数据并传递给API
+      const store = useTeachingStore.getState();
+      const requestData = {
+        uploadData: store.uploadData,
+        analysisData: store.analysisData,
+        socraticData: {
+          level: store.socraticData.level,
+          completedNodes: Array.from(store.socraticData.completedNodes),
+        }
+      };
+
+      console.log('📤 [ActFour] 发送Store数据到API:', {
+        uploadData存在: !!requestData.uploadData.extractedElements,
+        analysisData存在: !!requestData.analysisData.result,
+        socraticLevel: requestData.socraticData.level,
+        completedNodes: requestData.socraticData.completedNodes.length
+      });
+
       const response = await fetch('/api/teaching-acts/summary', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestData)
       });
-      
+
       const result = await response.json();
       
       if (!result.success) {
@@ -301,6 +322,16 @@ export function ActFour() {
           <Download className="w-4 h-4 mr-2" />
           下载报告
         </Button>
+
+        {/* PPT生成按钮 - 跳转到独立页面 */}
+        <Button
+          variant="outline"
+          onClick={() => router.push('/teaching/ppt/generate')}
+        >
+          <Presentation className="w-4 h-4 mr-2" />
+          生成教学PPT
+        </Button>
+
         <Button onClick={startNewCase}>
           学习下一个案例
         </Button>

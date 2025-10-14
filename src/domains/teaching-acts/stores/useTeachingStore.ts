@@ -345,7 +345,16 @@ export const useTeachingStore = create<TeachingStore>()(
           state.error = error;
         }),
 
-      reset: () =>
+      reset: () => {
+        // 🔧 修复：先清除localStorage中的持久化数据
+        try {
+          localStorage.removeItem('teaching-store');
+          console.log('✅ [Store] localStorage已清除');
+        } catch (error) {
+          console.error('❌ [Store] 清除localStorage失败:', error);
+        }
+
+        // 然后重置内存state
         set(() => ({
           ...initialState,
           socraticData: {
@@ -353,7 +362,10 @@ export const useTeachingStore = create<TeachingStore>()(
             completedNodes: new Set(),
           },
           editingFields: new Set(),
-        })),
+        }));
+
+        console.log('✅ [Store] 状态已重置为初始值');
+      },
     })),
     {
       name: 'teaching-store',
@@ -364,9 +376,21 @@ export const useTeachingStore = create<TeachingStore>()(
         // 🚨 移除 storyChapters 的持久化，防止缓存问题
         // storyChapters: state.storyChapters,  // 不再持久化故事章节
         autoTransition: state.autoTransition,
+        // 🔗 数据桥接：持久化第一幕和第二幕数据（第四幕需要）
+        uploadData: state.uploadData,
+        analysisData: {
+          result: state.analysisData.result,
+          isAnalyzing: false, // 不持久化loading状态
+        },
         socraticData: {
           ...state.socraticData,
           completedNodes: Array.from(state.socraticData.completedNodes),
+        },
+        // ✅ 新增：持久化第四幕数据（PPT生成需要）
+        summaryData: {
+          report: state.summaryData.report,
+          caseLearningReport: state.summaryData.caseLearningReport,
+          isGenerating: false, // 不持久化loading状态
         },
       }),
       // 恢复时处理Set类型

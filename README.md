@@ -133,6 +133,7 @@ MIT License
 ### 核心文档
 - **[架构指南](./docs/CLAUDE.md)** - 项目架构、DDD设计、开发规范（⭐ 新贡献者必读）
 - **[部署文档](./docs/DEPLOYMENT.md)** - 生产环境部署完整指南
+- **[DevOps指南](./docs/DEVOPS.md)** - CI/CD、Docker部署、自动化运维（⭐ 运维必读）
 
 ### 技术文档
 - [文档索引](./docs/README.md) - 所有技术文档的导航

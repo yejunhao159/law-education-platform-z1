@@ -88,6 +88,24 @@ export const useSocraticDialogueStore = create<SocraticDialogueStore>()(
           timestamp: Date.now(),
         };
         state.messages.push(message);
+
+        // 🔗 数据桥接：同步对话消息计数到 useTeachingStore（第四幕需要）
+        if (typeof window !== 'undefined') {
+          import('@/src/domains/teaching-acts/stores/useTeachingStore').then(({ useTeachingStore }) => {
+            // 简单记录：当前讨论深度等级
+            const levelMap = { beginner: 1, intermediate: 2, advanced: 3 } as const;
+            const numericLevel = levelMap[state.currentLevel] || 1;
+
+            // 更新苏格拉底数据的level
+            const teachingStore = useTeachingStore.getState();
+            if (teachingStore.socraticData.level !== numericLevel) {
+              // 🔧 修复：实际调用方法更新level
+              while (teachingStore.socraticData.level < numericLevel) {
+                teachingStore.progressSocraticLevel();
+              }
+            }
+          });
+        }
       }),
 
     updateMessage: (messageId, content) =>

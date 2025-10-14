@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ArgumentNode } from './ArgumentTree';
 import { ClassroomCode } from './ClassroomCode';
 import { RealtimeClassroomPanel } from './RealtimeClassroomPanel';
+import MessageItem from './MessageItem';
 import { ClassroomSession } from '@/lib/types/socratic';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -27,13 +28,10 @@ import {
  * 简化设计，专注于教师引导学生思考的核心功能
  */
 
+import type { LegalCase } from '@/types/legal-case';
+
 interface TeacherSocraticProps {
-  caseData: {
-    title: string;
-    facts: string[];
-    laws: string[];
-    dispute: string;
-  };
+  caseData: LegalCase;
   /** 可选：外部传入的课堂代码（用于独立访问模式） */
   initialClassroomCode?: string;
 }
@@ -160,7 +158,7 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
               timestamp: new Date().toISOString()
             }
           ],
-          caseContext: `案件：${caseData.title}\n争议：${caseData.dispute}\n事实：${caseData.facts.join('；')}\n法条：${caseData.laws.join('；')}`,
+          caseContext: caseData, // 🔥 传递完整的案件对象，而非字符串
           currentTopic: content,
           level: 'INTERMEDIATE',
           mode: 'EXPLORATION',
@@ -168,10 +166,12 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
           // 保持向后兼容的字段
           question: content,
           context: {
-            caseTitle: caseData.title,
-            facts: caseData.facts,
-            laws: caseData.laws,
-            dispute: caseData.dispute,
+            caseTitle: caseData.basicInfo?.caseNumber || '案例分析',
+            facts: caseData.threeElements?.facts?.keyFacts || [],
+            laws: caseData.threeElements?.reasoning?.legalBasis?.map(basis =>
+              `${basis.law} ${basis.article}${basis.content ? `: ${basis.content}` : ''}`
+            ) || [],
+            dispute: caseData.threeElements?.facts?.disputedFacts || [],
             previousMessages: messages.map(m => ({
               role: m.role,
               content: m.content
@@ -437,10 +437,11 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
     if (!isActive) {
       // 开始会话时添加初始消息
       const aiMessageId = `msg-${Date.now()}`;
+      const caseTitle = caseData.basicInfo?.caseNumber || '案件';
       const welcomeMessage = {
         id: aiMessageId,
         role: 'ai' as const,
-        content: `正在分析案件"${caseData.title}"...`,
+        content: `正在分析案件"${caseTitle}"...`,
         timestamp: new Date().toLocaleTimeString(),
         suggestions: []
       };
@@ -506,7 +507,7 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
 现在，请基于这个案件生成你的第一个问题。`,
               timestamp: new Date().toISOString()
             }],
-            caseContext: `案件：${caseData.title}\n争议：${caseData.dispute}\n事实：${caseData.facts.join('；')}\n法条：${caseData.laws.join('；')}`,
+            caseContext: caseData, // 🔥 传递完整的案件对象
             currentTopic: '案件深度分析与教学准备',
             level: 'INTERMEDIATE',
             mode: 'EXPLORATION',
@@ -514,10 +515,12 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
             // 保持向后兼容的字段
             question: '案件深度分析与教学准备',
             context: {
-              caseTitle: caseData.title,
-              facts: caseData.facts,
-              laws: caseData.laws,
-              dispute: caseData.dispute,
+              caseTitle: caseData.basicInfo?.caseNumber || '案例分析',
+              facts: caseData.threeElements?.facts?.keyFacts || [],
+              laws: caseData.threeElements?.reasoning?.legalBasis?.map(basis =>
+                `${basis.law} ${basis.article}${basis.content ? `: ${basis.content}` : ''}`
+              ) || [],
+              dispute: caseData.threeElements?.facts?.disputedFacts || [],
               previousMessages: []
             }
           })
@@ -592,7 +595,7 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
         setMessages([{
           id: aiMessageId,
           role: 'ai' as const,
-          content: `案件分析失败，请稍后重试或手动输入问题开始教学。\n\n案件：${caseData.title}\n争议：${caseData.dispute}`,
+          content: `案件分析失败，请稍后重试或手动输入问题开始教学。\n\n案件：${caseData.basicInfo?.caseNumber || '未知案件'}\n争议：${caseData.threeElements?.facts?.disputedFacts?.join(', ') || '待分析'}`,
           timestamp: new Date().toLocaleTimeString(),
           suggestions: []
         }]);
@@ -633,7 +636,7 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
               苏格拉底教学法 - 教师控制台
             </h2>
             <p className="text-gray-600 mt-2 text-base">
-              案件: <span className="font-semibold">{caseData.title}</span>
+              案件: <span className="font-semibold">{caseData.basicInfo?.caseNumber || caseData.threeElements?.facts?.caseTitle || '案件分析'}</span>
             </p>
           </div>
 
@@ -684,130 +687,52 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
         {/* Tab 1: AI对话引导 */}
         <TabsContent value="dialogue">
           <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
-            {/* 左侧：对话区域 */}
-            <Card className="p-4 flex flex-col h-[1100px]">
+            {/* 左侧：对话区域 - 优化：增加高度以显示更多内容 */}
+            <Card className="p-4 flex flex-col" style={{ height: 'calc(100vh - 200px)', minHeight: '700px' }}>
               <div className="space-y-4 flex-1 flex flex-col overflow-hidden">
-                {/* 消息列表 */}
-                <div className="flex-1 overflow-y-auto border rounded-lg p-4 space-y-3">
-                {messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex ${msg.role === 'teacher' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div className={`
-                      max-w-[80%] p-3 rounded-lg
-                      ${msg.role === 'teacher' ? 'bg-blue-100' : 
-                        msg.role === 'ai' ? 'bg-purple-100' : 'bg-green-100'}
-                    `}>
-                      <div className="flex items-center mb-1">
-                        {msg.role === 'teacher' ? <User className="w-4 h-4 mr-1" /> :
-                         msg.role === 'ai' ? <Bot className="w-4 h-4 mr-1" /> :
-                         <User className="w-4 h-4 mr-1" />}
-                        <span className="text-xs font-medium">
-                          {msg.role === 'teacher' ? '教师' :
-                           msg.role === 'ai' ? 'AI助手' : '学生模拟'}
-                        </span>
-                        <span className="text-xs text-gray-500 ml-2">{msg.timestamp}</span>
-                      </div>
-                      <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
-
-                      {/* AI选项 - ISSUE方法论ABCDE选项 */}
-                      {msg.choices && msg.choices.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-blue-200">
-                          <div className="text-xs font-medium text-blue-700 mb-2 flex items-center">
-                            <Sparkles className="w-3 h-3 mr-1" />
-                            点击选项继续讨论：
-                          </div>
-                          <div className="grid grid-cols-1 gap-2">
-                            {msg.choices.map((choice) => (
-                              <button
-                                key={`${msg.id}-${choice.id}`}
-                                onClick={() => handleChoiceClick(choice)}
-                                className="flex items-start text-left text-xs p-2 rounded-lg border border-blue-200 hover:bg-blue-50 hover:border-blue-400 transition-all"
-                              >
-                                <span className="inline-block w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center mr-2 flex-shrink-0 font-semibold">
-                                  {choice.id}
-                                </span>
-                                <span className="flex-1">{choice.content}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* AI建议 */}
-                      {msg.suggestions && msg.suggestions.length > 0 && (
-                        <div className="mt-2 pt-2 border-t">
-                          <div className="text-xs text-gray-600 mb-1">建议追问：</div>
-                          <div className="space-y-1">
-                            {msg.suggestions.map((q, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => useSuggestedQuestion(q)}
-                                className="block w-full text-left text-xs p-1 rounded hover:bg-white/50 transition-colors"
-                              >
-                                • {q}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* 建议问题 */}
-              {suggestedQuestions.length > 0 && (
-                <div className="border rounded-lg p-3 bg-yellow-50">
-                  <div className="flex items-center mb-2">
-                    <Sparkles className="w-4 h-4 text-yellow-600 mr-2" />
-                    <span className="text-sm font-medium">AI建议的引导问题</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {suggestedQuestions.map((q, idx) => (
-                      <Button
-                        key={idx}
-                        size="sm"
-                        variant="outline"
-                        onClick={() => useSuggestedQuestion(q)}
-                        className="text-xs"
-                      >
-                        {q}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 输入区域 */}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={currentInput}
-                  onChange={(e) => setCurrentInput(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      sendMessage(currentInput);
-                    }
-                  }}
-                  placeholder="输入引导性问题..."
-                  className="flex-1 px-3 py-2 border rounded-lg"
-                  disabled={!isActive}
-                />
-                <Button 
-                  onClick={() => sendMessage(currentInput)}
-                  disabled={!isActive || !currentInput.trim()}
+                {/* 消息列表 - 优化：使用独立的MessageItem组件避免整体重渲染 */}
+                <div
+                  className="flex-1 overflow-y-auto border rounded-lg p-4 space-y-3"
+                  style={{ scrollBehavior: 'smooth' }}
                 >
+                  {messages.map((msg) => (
+                    <MessageItem
+                      key={msg.id}
+                      message={msg}
+                      onChoiceClick={handleChoiceClick}
+                      onSuggestionClick={useSuggestedQuestion}
+                    />
+                  ))}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* 输入区域 */}
+                <div className="flex gap-2 mt-2">
+                  <input
+                    type="text"
+                    value={currentInput}
+                    onChange={(e) => setCurrentInput(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        sendMessage(currentInput);
+                      }
+                    }}
+                    placeholder="输入引导性问题..."
+                    className="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    disabled={!isActive}
+                  />
+                  <Button
+                    onClick={() => sendMessage(currentInput)}
+                    disabled={!isActive || !currentInput.trim()}
+                  >
                     <Send className="w-4 h-4" />
                   </Button>
                 </div>
               </div>
             </Card>
 
-            {/* 右侧：简化教师控制台 */}
-            <Card className="p-4 flex flex-col h-[1100px] overflow-hidden">
+            {/* 右侧：简化教师控制台 - 优化：增加高度以显示更多内容 */}
+            <Card className="p-4 flex flex-col" style={{ height: 'calc(100vh - 200px)', minHeight: '700px' }}>
               <h3 className="font-semibold mb-4 flex items-center">
                 <MessageSquare className="w-5 h-5 mr-2" />
                 课堂互动控制
@@ -818,7 +743,7 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
                 <label className="text-sm font-medium text-gray-700 mb-2 block">
                   当前AI建议问题：
                 </label>
-                <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg min-h-[80px]">
+                <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg min-h-[80px] max-h-[200px] overflow-y-auto">
                   <p className="text-sm text-gray-800">
                     {currentAIQuestion || messages.filter(m => m.role === 'ai').slice(-1)[0]?.content || '等待AI生成问题...'}
                   </p>
@@ -838,11 +763,11 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
 
               {/* 二维码区域 */}
               {classroomSession && (
-                <div className="border-t pt-4 flex-1 flex flex-col">
+                <div className="border-t pt-4 flex-1 flex flex-col overflow-y-auto">
                   <label className="text-sm font-medium text-gray-700 mb-2 block">
                     课堂二维码：
                   </label>
-                  <div className="flex-1 flex items-center justify-center">
+                  <div className="flex-1 flex items-center justify-center min-h-[200px]">
                     <ClassroomCode
                       session={classroomSession}
                       isTeacher={true}

@@ -427,14 +427,21 @@ export async function callUnifiedAIStream(
   options?: {
     temperature?: number;
     maxTokens?: number;
+    responseFormat?: 'json' | 'text';
     onChunk?: (chunk: string) => void;
   }
 ) {
   const proxy = AICallProxy.getInstance();
 
+  // 🔧 关键修复：如果要求JSON格式，在system prompt中强制要求
+  let finalSystemPrompt = systemPrompt;
+  if (options?.responseFormat === 'json') {
+    finalSystemPrompt = systemPrompt + '\n\n**重要：你必须返回一个有效的JSON对象，不要包含任何markdown格式标记（如```json），直接返回纯JSON。**';
+  }
+
   // 创建流式调用方法
   const messages = [
-    { role: 'system' as const, content: systemPrompt },
+    { role: 'system' as const, content: finalSystemPrompt },
     { role: 'user' as const, content: userPrompt }
   ];
 
@@ -445,20 +452,45 @@ export async function callUnifiedAIStream(
       throw new Error('AI客户端不支持流式调用');
     }
 
-    const streamResponse = await aiClient.sendCustomMessageStream(
+    // 🔧 修复：sendCustomMessageStream返回AsyncIterable，不需要await
+    const streamIterable = aiClient.sendCustomMessageStream(
       messages,
       {
         temperature: options?.temperature || 0.7,
-        maxTokens: options?.maxTokens || 1000,
-        enableStreaming: true
+        maxTokens: options?.maxTokens || 1000
       }
     );
 
-    // 返回异步迭代器
+    // 返回包装后的异步迭代器，支持onChunk回调
     return {
       async *[Symbol.asyncIterator]() {
-        for await (const chunk of streamResponse.stream) {
-          const text = chunk.content || chunk.text || chunk;
+        // ✅ 修复：直接迭代streamIterable，不是streamIterable.stream
+        for await (const chunk of streamIterable) {
+          // 🔧 关键修复：确保text总是字符串，并处理DeepSeek特殊chunk
+          let text: string;
+          if (typeof chunk === 'string') {
+            text = chunk;
+          } else if (typeof chunk === 'object' && chunk !== null) {
+            // 🔧 DeepSeek特殊处理：跳过元数据chunk（如 {phase: 'thinking'}）
+            const chunkObj = chunk as any;
+
+            // 如果是DeepSeek的元数据chunk，跳过
+            if (chunkObj.phase === 'thinking' || chunkObj.phase === 'responding') {
+              continue; // 跳过这种元数据
+            }
+
+            // 尝试提取content或text字段
+            text = chunkObj.content || chunkObj.text || chunkObj.delta?.content || '';
+
+            // 如果都没有，记录警告并跳过
+            if (!text) {
+              console.warn('⚠️ [AICallProxy] 流式chunk无法提取文本内容:', JSON.stringify(chunk).substring(0, 100));
+              continue; // 跳过无效chunk
+            }
+          } else {
+            continue; // 跳过非字符串非对象的chunk
+          }
+
           if (text && options?.onChunk) {
             options.onChunk(text);
           }

@@ -16,19 +16,72 @@ interface PageProps {
 export default function TeacherClassroomPage({ params }: PageProps) {
   const { code } = use(params);
 
-  // 构造一个模拟的 caseData，因为独立模式不需要真实案例
+  // 构造一个模拟的 caseData，使用完整的 LegalCase 格式
   const mockCaseData = {
-    title: `课堂 ${code}`,
-    facts: [
-      '这是一个独立的课堂互动场景',
-      '教师可以发布问题，学生实时回答',
-      '支持投票和文本两种问答模式'
+    id: `classroom-${code}`,
+    basicInfo: {
+      caseNumber: `课堂 ${code}`,
+      court: '教学场景',
+      judgeDate: new Date().toISOString().split('T')[0] || '',
+      caseType: '民事' as const,
+      parties: {
+        plaintiff: [{ name: '教师' }],
+        defendant: [{ name: '学生' }]
+      }
+    },
+    threeElements: {
+      facts: {
+        summary: '这是一个独立的课堂互动场景，教师可以发布问题，学生实时回答',
+        timeline: [
+          { date: new Date().toISOString().split('T')[0] || '', event: '课堂开始', title: '开始', importance: 'normal' as const }
+        ],
+        keyFacts: [
+          '这是一个独立的课堂互动场景',
+          '教师可以发布问题，学生实时回答',
+          '支持投票和文本两种问答模式'
+        ],
+        disputedFacts: []
+      },
+      evidence: {
+        summary: '通过互动提升教学效果',
+        items: [],
+        chainAnalysis: {
+          complete: true,
+          missingLinks: [],
+          strength: 'moderate' as const
+        }
+      },
+      reasoning: {
+        summary: '苏格拉底式教学方法',
+        legalBasis: [
+          {
+            law: '教学互动原则',
+            article: '第1条',
+            content: '引导而非灌输',
+            application: '通过提问启发思考'
+          },
+          {
+            law: '苏格拉底方法',
+            article: '第2条',
+            content: '通过提问启发思考',
+            application: '帮助学生自主发现知识'
+          }
+        ],
+        logicChain: [],
+        keyArguments: ['引导思考', '互动学习'],
+        judgment: '通过互动提升教学效果'
+      }
+    },
+    timeline: [
+      { date: new Date().toISOString().split('T')[0] || '', event: '课堂开始', title: '开始', importance: 'normal' as const }
     ],
-    laws: [
-      '教学互动原则：引导而非灌输',
-      '苏格拉底方法：通过提问启发思考'
-    ],
-    dispute: '如何通过互动提升教学效果'
+    metadata: {
+      extractedAt: new Date().toISOString(),
+      confidence: 100,
+      aiModel: 'mock',
+      processingTime: 0,
+      extractionMethod: 'manual' as const
+    }
   };
 
   return (

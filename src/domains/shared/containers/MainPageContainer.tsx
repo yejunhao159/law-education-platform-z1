@@ -85,9 +85,27 @@ export const MainPageContainer: React.FC = () => {
   // ========== 副作用处理 ==========
   useEffect(() => {
     if (currentCase) {
-      setExtractedElements({
+      const elements = {
         data: currentCase,
         confidence: currentCase.metadata?.confidence || 90
+      };
+
+      setExtractedElements(elements);
+
+      // 🔗 数据桥接：同步到 useTeachingStore（第四幕需要）
+      console.log('🔗 [MainPageContainer] 同步案例数据到 useTeachingStore', {
+        数据大小: Object.keys(elements.data || {}).length,
+        confidence: elements.confidence,
+        案例标题: elements.data?.basicInfo?.caseNumber || elements.data?.threeElements?.facts?.caseTitle || '未知',
+        数据预览: Object.keys(elements.data || {}).slice(0, 5)
+      });
+      useTeachingStore.getState().setExtractedElements(elements, elements.confidence);
+
+      // 验证写入
+      const stored = useTeachingStore.getState().uploadData;
+      console.log('✅ [MainPageContainer] 验证Store写入:', {
+        extractedElements存在: !!stored.extractedElements,
+        confidence: stored.confidence
       });
     }
   }, [currentCase]);

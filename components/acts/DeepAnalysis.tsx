@@ -432,9 +432,40 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
 
       // 处理时间轴分析结果
       if (timelineResult.status === 'fulfilled' && timelineResult.value.success) {
-        setAnalysisResult(timelineResult.value.data.analysis)
+        const analysisData = timelineResult.value.data.analysis;
+        setAnalysisResult(analysisData);
+
+        // 🔗 数据桥接：同步到 useTeachingStore（第四幕需要）
+        // 🔧 修复：使用适配器转换TimelineAnalysis → DeepAnalysisResult
+        console.log('🔗 [DeepAnalysis] 同步分析结果到 useTeachingStore (使用适配器)', {
+          数据大小: Object.keys(analysisData || {}).length,
+          转折点数量: analysisData?.turningPoints?.length || 0,
+          风险数量: analysisData?.risks?.length || analysisData?.legalRisks?.length || 0,
+          数据字段: Object.keys(analysisData || {}).slice(0, 5)
+        });
+
+        // 动态导入适配器
+        const { adaptTimelineAnalysisToDeepAnalysisResult } = await import(
+          '@/src/domains/teaching-acts/services/AnalysisDataAdapter'
+        );
+
+        // 转换数据格式
+        const deepAnalysisResult = adaptTimelineAnalysisToDeepAnalysisResult(analysisData);
+
+        const { useTeachingStore } = await import('@/src/domains/teaching-acts/stores/useTeachingStore');
+        useTeachingStore.getState().setAnalysisResult(deepAnalysisResult);
+
+        // 验证写入
+        const stored = useTeachingStore.getState().analysisData;
+        console.log('✅ [DeepAnalysis] 验证Store写入 (适配后):', {
+          result存在: !!stored.result,
+          result字段数: stored.result ? Object.keys(stored.result).length : 0,
+          factAnalysis: stored.result?.factAnalysis,
+          evidenceAnalysis: stored.result?.evidenceAnalysis,
+          legalAnalysis: stored.result?.legalAnalysis
+        });
+
         const metadata = timelineResult.value.metadata || {}
-        const analysisData = timelineResult.value.data?.analysis
         const turningPoints = analysisData?.turningPoints?.length || 0
         const aiMode = metadata.analysisMethod || 'unknown'
         const aiWarnings = Array.isArray(metadata.aiWarnings)
