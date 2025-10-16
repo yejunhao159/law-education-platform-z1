@@ -95,8 +95,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/package.json /app/package-lock.js
 
 # 安装生产依赖（自动处理所有dependencies和传递依赖）
 # 使用--legacy-peer-deps避免peer依赖冲突
+# 使用--ignore-scripts跳过prepare script（husky是开发依赖，生产环境不需要）
 # 这会安装所有package.json中的dependencies，包括socket.io及其所有依赖
-RUN npm ci --only=production --legacy-peer-deps --omit=dev
+RUN npm ci --only=production --legacy-peer-deps --omit=dev --ignore-scripts
 
 # 特殊处理：tiktoken（WASM依赖）
 # tiktoken在next.config.mjs中被标记为外部依赖，但上面的npm ci已经安装了
