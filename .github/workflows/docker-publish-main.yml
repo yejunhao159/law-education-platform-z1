@@ -72,39 +72,97 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Verify Socket.IO dependencies in image
+      - name: Verify Docker Image Health
         run: |
-          echo "🔍 Verifying Socket.IO dependencies..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🔍 [CI] 镜像完整性验证（治本方案 v2.0）"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+
           docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          
-          # 检查关键依赖是否存在
+
+          echo "📦 检查核心依赖（自动安装验证）..."
           docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
             sh -c '
-              echo "Checking Socket.IO dependencies..."
-              test -d /app/node_modules/socket.io && echo "✅ socket.io found" || exit 1
-              test -d /app/node_modules/negotiator && echo "✅ negotiator found" || exit 1
-              test -d /app/node_modules/accepts && echo "✅ accepts found" || exit 1
-              test -d /app/node_modules/cors && echo "✅ cors found" || exit 1
-              test -d /app/node_modules/mime-types && echo "✅ mime-types found" || exit 1
-              test -d /app/server && echo "✅ Socket.IO server found" || exit 1
-              echo "✅ All Socket.IO dependencies verified!"
+              # Socket.IO核心依赖检查
+              test -d /app/node_modules/socket.io && echo "  ✅ socket.io" || exit 1
+              test -d /app/node_modules/socket.io-client && echo "  ✅ socket.io-client" || exit 1
+              test -d /app/node_modules/engine.io && echo "  ✅ engine.io" || exit 1
+
+              # 传递依赖检查（Issue #49, #50修复验证）
+              test -d /app/node_modules/negotiator && echo "  ✅ negotiator (传递依赖)" || exit 1
+              test -d /app/node_modules/accepts && echo "  ✅ accepts" || exit 1
+              test -d /app/node_modules/cors && echo "  ✅ cors" || exit 1
+              test -d /app/node_modules/mime-types && echo "  ✅ mime-types" || exit 1
+
+              # AI相关依赖
+              test -d /app/node_modules/tiktoken && echo "  ✅ tiktoken (WASM)" || exit 1
+
+              # Socket.IO服务器文件
+              test -d /app/server && echo "  ✅ Socket.IO server" || exit 1
+              test -f /app/server/socket-server.js && echo "  ✅ socket-server.js" || exit 1
+
+              # 环境验证脚本
+              test -f /app/scripts/check-env.sh && echo "  ✅ check-env.sh" || exit 1
+              test -x /app/scripts/check-env.sh && echo "  ✅ check-env.sh (可执行)" || exit 1
+
+              echo ""
+              echo "✅ 所有核心依赖验证通过！"
             '
+
+          echo ""
+          echo "🧪 测试环境变量验证脚本..."
+          docker run --rm \
+            -e DEEPSEEK_API_KEY=test-key \
+            -e NEXT_PUBLIC_DEEPSEEK_API_KEY=test-key \
+            -e NODE_ENV=production \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            sh -c './scripts/check-env.sh'
+
+          echo ""
+          echo "✅ 镜像健康检查完成！"
 
       - name: Create deployment summary
         run: |
-          echo "## 🚀 Docker Image Built from Main" >> $GITHUB_STEP_SUMMARY
+          echo "## 🚀 Docker镜像构建完成（治本方案 v2.0）" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Registry:** ${{ env.REGISTRY }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 构建信息" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Registry:** \`${{ env.REGISTRY }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### ✅ Verified Dependencies" >> $GITHUB_STEP_SUMMARY
-          echo "- Socket.IO core modules" >> $GITHUB_STEP_SUMMARY
-          echo "- negotiator (Issue #49, #50 fix)" >> $GITHUB_STEP_SUMMARY
-          echo "- accepts, cors, mime-types" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ 核心改进" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **依赖自动化管理**：使用 \`npm ci --only=production\` 自动安装所有依赖" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **传递依赖完整**：自动处理 Socket.IO 的所有传递依赖（Issue #49, #50 彻底修复）" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **环境变量验证**：启动时自动检查必需的环境变量" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **可维护性提升**：socket.io 升级不再需要修改 Dockerfile" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 部署命令" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 已验证的依赖" >> $GITHUB_STEP_SUMMARY
+          echo "- Socket.IO (v4.8.1) + 所有传递依赖" >> $GITHUB_STEP_SUMMARY
+          echo "- tiktoken (WASM依赖)" >> $GITHUB_STEP_SUMMARY
+          echo "- 环境变量验证脚本" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 部署命令" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "# 1. 拉取最新镜像" >> $GITHUB_STEP_SUMMARY
           echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# 2. 确保环境变量文件存在（必需！）" >> $GITHUB_STEP_SUMMARY
+          echo "# 参考 .env.example 创建 .env.production" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# 3. 重启服务" >> $GITHUB_STEP_SUMMARY
+          echo "docker-compose -f docker-compose.prod.yml down" >> $GITHUB_STEP_SUMMARY
           echo "docker-compose -f docker-compose.prod.yml up -d" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# 4. 验证部署" >> $GITHUB_STEP_SUMMARY
+          echo "docker logs law-edu-app-prod --tail 50" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ⚠️ 部署前必读" >> $GITHUB_STEP_SUMMARY
+          echo "**必需的环境变量**（容器启动时会自动验证）：" >> $GITHUB_STEP_SUMMARY
+          echo "- \`DEEPSEEK_API_KEY\` - DeepSeek AI密钥" >> $GITHUB_STEP_SUMMARY
+          echo "- \`NEXT_PUBLIC_DEEPSEEK_API_KEY\` - 前端调用密钥" >> $GITHUB_STEP_SUMMARY
+          echo "- \`NEXT_PUBLIC_AI_302_API_KEY\` - PPT功能密钥（可选但推荐）" >> $GITHUB_STEP_SUMMARY
+          echo "- \`NEXT_PUBLIC_SOCKET_URL\` - Socket.IO服务器地址（可选）" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "如果环境变量缺失，容器将拒绝启动并显示详细错误信息。" >> $GITHUB_STEP_SUMMARY

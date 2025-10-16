@@ -74,41 +74,41 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-# 修复 tiktoken 依赖问题
-# 由于 tiktoken 在 next.config.mjs 中被标记为外部依赖（externals）
-# standalone 模式不会自动复制，需要手动复制整个 tiktoken 目录
-# 这样可以确保所有运行时依赖（WASM文件、类型定义、辅助文件）都完整
+# =============================================================================
+# 🔧 依赖修复方案（治本版本 v2.0）
+# =============================================================================
+# 问题：Next.js standalone模式只打包Next.js应用依赖，不包含独立Node.js服务（Socket.IO）的依赖
+# 旧方案：手动COPY依赖列表 → 脆弱，容易遗漏传递依赖
+# 新方案：重新安装生产依赖 → 自动处理所有依赖，包括传递依赖
+#
+# 权衡：
+# - 镜像大小增加约50-100MB（从200MB → 250-300MB）
+# - 构建时间增加约30-60秒
+# - 但彻底解决依赖完整性问题，socket.io升级不再需要修改Dockerfile
+# =============================================================================
+
 RUN mkdir -p ./node_modules
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/tiktoken ./node_modules/tiktoken
 
-# 修复 Socket.IO 依赖问题
-# standalone 模式只打包 Next.js 应用依赖，不包含 Socket.IO 服务器的依赖
-# 需要手动复制 socket.io 及其运行时依赖
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/socket.io ./node_modules/socket.io
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/socket.io-parser ./node_modules/socket.io-parser
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/engine.io ./node_modules/engine.io
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/engine.io-parser ./node_modules/engine.io-parser
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/ws ./node_modules/ws
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@socket.io ./node_modules/@socket.io
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/debug ./node_modules/debug
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/ms ./node_modules/ms
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/accepts ./node_modules/accepts
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/base64id ./node_modules/base64id
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/cookie ./node_modules/cookie
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/cors ./node_modules/cors
+# 方案：重新安装生产依赖（推荐）
+# 复制package文件到runner阶段
+COPY --from=builder --chown=nextjs:nodejs /app/package.json /app/package-lock.json ./
 
-# 修复 Socket.IO 传递依赖缺失问题（Issue #49, #50）
-# 这些是 accepts、cors 等模块的依赖，在 standalone 模式下不会自动打包
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/negotiator ./node_modules/negotiator
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/mime-types ./node_modules/mime-types
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/mime-db ./node_modules/mime-db
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/vary ./node_modules/vary
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/object-inspect ./node_modules/object-inspect
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/side-channel ./node_modules/side-channel
+# 安装生产依赖（自动处理所有dependencies和传递依赖）
+# 使用--legacy-peer-deps避免peer依赖冲突
+# 这会安装所有package.json中的dependencies，包括socket.io及其所有依赖
+RUN npm ci --only=production --legacy-peer-deps --omit=dev
+
+# 特殊处理：tiktoken（WASM依赖）
+# tiktoken在next.config.mjs中被标记为外部依赖，但上面的npm ci已经安装了
+# 无需额外处理，但保留这个注释说明为什么不需要特殊复制
 
 # 复制Socket.IO服务器和PM2配置
 COPY --from=builder --chown=nextjs:nodejs /app/server ./server
 COPY --from=builder --chown=nextjs:nodejs /app/ecosystem.config.js ./ecosystem.config.js
+
+# 复制环境变量验证脚本（治本方案的安全网）
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/check-env.sh ./scripts/check-env.sh
+RUN chmod +x ./scripts/check-env.sh
 
 # 创建日志目录
 RUN mkdir -p /app/logs && chown -R nextjs:nodejs /app/logs
@@ -126,5 +126,6 @@ EXPOSE 3000 3001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"
 
-# 启动命令（使用PM2管理两个进程）
-CMD ["pm2-runtime", "ecosystem.config.js"]
+# 启动命令（先验证环境变量，再启动服务）
+# 使用sh -c包装命令，先执行环境检查，成功后再启动PM2
+CMD ["sh", "-c", "./scripts/check-env.sh && pm2-runtime ecosystem.config.js"]
