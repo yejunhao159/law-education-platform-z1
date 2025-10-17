@@ -55,7 +55,7 @@ COPY --chown=nextjs:nodejs ecosystem.config.js ./ecosystem.config.js
 # 作用：动态生成.env.production，将docker run -e传入的环境变量注入到应用中
 # =============================================================================
 
-# 复制脚本
+# 复制环境变量脚本（核心：运行时动态注入环境变量）
 COPY --chown=nextjs:nodejs scripts/generate-env.sh ./scripts/generate-env.sh
 COPY --chown=nextjs:nodejs scripts/check-env.sh ./scripts/check-env.sh
 
@@ -81,12 +81,12 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"
 
 # =============================================================================
-# 🚀 启动命令
+# 🚀 启动命令 - 三步初始化流程
 # =============================================================================
-# 执行流程：
-# 1. generate-env.sh   → 生成.env.production，注入环境变量
-# 2. check-env.sh      → 验证必要的环境变量已设置
-# 3. pm2-runtime       → 启动Next.js + Socket.IO服务
+# 执行顺序（确保所有API环境变量都被正确注入）：
+# 1. generate-env.sh   → 生成.env.production，动态注入docker run -e传入的环境变量
+# 2. check-env.sh      → 验证必要的API密钥已设置（DEEPSEEK_API_KEY、NEXT_PUBLIC_AI_302_API_KEY等）
+# 3. pm2-runtime       → 启动Next.js（3000）+ Socket.IO（3001）服务
 # =============================================================================
 
 CMD ["sh", "-c", "set -e && \

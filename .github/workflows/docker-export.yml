@@ -1,0 +1,287 @@
+# =============================================================================
+# GitHub Actions - Docker镜像构建和导出
+# =============================================================================
+# 触发条件：推送到main分支或手动触发
+# 功能：
+#   1. 构建完整的Docker镜像
+#   2. 导出为tar文件并上传为GitHub Actions artifact
+#   3. 验证镜像功能
+#   4. 生成部署文档
+# =============================================================================
+
+name: Docker Build and Export
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/**'
+      - '!.github/workflows/**'
+
+  workflow_dispatch:
+    inputs:
+      deploy_version:
+        description: '部署版本号 (例如: v1.2.0)'
+        required: false
+        default: 'latest'
+        type: string
+
+env:
+  IMAGE_NAME: law-education-platform-z1
+  IMAGE_TAG: ${{ github.event.inputs.deploy_version || 'latest' }}
+
+jobs:
+  # ============================================
+  # Job 1: 构建Docker镜像
+  # ============================================
+  build-and-export:
+    name: Build Docker Image and Export
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure Docker metadata
+        id: meta
+        run: |
+          echo "IMAGE_TAG=${{ env.IMAGE_TAG }}" >> $GITHUB_ENV
+          echo "IMAGE_FULL_NAME=${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
+          echo "GIT_SHA=${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Build Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true  # 将镜像加载到Docker daemon
+          tags: ${{ env.IMAGE_FULL_NAME }}
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.title=${{ env.IMAGE_NAME }}
+            org.opencontainers.image.version=${{ env.IMAGE_TAG }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            org.opencontainers.image.revision=${{ env.GIT_SHA }}
+            org.opencontainers.image.source=${{ github.repositoryUrl }}
+
+      - name: Verify Docker image
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🔍 [CI] 镜像完整性验证"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+
+          # 检查镜像是否存在
+          docker images ${{ env.IMAGE_FULL_NAME }}
+
+          # 创建临时容器进行功能验证
+          echo "📦 检查核心依赖..."
+          docker run --rm --name temp-test ${{ env.IMAGE_FULL_NAME }} \
+            sh -c '
+              # 基础检查
+              test -d /app/node_modules && echo "  ✅ node_modules" || exit 1
+              test -f /app/server/socket-server.js && echo "  ✅ socket-server.js" || exit 1
+              test -f /app/ecosystem.config.js && echo "  ✅ ecosystem.config.js" || exit 1
+              test -f /app/scripts/check-env.sh && echo "  ✅ check-env.sh" || exit 1
+              test -f /app/scripts/init-database.js && echo "  ✅ init-database.js" || exit 1
+              test -f /app/scripts/test-ppt-functionality.js && echo "  ✅ test-ppt-functionality.js" || exit 1
+
+              # 检查关键依赖
+              test -d /app/node_modules/bcryptjs && echo "  ✅ bcryptjs (密码加密)" || exit 1
+              test -d /app/node_modules/better-sqlite3 && echo "  ✅ better-sqlite3 (数据库)" || exit 1
+              test -d /app/node_modules/socket.io && echo "  ✅ socket.io" || exit 1
+
+              echo ""
+              echo "✅ 所有核心组件验证通过！"
+            '
+
+      - name: Export Docker image to tar
+        run: |
+          echo "📦 [CI] 导出Docker镜像为tar文件..."
+          docker save ${{ env.IMAGE_FULL_NAME }} | gzip > ${{ env.IMAGE_NAME }}-${{ env.IMAGE_TAG }}.tar.gz
+          ls -lh ${{ env.IMAGE_NAME }}-${{ env.IMAGE_TAG }}.tar.gz
+
+      - name: Generate deployment package
+        run: |
+          echo "📋 [CI] 生成部署包..."
+
+          # 创建部署目录
+          mkdir -p deployment-package
+
+          # 复制必要文件
+          cp ${{ env.IMAGE_NAME }}-${{ env.IMAGE_TAG }}.tar.gz deployment-package/
+          cp docker-compose.prod.yml deployment-package/
+          cp .env.production.example deployment-package/.env.production.example
+          cp .env.production.configured deployment-package/.env.production.configured
+          cp scripts/quick-deploy.sh deployment-package/
+          chmod +x deployment-package/quick-deploy.sh
+
+          # 生成部署说明
+          cat > deployment-package/README.md << 'EOF'
+          # 法学教育平台 - 部署包
+
+          ## 📦 包含文件
+          - `IMAGE.tar.gz` - Docker镜像文件
+          - `docker-compose.prod.yml` - Docker Compose配置
+          - `.env.production.example` - 环境变量模板
+          - `DEPLOY-GUIDE.md` - 部署指南（本文件）
+
+          ## 🚀 快速部署
+
+          ### 1. 上传到服务器
+          ```bash
+          # 将整个deployment-package文件夹上传到服务器
+          scp -r deployment-package/ user@your-server:/opt/law-education-platform/
+          ```
+
+          ### 2. 在服务器上部署
+
+          #### 方法1：一键部署（推荐）
+          ```bash
+          cd /opt/law-education-platform/
+
+          # 运行一键部署脚本
+          ./quick-deploy.sh IMAGE.tar.gz
+          ```
+
+          #### 方法2：手动部署
+          ```bash
+          cd /opt/law-education-platform/
+
+          # 加载Docker镜像
+          docker load < IMAGE.tar.gz
+
+          # 使用预配置的环境变量（已包含API密钥）
+          cp .env.production.configured .env.production
+
+          # 启动服务
+          docker-compose -f docker-compose.prod.yml up -d
+
+          # 查看日志
+          docker-compose -f docker-compose.prod.yml logs -f
+          ```
+
+          ### 3. 验证部署
+          ```bash
+          # 检查服务状态
+          docker-compose -f docker-compose.prod.yml ps
+
+          # 检查健康状态
+          curl http://localhost:3000/api/health
+
+          # 测试登录
+          # 访问: http://your-server:3000/login
+          # 使用账号: teacher01 - teacher05, 密码: 2025
+          ```
+
+          ## ⚙️ 环境变量配置
+
+          编辑 `.env.production` 文件，配置以下必需变量：
+
+          ```bash
+          # DeepSeek AI (必需)
+          DEEPSEEK_API_KEY=your_deepseek_api_key
+          NEXT_PUBLIC_DEEPSEEK_API_KEY=your_deepseek_api_key
+
+          # 302.ai PPT (重要)
+          NEXT_PUBLIC_AI_302_API_KEY=your_302_api_key
+
+          # 其他配置
+          NODE_ENV=production
+          ```
+
+          ## 🔧 故障排除
+
+          ### 容器无法启动
+          ```bash
+          # 查看详细日志
+          docker-compose -f docker-compose.prod.yml logs app
+
+          # 检查环境变量
+          docker-compose -f docker-compose.prod.yml exec app printenv | grep -E "(DEEPSEEK|AI_302)"
+          ```
+
+          ### 登录失败
+          ```bash
+          # 检查数据库状态
+          docker-compose -f docker-compose.prod.yml exec app ls -la /app/data/
+
+          # 重新初始化数据库
+          docker-compose -f docker-compose.prod.yml exec app node scripts/init-database.js
+          ```
+
+          ### PPT功能异常
+          ```bash
+          # 测试PPT功能
+          docker-compose -f docker-compose.prod.yml exec app node scripts/test-ppt-functionality.js
+          ```
+
+          ## 📞 支持
+
+          如遇问题，请检查：
+          1. 环境变量是否正确配置
+          2. API密钥是否有效
+          3. 服务器资源是否充足
+          4. 网络连接是否正常
+          EOF
+
+          # 重命名README为更具体的名称
+          mv deployment-package/README.md deployment-package/DEPLOY-GUIDE.md
+
+      - name: Upload deployment package as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: law-education-platform-deployment-${{ env.IMAGE_TAG }}
+          path: deployment-package/
+          retention-days: 30
+
+      - name: Create deployment summary
+        run: |
+          echo "## 🚀 Docker镜像构建完成" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 构建信息" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **镜像:** \`${{ env.IMAGE_FULL_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **版本:** \`${{ env.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **构建时间:** \`${{ env.BUILD_DATE }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### ✅ 新增功能修复" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **数据库自动初始化**：容器启动时自动创建用户数据" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **登录问题修复**：内置5个测试账号 (teacher01-05, 密码: 2025)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **PPT功能完善**：支持302.ai PPT生成，包含功能测试脚本" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **环境变量验证**：启动前检查所有必需配置" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **健康检查增强**：验证数据库和服务状态" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 📦 部署步骤" >> $GITHUB_STEP_SUMMARY
+          echo "1. **下载部署包**：从GitHub Actions Artifacts下载" >> $GITHUB_STEP_SUMMARY
+          echo "2. **上传到服务器**：将整个包上传到服务器" >> $GITHUB_STEP_SUMMARY
+          echo "3. **加载镜像**：`docker load < IMAGE.tar.gz`" >> $GITHUB_STEP_SUMMARY
+          echo "4. **配置环境**：编辑 `.env.production` 文件" >> $GITHUB_STEP_SUMMARY
+          echo "5. **启动服务**：`docker-compose -f docker-compose.prod.yml up -d`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 🎯 预置账号" >> $GITHUB_STEP_SUMMARY
+          echo "| 用户名 | 密码 | 角色 |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| teacher01 | 2025 | 管理员 |" >> $GITHUB_STEP_SUMMARY
+          echo "| teacher02 | 2025 | 教师 |" >> $GITHUB_STEP_SUMMARY
+          echo "| teacher03 | 2025 | 教师 |" >> $GITHUB_STEP_SUMMARY
+          echo "| teacher04 | 2025 | 教师 |" >> $GITHUB_STEP_SUMMARY
+          echo "| teacher05 | 2025 | 教师 |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 🔗 下载链接" >> $GITHUB_STEP_SUMMARY
+          echo "📦 [部署包下载](actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY

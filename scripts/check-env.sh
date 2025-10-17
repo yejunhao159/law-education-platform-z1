@@ -23,6 +23,8 @@ fi
 # ========== PPT功能检查（重要但非致命） ==========
 if [ -z "$NEXT_PUBLIC_AI_302_API_KEY" ]; then
   warnings="$warnings\n  ⚠️  NEXT_PUBLIC_AI_302_API_KEY - 302.ai PPT生成密钥（PPT功能将不可用）"
+else
+  echo "  ✅ NEXT_PUBLIC_AI_302_API_KEY - 302.ai PPT生成密钥已配置"
 fi
 
 # ========== Socket.IO配置检查（实时课堂功能） ==========
