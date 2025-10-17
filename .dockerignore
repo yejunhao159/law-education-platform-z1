@@ -4,17 +4,20 @@
 # 目的：减小构建上下文体积，加快构建速度
 # =============================================================================
 
-# 依赖目录和构建产物说明：
-# 注意：现在使用本地预构建产物方案，所以不排除 node_modules 和 .next
-# 这些文件会被直接复制到镜像中
+# Docker 构建排除文件
+# 注意：.next 和 node_modules 会在Docker构建过程中动态生成
 
-# 仍然排除的文件
+# 日志文件
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# 构建产物和临时目录
 out
 dist
 build
+coverage
+.nyc_output
 
 # 测试相关
 coverage
