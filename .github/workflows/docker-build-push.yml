@@ -61,6 +61,9 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            DEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
+            NEXT_PUBLIC_AI_302_API_KEY=${{ secrets.NEXT_PUBLIC_AI_302_API_KEY }}
 
       # Step 6: 输出结果
       - name: ✅ Build result

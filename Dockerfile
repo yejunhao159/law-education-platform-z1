@@ -7,6 +7,14 @@ FROM node:20
 WORKDIR /app
 
 # =============================================================================
+# 接收构建参数（从GitHub Actions或docker build --build-arg传入）
+# =============================================================================
+ARG DEEPSEEK_API_KEY=""
+ARG NEXT_PUBLIC_AI_302_API_KEY=""
+ARG NEXT_PUBLIC_BASE_URL="http://localhost:3000"
+ARG NEXT_PUBLIC_SOCKET_IO_URL="http://localhost:3001"
+
+# =============================================================================
 # 构建阶段
 # =============================================================================
 # 安装依赖
@@ -19,6 +27,10 @@ COPY . .
 # 设置环境变量并构建
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+ENV NEXT_PUBLIC_AI_302_API_KEY=${NEXT_PUBLIC_AI_302_API_KEY}
+ENV NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
+ENV NEXT_PUBLIC_SOCKET_IO_URL=${NEXT_PUBLIC_SOCKET_IO_URL}
 
 # 构建 Next.js 应用
 RUN npm run build
