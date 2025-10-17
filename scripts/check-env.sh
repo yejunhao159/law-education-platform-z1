@@ -70,7 +70,21 @@ echo "✅ [ENV-CHECK] 环境变量检查通过！"
 echo ""
 echo "📋 当前环境配置："
 echo "   NODE_ENV: ${NODE_ENV:-未设置}"
-echo "   DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:0:10}... (已配置)"
-echo "   NEXT_PUBLIC_AI_302_API_KEY: ${NEXT_PUBLIC_AI_302_API_KEY:+已配置}"
+
+# 显示API密钥前10个字符（兼容sh/dash）
+if [ -n "$DEEPSEEK_API_KEY" ]; then
+  API_KEY_SHORT=$(printf "%.10s" "$DEEPSEEK_API_KEY")
+  echo "   DEEPSEEK_API_KEY: ${API_KEY_SHORT}... (已配置)"
+else
+  echo "   DEEPSEEK_API_KEY: 未设置"
+fi
+
+# 显示PPT API是否已配置
+if [ -n "$NEXT_PUBLIC_AI_302_API_KEY" ]; then
+  echo "   NEXT_PUBLIC_AI_302_API_KEY: 已配置"
+else
+  echo "   NEXT_PUBLIC_AI_302_API_KEY: 未配置"
+fi
+
 echo "   NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL:-使用默认配置}"
 echo ""
