@@ -54,16 +54,22 @@ if (!globalForDb.dbInitialized) {
     initDatabase();
     globalForDb.dbInitialized = true;
 
-    // 异步导入种子数据（避免阻塞）
-    setTimeout(() => {
-      import('./seed')
-        .then(({ seedDatabase }) => {
-          seedDatabase();
-        })
-        .catch((err) => {
-          console.error('Failed to seed database:', err);
-        });
-    }, 100);
+    // 仅在生产环境且明确启用时才自动种子数据
+    // 避免在Docker构建、测试等场景中多次触发导致唯一约束冲突
+    if (process.env.NODE_ENV === 'production' && process.env.AUTO_SEED_DATABASE === 'true') {
+      console.log('🌱 Auto-seeding database in production...');
+      setTimeout(() => {
+        import('./seed')
+          .then(({ seedDatabase }) => {
+            seedDatabase();
+          })
+          .catch((err) => {
+            console.error('Failed to seed database:', err);
+          });
+      }, 100);
+    } else if (process.env.NODE_ENV !== 'production') {
+      console.log('ℹ️  Skipping auto-seed (not in production or AUTO_SEED_DATABASE not enabled)');
+    }
   } catch (error) {
     console.error('❌ Failed to initialize database:', error);
   }
