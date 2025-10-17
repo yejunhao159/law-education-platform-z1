@@ -1,55 +1,34 @@
 # =============================================================================
-# 法学教育平台 - Docker 多阶段构建（v4.1 - GitHub Actions优化版）
-# =============================================================================
-# 优化方案：
-# - 在GitHub Actions云端完整构建（npm ci + npm run build）
-# - 使用多阶段构建减小最终镜像
-# - 环境变量运行时动态注入
+# 法学教育平台 - Docker 多阶段构建（v4.2 - 修复npm PATH问题）
 # =============================================================================
 
-FROM node:20 AS base
+FROM node:20
 
 WORKDIR /app
 
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-
 # =============================================================================
-# Stage 1: 安装依赖
+# 构建阶段
 # =============================================================================
-FROM base AS deps
-
+# 安装依赖
 COPY package.json package-lock.json ./
+RUN npm ci --legacy-peer-deps
 
-# 安装依赖（包含lightningcss预编译二进制）
-RUN npm ci --legacy-peer-deps && npm cache clean --force
-
-# =============================================================================
-# Stage 2: 构建应用
-# =============================================================================
-FROM base AS builder
-
-COPY --from=deps /app/node_modules ./node_modules
+# 复制源代码
 COPY . .
 
-# 设置构建时环境变量
-ENV NEXT_TELEMETRY_DISABLED=1
+# 设置环境变量并构建
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # 构建 Next.js 应用
 RUN npm run build
 
 # =============================================================================
-# Stage 3: 生产运行环境
+# 生产运行环境准备
 # =============================================================================
-FROM node:20 AS runner
 
-WORKDIR /app
-
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
+# 清理构建依赖（保留生产依赖）
+RUN npm ci --only=production --legacy-peer-deps --omit=dev --ignore-scripts
 
 # 创建非 root 用户
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -62,43 +41,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN npm install -g pm2
 
 # =============================================================================
-# 复制构建产物
-# =============================================================================
-
-# 复制 .next standalone 构建产物
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-
-# 复制静态资源
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-
-# 复制package文件
-COPY --from=builder --chown=nextjs:nodejs /app/package.json /app/package-lock.json ./
-
-# =============================================================================
-# 复制依赖和脚本
-# =============================================================================
-
-# 重新安装生产依赖（为了Socket.IO和其他runtime依赖）
-RUN npm ci --only=production --legacy-peer-deps --omit=dev --ignore-scripts
-
-# 复制Socket.IO服务和PM2配置
-COPY --from=builder --chown=nextjs:nodejs /app/server ./server
-COPY --from=builder --chown=nextjs:nodejs /app/ecosystem.config.js ./ecosystem.config.js
-
-# =============================================================================
 # 复制环境变量脚本
 # =============================================================================
-
-# 复制并赋予执行权限
-COPY --from=builder --chown=nextjs:nodejs /app/scripts/generate-env.sh ./scripts/generate-env.sh
-COPY --from=builder --chown=nextjs:nodejs /app/scripts/check-env.sh ./scripts/check-env.sh
+COPY scripts/generate-env.sh ./scripts/generate-env.sh
+COPY scripts/check-env.sh ./scripts/check-env.sh
 RUN chmod +x ./scripts/generate-env.sh ./scripts/check-env.sh
 
-# 创建必要目录
+# 复制Socket.IO服务和PM2配置
+COPY server ./server
+COPY ecosystem.config.js ./ecosystem.config.js
+
+# 创建必要的目录
 RUN mkdir -p /app/logs /app/data && chown -R nextjs:nodejs /app/logs /app/data
 
-# 切换用户
+# 修复权限
+RUN chown -R nextjs:nodejs /app
+
+# 切换到非 root 用户
 USER nextjs
 
 # =============================================================================
@@ -107,7 +66,7 @@ USER nextjs
 EXPOSE 3000 3001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"
+  CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })" || exit 1
 
 # =============================================================================
 # 启动命令 - 三步初始化流程
