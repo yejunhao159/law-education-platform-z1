@@ -1,0 +1,81 @@
+name: 🐳 Build and Push Docker Image
+
+# 触发条件
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:  # 允许手动触发
+
+env:
+  ALIYUN_REGISTRY: crpi-k9wo9ii25m22jesx.cn-shenzhen.personal.cr.aliyuncs.com
+  ALIYUN_NAMESPACE: yejunhao
+  IMAGE_NAME: legal-education
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: 检出代码
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: 设置 Docker Buildx
+      - name: 🔧 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Step 3: 登录到阿里云Container Registry
+      - name: 🔐 Login to Aliyun Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ALIYUN_REGISTRY }}
+          username: ${{ secrets.ALIYUN_USERNAME }}
+          password: ${{ secrets.ALIYUN_PASSWORD }}
+
+      # Step 4: 确定镜像版本标签
+      - name: 📝 Determine image tags
+        id: meta
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            # 从tag提取版本号
+            VERSION=${GITHUB_REF#refs/tags/}
+            echo "tags=${{ env.ALIYUN_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.IMAGE_NAME }}:${VERSION}" >> $GITHUB_OUTPUT
+            echo "tag_name=${VERSION}" >> $GITHUB_OUTPUT
+          else
+            # 使用commit sha或latest
+            VERSION=$(echo ${{ github.sha }} | cut -c1-7)
+            echo "tags=${{ env.ALIYUN_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.IMAGE_NAME }}:latest,${{ env.ALIYUN_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.IMAGE_NAME }}:${VERSION}" >> $GITHUB_OUTPUT
+            echo "tag_name=latest" >> $GITHUB_OUTPUT
+          fi
+
+      # Step 5: 构建并推送Docker镜像
+      - name: 🚀 Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Step 6: 输出结果
+      - name: ✅ Build result
+        run: |
+          echo "🎉 Docker镜像构建并推送成功！"
+          echo "镜像地址: ${{ env.ALIYUN_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag_name }}"
+          echo ""
+          echo "📋 服务器拉取命令:"
+          echo "docker pull ${{ env.ALIYUN_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag_name }}"
+          echo ""
+          echo "🏃 运行命令:"
+          echo "docker run -d --name legal-education-prod \\"
+          echo "  -p 3000:3000 -p 3001:3001 \\"
+          echo "  -e DEEPSEEK_API_KEY=sk-xxxxx \\"
+          echo "  -e NEXT_PUBLIC_AI_302_API_KEY=sk-xxxxx \\"
+          echo "  -e NEXT_PUBLIC_BASE_URL=http://115.29.191.180:3000 \\"
+          echo "  -e NEXT_PUBLIC_SOCKET_IO_URL=http://115.29.191.180:3001 \\"
+          echo "  ${{ env.ALIYUN_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag_name }}"

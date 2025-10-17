@@ -1,59 +1,13 @@
 # =============================================================================
-# 法学教育平台 - Docker 多阶段构建
+# 法学教育平台 - Docker 轻量级镜像（优化版 v4.0）
 # =============================================================================
-# 基于 Next.js 官方推荐的 Dockerfile
-# https://github.com/vercel/next.js/blob/canary/examples/with-docker/Dockerfile
+# 🚀 新方案：使用本地预构建产物
+# - 本地 .next/ 和 node_modules/ 已准备好
+# - Docker只负责打包和运行，不重新构建
+# - 构建时间从20分钟降低到30秒 ⚡
 # =============================================================================
 
-FROM node:20-alpine AS base
-
-# 安装必要的系统依赖
-RUN apk add --no-cache libc6-compat
-
-WORKDIR /app
-
-# -----------------------------------------------------------------------------
-# Stage 1: 安装依赖
-# -----------------------------------------------------------------------------
-FROM base AS deps
-
-# 复制 package 文件
-COPY package.json package-lock.json ./
-
-# 安装依赖（使用 --legacy-peer-deps）
-RUN npm ci --legacy-peer-deps
-
-# -----------------------------------------------------------------------------
-# Stage 2: 构建应用
-# -----------------------------------------------------------------------------
-FROM base AS builder
-
-WORKDIR /app
-
-# 从 deps 阶段复制 node_modules
-COPY --from=deps /app/node_modules ./node_modules
-
-# 复制所有源代码
-COPY . .
-
-# 设置环境变量（构建时需要）
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_ENV=production
-
-# 设置占位符环境变量（避免构建时出错）
-# 实际的环境变量会在运行时通过 .env.production 注入
-ENV DEEPSEEK_API_KEY=placeholder
-ENV NEXT_PUBLIC_DEEPSEEK_API_KEY=placeholder
-ENV DEEPSEEK_API_URL=https://api.deepseek.com
-ENV NEXT_PUBLIC_DEEPSEEK_API_URL=https://api.deepseek.com
-
-# 构建 Next.js 应用（会生成 .next/standalone）
-RUN npm run build
-
-# -----------------------------------------------------------------------------
-# Stage 3: 生产运行
-# -----------------------------------------------------------------------------
-FROM base AS runner
+FROM node:20
 
 WORKDIR /app
 
@@ -62,71 +16,87 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# 创建非 root 用户
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# =============================================================================
+# 创建非 root 用户和安装基础工具
+# =============================================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && addgroup --system --gid 1001 nodejs \
+    && adduser --system --uid 1001 nextjs
 
 # 安装PM2进程管理器（用于同时运行Next.js和Socket.IO）
 RUN npm install -g pm2
 
-# 复制必要的文件
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-
 # =============================================================================
-# 🔧 依赖修复方案（治本版本 v2.0）
-# =============================================================================
-# 问题：Next.js standalone模式只打包Next.js应用依赖，不包含独立Node.js服务（Socket.IO）的依赖
-# 旧方案：手动COPY依赖列表 → 脆弱，容易遗漏传递依赖
-# 新方案：重新安装生产依赖 → 自动处理所有依赖，包括传递依赖
-#
-# 权衡：
-# - 镜像大小增加约50-100MB（从200MB → 250-300MB）
-# - 构建时间增加约30-60秒
-# - 但彻底解决依赖完整性问题，socket.io升级不再需要修改Dockerfile
+# 📦 复制预构建的产物（最关键 - 极快）
 # =============================================================================
 
-RUN mkdir -p ./node_modules
+# 1. 复制package文件
+COPY --chown=nextjs:nodejs package.json package-lock.json ./
 
-# 方案：重新安装生产依赖（推荐）
-# 复制package文件到runner阶段
-COPY --from=builder --chown=nextjs:nodejs /app/package.json /app/package-lock.json ./
+# 2. 复制预安装的 node_modules（~600MB，已包含所有依赖）
+COPY --chown=nextjs:nodejs node_modules ./node_modules
 
-# 安装生产依赖（自动处理所有dependencies和传递依赖）
-# 使用--legacy-peer-deps避免peer依赖冲突
-# 使用--ignore-scripts跳过prepare script（husky是开发依赖，生产环境不需要）
-# 这会安装所有package.json中的dependencies，包括socket.io及其所有依赖
-RUN npm ci --only=production --legacy-peer-deps --omit=dev --ignore-scripts
+# 3. 复制预编译的 .next 目录（~200MB，Next.js应用产物）
+COPY --chown=nextjs:nodejs .next ./.next
 
-# 特殊处理：tiktoken（WASM依赖）
-# tiktoken在next.config.mjs中被标记为外部依赖，但上面的npm ci已经安装了
-# 无需额外处理，但保留这个注释说明为什么不需要特殊复制
+# 4. 复制公共文件
+COPY --chown=nextjs:nodejs public ./public
 
-# 复制Socket.IO服务器和PM2配置
-COPY --from=builder --chown=nextjs:nodejs /app/server ./server
-COPY --from=builder --chown=nextjs:nodejs /app/ecosystem.config.js ./ecosystem.config.js
+# 5. 复制Socket.IO服务器和PM2配置
+COPY --chown=nextjs:nodejs server ./server
+COPY --chown=nextjs:nodejs ecosystem.config.js ./ecosystem.config.js
 
-# 复制环境变量验证脚本（治本方案的安全网）
-COPY --from=builder --chown=nextjs:nodejs /app/scripts/check-env.sh ./scripts/check-env.sh
-RUN chmod +x ./scripts/check-env.sh
+# =============================================================================
+# 🔧 环境变量运行时注入脚本
+# =============================================================================
+# 关键：这些脚本会在容器启动时运行
+# 作用：动态生成.env.production，将docker run -e传入的环境变量注入到应用中
+# =============================================================================
 
-# 创建日志目录
-RUN mkdir -p /app/logs && chown -R nextjs:nodejs /app/logs
+# 复制脚本
+COPY --chown=nextjs:nodejs scripts/generate-env.sh ./scripts/generate-env.sh
+COPY --chown=nextjs:nodejs scripts/check-env.sh ./scripts/check-env.sh
 
-# 创建数据目录（用于SQLite数据库）
-RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
+# 赋予执行权限
+RUN chmod +x ./scripts/generate-env.sh ./scripts/check-env.sh
+
+# =============================================================================
+# 创建必要的目录（日志、数据等）
+# =============================================================================
+RUN mkdir -p /app/logs /app/data \
+    && chown -R nextjs:nodejs /app/logs /app/data
 
 # 切换到非 root 用户
 USER nextjs
 
-# 暴露端口（3000=Next.js, 3001=Socket.IO）
+# =============================================================================
+# 暴露端口和健康检查
+# =============================================================================
 EXPOSE 3000 3001
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"
 
-# 启动命令（先验证环境变量，再启动服务）
-# 使用sh -c包装命令，先执行环境检查，成功后再启动PM2
-CMD ["sh", "-c", "./scripts/check-env.sh && pm2-runtime ecosystem.config.js"]
+# =============================================================================
+# 🚀 启动命令
+# =============================================================================
+# 执行流程：
+# 1. generate-env.sh   → 生成.env.production，注入环境变量
+# 2. check-env.sh      → 验证必要的环境变量已设置
+# 3. pm2-runtime       → 启动Next.js + Socket.IO服务
+# =============================================================================
+
+CMD ["sh", "-c", "set -e && \
+  echo '🚀 [1/3] 生成运行时环境变量...' && \
+  ./scripts/generate-env.sh && \
+  echo '✓ 环境变量生成完成' && \
+  echo '' && \
+  echo '🔍 [2/3] 验证环境变量...' && \
+  ./scripts/check-env.sh && \
+  echo '✓ 环境变量验证完成' && \
+  echo '' && \
+  echo '🎬 [3/3] 启动服务...' && \
+  pm2-runtime ecosystem.config.js"]

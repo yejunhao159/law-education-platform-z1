@@ -59,3 +59,16 @@ test-report-*.md
 *.db
 *.db-shm
 *.db-wal
+
+# deployment artifacts
+*.tar
+*.tar.gz
+*.tar.md5
+law-edu-part-*
+law-edu-parts.md5
+download-and-merge.sh
+SERVER-*.txt
+SERVER-*.md
+TRANSFER-*.md
+DOCKER-BUILD-EXPORT-GUIDE.md
+DEPLOY-NOW.md
