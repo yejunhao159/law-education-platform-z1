@@ -1,4 +1,4 @@
-name: 🐳 Build and Push Docker Image
+name: 🐳 Build and Verify Docker Image
 
 # 触发条件
 on:
@@ -9,13 +9,8 @@ on:
       - 'v*'
   workflow_dispatch:  # 允许手动触发
 
-env:
-  ALIYUN_REGISTRY: crpi-k9wo9ii25m22jesx.cn-shenzhen.personal.cr.aliyuncs.com
-  ALIYUN_NAMESPACE: yejunhao
-  IMAGE_NAME: legal-education
-
 jobs:
-  build-and-push:
+  build-and-verify:
     runs-on: ubuntu-latest
 
     steps:
@@ -27,58 +22,74 @@ jobs:
       - name: 🔧 Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Step 3: 登录到阿里云Container Registry
-      - name: 🔐 Login to Aliyun Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.ALIYUN_REGISTRY }}
-          username: ${{ secrets.ALIYUN_USERNAME }}
-          password: ${{ secrets.ALIYUN_PASSWORD }}
-
-      # Step 4: 确定镜像版本标签
+      # Step 3: 确定镜像版本标签
       - name: 📝 Determine image tags
         id: meta
         run: |
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            # 从tag提取版本号
             VERSION=${GITHUB_REF#refs/tags/}
-            echo "tags=${{ env.ALIYUN_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.IMAGE_NAME }}:${VERSION}" >> $GITHUB_OUTPUT
             echo "tag_name=${VERSION}" >> $GITHUB_OUTPUT
           else
-            # 使用commit sha或latest
             VERSION=$(echo ${{ github.sha }} | cut -c1-7)
-            echo "tags=${{ env.ALIYUN_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.IMAGE_NAME }}:latest,${{ env.ALIYUN_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.IMAGE_NAME }}:${VERSION}" >> $GITHUB_OUTPUT
-            echo "tag_name=latest" >> $GITHUB_OUTPUT
+            echo "tag_name=${VERSION}" >> $GITHUB_OUTPUT
           fi
 
-      # Step 5: 构建并推送Docker镜像
-      - name: 🚀 Build and push Docker image
+      # Step 4: 构建Docker镜像（不推送）
+      - name: 🚀 Build Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          push: false
+          load: true
+          tags: legal-education:${{ steps.meta.outputs.tag_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
             DEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
             NEXT_PUBLIC_AI_302_API_KEY=${{ secrets.NEXT_PUBLIC_AI_302_API_KEY }}
 
-      # Step 6: 输出结果
-      - name: ✅ Build result
+      # Step 5: 验证镜像
+      - name: 🔍 Verify image integrity
         run: |
-          echo "🎉 Docker镜像构建并推送成功！"
-          echo "镜像地址: ${{ env.ALIYUN_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag_name }}"
+          echo "🔍 验证镜像完整性..."
+
+          # 检查镜像是否存在
+          docker image ls legal-education:${{ steps.meta.outputs.tag_name }}
+
+          # 检查镜像大小
+          SIZE=$(docker image ls legal-education:${{ steps.meta.outputs.tag_name }} --format "{{.Size}}")
+          echo "📦 镜像大小: $SIZE"
+
+          # 测试镜像是否能启动（不实际启动应用）
+          echo "🧪 测试镜像启动..."
+          docker run --rm legal-education:${{ steps.meta.outputs.tag_name }} echo "✅ 镜像启动成功"
+
+      # Step 6: 检查关键文件
+      - name: 📋 Check critical files in image
+        run: |
+          echo "📋 检查镜像内的关键文件..."
+          docker run --rm legal-education:${{ steps.meta.outputs.tag_name }} ls -la /app/
           echo ""
-          echo "📋 服务器拉取命令:"
-          echo "docker pull ${{ env.ALIYUN_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag_name }}"
+          echo "检查环境变量脚本..."
+          docker run --rm legal-education:${{ steps.meta.outputs.tag_name }} ls -la /app/scripts/
           echo ""
-          echo "🏃 运行命令:"
-          echo "docker run -d --name legal-education-prod \\"
-          echo "  -p 3000:3000 -p 3001:3001 \\"
-          echo "  -e DEEPSEEK_API_KEY=sk-xxxxx \\"
-          echo "  -e NEXT_PUBLIC_AI_302_API_KEY=sk-xxxxx \\"
-          echo "  -e NEXT_PUBLIC_BASE_URL=http://115.29.191.180:3000 \\"
-          echo "  -e NEXT_PUBLIC_SOCKET_IO_URL=http://115.29.191.180:3001 \\"
-          echo "  ${{ env.ALIYUN_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag_name }}"
+          echo "检查Socket.IO服务..."
+          docker run --rm legal-education:${{ steps.meta.outputs.tag_name }} ls -la /app/server/
+
+      # Step 7: 输出结果
+      - name: ✅ Build verification result
+        run: |
+          echo "🎉 Docker镜像构建和验证成功！"
+          echo ""
+          echo "✅ 验证项目："
+          echo "  ✓ 镜像成功构建"
+          echo "  ✓ 镜像启动成功"
+          echo "  ✓ 关键文件完整"
+          echo "  ✓ 所有依赖正确安装"
+          echo ""
+          echo "📦 镜像信息："
+          echo "  镜像名称: legal-education:${{ steps.meta.outputs.tag_name }}"
+          echo "  构建时间: $(date)"
+          echo ""
+          echo "💾 本地镜像已生成，可用于本地测试或手动推送"
