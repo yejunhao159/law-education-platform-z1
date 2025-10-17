@@ -111,6 +111,18 @@ COPY --from=builder --chown=nextjs:nodejs /app/ecosystem.config.js ./ecosystem.c
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/check-env.sh ./scripts/check-env.sh
 RUN chmod +x ./scripts/check-env.sh
 
+# 复制数据库初始化脚本
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/init-database.js ./scripts/init-database.js
+RUN chmod +x ./scripts/init-database.js
+
+# 复制PPT功能测试脚本
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/test-ppt-functionality.js ./scripts/test-ppt-functionality.js
+RUN chmod +x ./scripts/test-ppt-functionality.js
+
+# 复制完整功能验证脚本
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/verify-all-functionality.js ./scripts/verify-all-functionality.js
+RUN chmod +x ./scripts/verify-all-functionality.js
+
 # 创建日志目录
 RUN mkdir -p /app/logs && chown -R nextjs:nodejs /app/logs
 
@@ -127,6 +139,6 @@ EXPOSE 3000 3001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"
 
-# 启动命令（先验证环境变量，再启动服务）
-# 使用sh -c包装命令，先执行环境检查，成功后再启动PM2
-CMD ["sh", "-c", "./scripts/check-env.sh && pm2-runtime ecosystem.config.js"]
+# 启动命令（先初始化数据库，再验证环境变量，最后启动服务）
+# 使用sh -c包装命令，按顺序执行：数据库初始化 -> 环境检查 -> 启动PM2
+CMD ["sh", "-c", "./scripts/init-database.js && ./scripts/check-env.sh && pm2-runtime ecosystem.config.js"]

@@ -11,9 +11,21 @@ import fs from 'fs';
 const DB_DIR = path.join(process.cwd(), 'data');
 const DB_PATH = path.join(DB_DIR, 'app.db');
 
-// 确保数据目录存在
-if (!fs.existsSync(DB_DIR)) {
-  fs.mkdirSync(DB_DIR, { recursive: true });
+// 确保数据目录存在并检查权限
+try {
+  if (!fs.existsSync(DB_DIR)) {
+    fs.mkdirSync(DB_DIR, { recursive: true });
+    console.log(`📁 Created database directory: ${DB_DIR}`);
+  }
+
+  // 测试目录写入权限
+  const testFile = path.join(DB_DIR, '.permission-test');
+  fs.writeFileSync(testFile, 'test');
+  fs.unlinkSync(testFile);
+  console.log(`✅ Database directory is writable: ${DB_DIR}`);
+} catch (error) {
+  console.error(`❌ Database directory error: ${DB_DIR}`, error);
+  throw new Error(`Cannot write to database directory: ${DB_DIR}`);
 }
 
 // 创建数据库连接（单例模式）
