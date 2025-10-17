@@ -64,6 +64,13 @@ export function seedDatabase() {
     const passwordHash = passwordUtils.hashSync(userData.password);
 
     try {
+      // 检查用户是否已存在（避免唯一约束冲突）
+      const existingUser = userDb.findByUsername(userData.username);
+      if (existingUser) {
+        console.log(`  ⏭️  User ${userData.username} already exists. Skipping...`);
+        continue;
+      }
+
       const user = userDb.create({
         username: userData.username,
         password_hash: passwordHash,
@@ -72,8 +79,13 @@ export function seedDatabase() {
       });
 
       console.log(`  ✅ Created user: ${user.username} (${user.display_name}) - Role: ${user.role}`);
-    } catch (error) {
-      console.error(`  ❌ Failed to create user ${userData.username}:`, error);
+    } catch (error: any) {
+      // 忽略唯一约束错误（用户已存在）
+      if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        console.log(`  ⏭️  User ${userData.username} already exists. Skipping...`);
+      } else {
+        console.error(`  ❌ Failed to create user ${userData.username}:`, error);
+      }
     }
   }
 
