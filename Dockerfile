@@ -60,8 +60,9 @@ RUN npm run build
 
 # 清理构建依赖（保留生产依赖）
 # 🎯 游客模式：允许better-sqlite3安装失败
-RUN npm ci --only=production --legacy-peer-deps --omit=dev || \
-    npm ci --only=production --legacy-peer-deps --omit=dev --no-optional
+# 跳过prepare脚本（husky install不需要在生产环境运行）
+RUN npm ci --only=production --legacy-peer-deps --omit=dev --ignore-scripts || \
+    npm ci --only=production --legacy-peer-deps --omit=dev --no-optional --ignore-scripts
 
 # 创建非 root 用户
 RUN apt-get update && apt-get install -y --no-install-recommends \
