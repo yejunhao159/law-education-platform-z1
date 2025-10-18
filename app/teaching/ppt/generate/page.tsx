@@ -82,12 +82,7 @@ export default function PptGeneratePage() {
    * 🎯 重构说明：现在直接返回Markdown，无需JSON转换
    */
   async function generateOutlineWithStreaming() {
-    const apiKey = process.env.NEXT_PUBLIC_AI_302_API_KEY;
-    if (!apiKey) {
-      throw new Error('PPT生成服务API Key未配置');
-    }
-
-    const service = new PptGeneratorService(apiKey);
+    const service = new PptGeneratorService();
 
     // 收集数据
     const data = service.collectData();
@@ -126,12 +121,7 @@ export default function PptGeneratePage() {
       setStage('rendering');
       setError(null);
 
-      const apiKey = process.env.NEXT_PUBLIC_AI_302_API_KEY;
-      if (!apiKey) {
-        throw new Error('PPT生成服务API Key未配置');
-      }
-
-      const service = new PptGeneratorService(apiKey);
+      const service = new PptGeneratorService();
 
       // 调用PPT生成服务
       const result = await service.generateFromMarkdown(outlineText, {

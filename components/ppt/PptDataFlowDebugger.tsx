@@ -31,12 +31,7 @@ export function PptDataFlowDebugger() {
     try {
       // 阶段1: 从Store收集数据
       console.log('🔍 [数据流调试] 阶段1: 从Store收集数据');
-      const apiKey = process.env.NEXT_PUBLIC_AI_302_API_KEY;
-      if (!apiKey) {
-        throw new Error('API Key未配置');
-      }
-
-      const service = new PptGeneratorService(apiKey);
+      const service = new PptGeneratorService();
       const collectedData = service.collectData();
 
       const stage1Notes: string[] = [];

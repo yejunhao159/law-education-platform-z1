@@ -23,6 +23,7 @@ const storage = {
 
 // 创建Socket.IO服务器
 const io = new Server(3001, {
+  path: '/socket.io/',
   cors: {
     // 开发环境：允许所有来源（方便调试）
     // 生产环境：限制为具体域名（安全）

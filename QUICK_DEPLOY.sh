@@ -119,31 +119,24 @@ main() {
   read -rs DEEPSEEK_KEY
   [ -z "$DEEPSEEK_KEY" ] && print_error "DEEPSEEK_API_KEY 不能为空"
 
-  echo -e "\n输入 NEXT_PUBLIC_AI_302_API_KEY (必需，用于PPT生成):"
+  echo -e "\n输入 AI_302_API_KEY (必需，用于PPT生成):"
   read -rs AI_302_KEY
-  [ -z "$AI_302_KEY" ] && print_error "NEXT_PUBLIC_AI_302_API_KEY 不能为空"
+  [ -z "$AI_302_KEY" ] && print_error "AI_302_API_KEY 不能为空"
 
-  echo -e "\n输入应用前端URL (默认: http://$SERVER_IP:3000):"
+  echo -e "\n输入应用前端URL (默认: https://$SERVER_IP):"
   read -r BASE_URL
-  BASE_URL="${BASE_URL:-http://$SERVER_IP:3000}"
-
-  echo -e "\n输入Socket.IO URL (默认: http://$SERVER_IP:3001):"
-  read -r SOCKET_IO_URL
-  SOCKET_IO_URL="${SOCKET_IO_URL:-http://$SERVER_IP:3001}"
+  BASE_URL="${BASE_URL:-https://$SERVER_IP}"
 
   # 生成远程部署命令
-  DEPLOY_CMD="docker run -d \\
-  --name legal-education-prod \\
-  --restart always \\
-  -p 3000:3000 \\
-  -p 3001:3001 \\
-  -e DEEPSEEK_API_KEY='$DEEPSEEK_KEY' \\
-  -e NEXT_PUBLIC_DEEPSEEK_API_KEY='$DEEPSEEK_KEY' \\
-  -e NEXT_PUBLIC_AI_302_API_KEY='$AI_302_KEY' \\
-  -e NEXT_PUBLIC_BASE_URL='$BASE_URL' \\
-  -e NEXT_PUBLIC_SOCKET_IO_URL='$SOCKET_IO_URL' \\
-  -v legal-education-data:/app/data \\
-  -v legal-education-logs:/app/logs \\
+  DEPLOY_CMD="docker run -d \
+  --name legal-education-prod \
+  --restart always \
+  -p 3000:3000 \
+  -e DEEPSEEK_API_KEY='$DEEPSEEK_KEY' \
+  -e AI_302_API_KEY='$AI_302_KEY' \
+  -e NEXT_PUBLIC_BASE_URL='$BASE_URL' \
+  -v legal-education-data:/app/data \
+  -v legal-education-logs:/app/logs \
   '$FULL_IMAGE'"
 
   # 在远程服务器执行

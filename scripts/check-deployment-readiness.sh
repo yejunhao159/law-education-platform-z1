@@ -146,10 +146,10 @@ if [ -f ".github/workflows/docker-build-push.yml" ]; then
         check_warn "工作流缺少 DEEPSEEK_API_KEY"
     fi
 
-    if grep -q "NEXT_PUBLIC_AI_302_API_KEY" .github/workflows/docker-build-push.yml; then
-        check_ok "工作流包含 NEXT_PUBLIC_AI_302_API_KEY"
+    if grep -q "AI_302_API_KEY" .github/workflows/docker-build-push.yml; then
+        check_ok "工作流包含 AI_302_API_KEY"
     else
-        check_warn "工作流缺少 NEXT_PUBLIC_AI_302_API_KEY"
+        check_warn "工作流缺少 AI_302_API_KEY"
     fi
 else
     check_warn "GitHub Actions 工作流未配置"
@@ -173,8 +173,8 @@ if [ -f "scripts/generate-env.sh" ]; then
         check_ok "generate-env.sh 包含 DEEPSEEK_API_KEY 检查"
     fi
 
-    if grep -q "NEXT_PUBLIC_AI_302_API_KEY" scripts/generate-env.sh; then
-        check_ok "generate-env.sh 包含 NEXT_PUBLIC_AI_302_API_KEY 检查"
+    if grep -q "AI_302_API_KEY" scripts/generate-env.sh; then
+        check_ok "generate-env.sh 包含 AI_302_API_KEY 检查"
     fi
 fi
 
@@ -219,8 +219,11 @@ echo "🔐 检查 API 密钥使用..."
 # 检查 PPT 生成功能
 if [ -f "app/teaching/ppt/generate/page.tsx" ]; then
     if grep -q "process.env.NEXT_PUBLIC_AI_302_API_KEY" app/teaching/ppt/generate/page.tsx 2>/dev/null; then
-        check_warn "PPT 生成使用客户端环境变量（需要在构建时传入）"
-        echo "   建议：使用 GitHub Actions 构建，或创建 API 路由代理"
+        check_warn "PPT 生成页面仍使用 NEXT_PUBLIC_AI_302_API_KEY（需要改为服务端代理）"
+    elif grep -q "process.env.AI_302_API_KEY" app/teaching/ppt/generate/page.tsx 2>/dev/null; then
+        check_warn "PPT 生成页面直接读取 AI_302_API_KEY（应通过服务端代理）"
+    else
+        check_ok "PPT 生成页面未直接访问敏感密钥"
     fi
 else
     check_ok "PPT 功能未使用或已优化"

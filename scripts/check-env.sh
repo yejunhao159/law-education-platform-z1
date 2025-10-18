@@ -14,22 +14,19 @@ warnings=""
 # ========== 核心API密钥检查（必需） ==========
 if [ -z "$DEEPSEEK_API_KEY" ]; then
   missing="$missing\n  ❌ DEEPSEEK_API_KEY - DeepSeek AI服务密钥（核心功能必需）"
-fi
-
-if [ -z "$NEXT_PUBLIC_DEEPSEEK_API_KEY" ]; then
-  missing="$missing\n  ❌ NEXT_PUBLIC_DEEPSEEK_API_KEY - DeepSeek前端调用密钥（核心功能必需）"
-fi
-
-# ========== PPT功能检查（重要但非致命） ==========
-if [ -z "$NEXT_PUBLIC_AI_302_API_KEY" ]; then
-  warnings="$warnings\n  ⚠️  NEXT_PUBLIC_AI_302_API_KEY - 302.ai PPT生成密钥（PPT功能将不可用）"
 else
-  echo "  ✅ NEXT_PUBLIC_AI_302_API_KEY - 302.ai PPT生成密钥已配置"
+  echo "  ✅ DEEPSEEK_API_KEY - DeepSeek AI服务密钥已配置"
 fi
 
-# ========== Socket.IO配置检查（实时课堂功能） ==========
-if [ -z "$NEXT_PUBLIC_SOCKET_URL" ]; then
-  warnings="$warnings\n  ⚠️  NEXT_PUBLIC_SOCKET_URL - Socket.IO服务器地址（实时课堂功能将使用默认配置）"
+if [ -z "$AI_302_API_KEY" ]; then
+  missing="$missing\n  ❌ AI_302_API_KEY - 302.ai PPT生成密钥（服务端代理 /api/ppt 必需）"
+else
+  echo "  ✅ AI_302_API_KEY - 302.ai PPT生成密钥已配置"
+fi
+
+# ========== Socket.IO配置提醒（信息提示） ==========
+if [ -n "$NEXT_PUBLIC_SOCKET_URL" ] || [ -n "$NEXT_PUBLIC_SOCKET_IO_URL" ]; then
+  warnings="$warnings\n  ⚠️  检测到 NEXT_PUBLIC_SOCKET_URL/NEXT_PUBLIC_SOCKET_IO_URL（前端已使用同域 \"/socket.io/\"，建议移除旧变量）"
 fi
 
 # ========== Node环境检查 ==========
@@ -51,7 +48,7 @@ if [ -n "$missing" ]; then
   echo ""
   echo "📚 详细配置说明："
   echo "   - DEEPSEEK_API_KEY: https://platform.deepseek.com/api_keys"
-  echo "   - NEXT_PUBLIC_AI_302_API_KEY: https://302.ai/ (注册后获取)"
+  echo "   - AI_302_API_KEY: https://302.ai/ (注册后获取)"
   echo ""
   exit 1
 fi
@@ -80,11 +77,17 @@ else
 fi
 
 # 显示PPT API是否已配置
-if [ -n "$NEXT_PUBLIC_AI_302_API_KEY" ]; then
-  echo "   NEXT_PUBLIC_AI_302_API_KEY: 已配置"
+if [ -n "$AI_302_API_KEY" ]; then
+  echo "   AI_302_API_KEY: 已配置"
 else
-  echo "   NEXT_PUBLIC_AI_302_API_KEY: 未配置"
+  echo "   AI_302_API_KEY: 未配置"
 fi
 
-echo "   NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL:-使用默认配置}"
+if [ -n "$NEXT_PUBLIC_SOCKET_URL" ]; then
+  echo "   NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL} (建议清理，改用同域)"
+elif [ -n "$NEXT_PUBLIC_SOCKET_IO_URL" ]; then
+  echo "   NEXT_PUBLIC_SOCKET_IO_URL: ${NEXT_PUBLIC_SOCKET_IO_URL} (建议清理，改用同域)"
+else
+  echo "   Socket 连接: 使用同域 /socket.io/"
+fi
 echo ""

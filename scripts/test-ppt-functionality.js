@@ -11,9 +11,9 @@ async function testPptFunctionality() {
 
   try {
     // 1. 检查环境变量
-    const apiKey = process.env.NEXT_PUBLIC_AI_302_API_KEY;
+    const apiKey = process.env.AI_302_API_KEY;
     if (!apiKey) {
-      console.log('❌ [PPT-TEST] NEXT_PUBLIC_AI_302_API_KEY not configured');
+      console.log('❌ [PPT-TEST] AI_302_API_KEY not configured');
       return false;
     }
 
