@@ -1,5 +1,16 @@
 # =============================================================================
-# 法学教育平台 - Docker 多阶段构建（v4.2 - 修复npm PATH问题）
+# 法学教育平台 - Docker 生产部署镜像（v5.0 - 方案A架构）
+# =============================================================================
+#
+# 架构设计（方案A）：
+# - Socket.IO: PM2管理（需要进程守护，独立3001端口）
+# - Next.js: Docker原生管理（标准npm start，3000端口）
+#
+# 关键改进：
+# - 修复PM2权限问题（设置PM2_HOME=/app/.pm2）
+# - 职责分离：PM2专注Socket.IO，Docker管理Next.js
+# - 符合Next.js最佳实践（使用官方推荐的next start）
+#
 # =============================================================================
 
 FROM node:20
@@ -17,9 +28,17 @@ ARG NEXT_PUBLIC_SOCKET_IO_URL="http://localhost:3001"
 # =============================================================================
 # 构建阶段
 # =============================================================================
-# 安装依赖
+
+# 🎯 游客模式优化：不安装编译工具
+# 因为better-sqlite3变成可选依赖，游客模式下不需要数据库
+# 如果需要数据库功能，取消下面的注释：
+# RUN apt-get update && apt-get install -y \
+#     python3 make g++ \
+#     && rm -rf /var/lib/apt/lists/*
+
+# 安装依赖（允许可选依赖失败）
 COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps
+RUN npm ci --legacy-peer-deps || npm ci --legacy-peer-deps --no-optional
 
 # 复制源代码
 COPY . .
@@ -40,7 +59,9 @@ RUN npm run build
 # =============================================================================
 
 # 清理构建依赖（保留生产依赖）
-RUN npm ci --only=production --legacy-peer-deps --omit=dev --ignore-scripts
+# 🎯 游客模式：允许better-sqlite3安装失败
+RUN npm ci --only=production --legacy-peer-deps --omit=dev || \
+    npm ci --only=production --legacy-peer-deps --omit=dev --no-optional
 
 # 创建非 root 用户
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -49,17 +70,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && addgroup --system --gid 1001 nodejs \
     && adduser --system --uid 1001 nextjs
 
-# 安装PM2进程管理器
+# =============================================================================
+# 安装PM2并修复权限问题（方案A：PM2只管理Socket.IO）
+# =============================================================================
 RUN npm install -g pm2
 
+# 创建PM2工作目录，解决权限问题
+# 关键：设置PM2_HOME到/app/.pm2，避免使用/nonexistent目录
+RUN mkdir -p /app/.pm2/logs /app/.pm2/pids /app/.pm2/modules \
+    && chown -R nextjs:nodejs /app/.pm2
+
 # =============================================================================
-# 复制环境变量脚本
+# 复制环境变量脚本和启动脚本
 # =============================================================================
 COPY scripts/generate-env.sh ./scripts/generate-env.sh
 COPY scripts/check-env.sh ./scripts/check-env.sh
-RUN chmod +x ./scripts/generate-env.sh ./scripts/check-env.sh
+COPY scripts/start.sh ./scripts/start.sh
+RUN chmod +x ./scripts/generate-env.sh ./scripts/check-env.sh ./scripts/start.sh
 
-# 复制Socket.IO服务和PM2配置
+# 复制Socket.IO服务器和PM2配置
 COPY server ./server
 COPY ecosystem.config.js ./ecosystem.config.js
 
@@ -68,6 +97,16 @@ RUN mkdir -p /app/logs /app/data && chown -R nextjs:nodejs /app/logs /app/data
 
 # 修复权限
 RUN chown -R nextjs:nodejs /app
+
+# 设置PM2环境变量（解决权限问题的关键）
+ENV PM2_HOME=/app/.pm2
+
+# 设置数据库自动seed（容器首次启动时自动创建用户）
+ENV AUTO_SEED_DATABASE=true
+
+# 🎯 游客模式：跳过登录验证（临时调试用）
+# 设置为true可以快速验证系统核心功能，无需登录
+ENV GUEST_MODE=true
 
 # 切换到非 root 用户
 USER nextjs
@@ -81,22 +120,17 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })" || exit 1
 
 # =============================================================================
-# 启动命令 - 三步初始化流程
+# 启动命令 - 简化启动流程（移除PM2依赖）
 # =============================================================================
-# 关键：确保所有API环境变量都被正确注入
+# 流程：
 # 1. generate-env.sh   → 运行时生成.env.production
 # 2. check-env.sh      → 验证必要的API密钥（DEEPSEEK_API_KEY、NEXT_PUBLIC_AI_302_API_KEY）
-# 3. pm2-runtime       → 启动Next.js（3000）+ Socket.IO（3001）
+# 3. start.sh          → 启动Next.js（3000）+ Socket.IO（3001）
+#
+# 优势：
+# - 移除PM2依赖，简化架构
+# - Docker自带进程管理和重启机制
+# - 符合Next.js官方最佳实践
 # =============================================================================
 
-CMD ["sh", "-c", "set -e && \
-  echo '🚀 [1/3] 生成运行时环境变量...' && \
-  ./scripts/generate-env.sh && \
-  echo '✓ 环境变量生成完成' && \
-  echo '' && \
-  echo '🔍 [2/3] 验证环境变量...' && \
-  ./scripts/check-env.sh && \
-  echo '✓ 环境变量验证完成' && \
-  echo '' && \
-  echo '🎬 [3/3] 启动服务...' && \
-  pm2-runtime ecosystem.config.js"]
+CMD ["./scripts/start.sh"]

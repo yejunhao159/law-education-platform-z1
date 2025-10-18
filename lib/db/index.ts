@@ -1,61 +1,72 @@
 /**
  * SQLite 数据库连接和初始化
  * 使用 better-sqlite3 提供同步 API，适合 Next.js
+ *
+ * 🎯 游客模式支持：数据库变成可选依赖
+ * - 如果better-sqlite3不可用，系统仍然可以启动
+ * - 游客模式下不需要数据库功能
  */
 
-import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+
+// 尝试导入better-sqlite3（可选依赖）
+let Database: any;
+let DB_AVAILABLE = false;
+
+try {
+  Database = require('better-sqlite3');
+  DB_AVAILABLE = true;
+  console.log('✅ better-sqlite3 loaded successfully');
+} catch (error) {
+  console.warn('⚠️  better-sqlite3 not available - running in database-free mode');
+  console.warn('   This is normal in GUEST_MODE. Database features will be disabled.');
+  DB_AVAILABLE = false;
+}
 
 // 数据库文件路径
 const DB_DIR = path.join(process.cwd(), 'data');
 const DB_PATH = path.join(DB_DIR, 'app.db');
 
-// 确保数据目录存在并检查权限
-try {
-  if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR, { recursive: true });
-    console.log(`📁 Created database directory: ${DB_DIR}`);
-  }
-
-  // 测试目录写入权限
-  const testFile = path.join(DB_DIR, '.permission-test');
-  fs.writeFileSync(testFile, 'test');
-  fs.unlinkSync(testFile);
-  console.log(`✅ Database directory is writable: ${DB_DIR}`);
-} catch (error) {
-  console.error(`❌ Database directory error: ${DB_DIR}`, error);
-  throw new Error(`Cannot write to database directory: ${DB_DIR}`);
-}
-
 // 创建数据库连接（单例模式）
 const globalForDb = globalThis as unknown as {
-  db: Database.Database | undefined;
+  db: any;
   dbInitialized: boolean | undefined;
 };
 
-// 初始化数据库连接
-if (!globalForDb.db) {
+// 仅在数据库可用时初始化
+if (DB_AVAILABLE && !globalForDb.db) {
   try {
+    // 确保数据目录存在
+    if (!fs.existsSync(DB_DIR)) {
+      fs.mkdirSync(DB_DIR, { recursive: true });
+      console.log(`📁 Created database directory: ${DB_DIR}`);
+    }
+
+    // 创建数据库连接
     globalForDb.db = new Database(DB_PATH);
     console.log('✅ Database connection created:', DB_PATH);
   } catch (error) {
     console.error('❌ Failed to create database connection:', error);
-    throw error;
+    console.warn('   Continuing without database support');
+    globalForDb.db = null;
   }
+} else if (!DB_AVAILABLE) {
+  globalForDb.db = null;
+  console.log('ℹ️  Database disabled (GUEST_MODE)');
 }
 
 export const db = globalForDb.db;
+export const isDatabaseAvailable = () => DB_AVAILABLE && db !== null;
 
-// 自动初始化数据库表结构（仅首次）
-if (!globalForDb.dbInitialized) {
+// 自动初始化数据库表结构（仅在数据库可用时）
+if (DB_AVAILABLE && db && !globalForDb.dbInitialized) {
   try {
     console.log('🔧 Initializing database schema...');
     initDatabase();
     globalForDb.dbInitialized = true;
 
     // 仅在生产环境且明确启用时才自动种子数据
-    // 避免在Docker构建、测试等场景中多次触发导致唯一约束冲突
     if (process.env.NODE_ENV === 'production' && process.env.AUTO_SEED_DATABASE === 'true') {
       console.log('🌱 Auto-seeding database in production...');
       setTimeout(() => {
@@ -67,16 +78,21 @@ if (!globalForDb.dbInitialized) {
             console.error('Failed to seed database:', err);
           });
       }, 100);
-    } else if (process.env.NODE_ENV !== 'production') {
-      console.log('ℹ️  Skipping auto-seed (not in production or AUTO_SEED_DATABASE not enabled)');
     }
   } catch (error) {
     console.error('❌ Failed to initialize database:', error);
   }
+} else if (!DB_AVAILABLE) {
+  console.log('ℹ️  Skipping database initialization (database not available)');
 }
 
 // 初始化数据库表结构
 export function initDatabase() {
+  if (!db) {
+    console.warn('⚠️  Cannot initialize database: database not available');
+    return;
+  }
+
   // 用户表
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (

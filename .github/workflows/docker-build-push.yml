@@ -48,6 +48,8 @@ jobs:
           build-args: |
             DEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
             NEXT_PUBLIC_AI_302_API_KEY=${{ secrets.NEXT_PUBLIC_AI_302_API_KEY }}
+            NEXT_PUBLIC_BASE_URL=${{ secrets.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000' }}
+            NEXT_PUBLIC_SOCKET_IO_URL=${{ secrets.NEXT_PUBLIC_SOCKET_IO_URL || 'http://localhost:3000' }}
 
       # Step 5: 验证镜像
       - name: 🔍 Verify image integrity

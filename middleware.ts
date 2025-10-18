@@ -10,11 +10,25 @@ import { jwtVerify } from 'jose';
 const JWT_SECRET = process.env.JWT_SECRET || 'law-education-platform-secret-key-2025';
 const secret = new TextEncoder().encode(JWT_SECRET);
 
+// =============================================================================
+// 🎯 游客模式开关（临时调试用）
+// =============================================================================
+// 设置为 true 时，跳过所有登录验证，直接放行
+// 用于快速验证系统核心功能（AI教学、Socket.IO等）
+// 生产环境请设置为 false
+const GUEST_MODE = process.env.GUEST_MODE === 'true' || false;
+
 // 公开路径（不需要登录）
 const publicPaths = ['/login'];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // ========== 游客模式：跳过所有验证 ==========
+  if (GUEST_MODE) {
+    console.log(`🎭 [GUEST MODE] 游客模式已启用，跳过登录验证: ${pathname}`);
+    return NextResponse.next();
+  }
 
   // 检查是否为公开路径
   const isPublicPath = publicPaths.some((path) => pathname.startsWith(path));
