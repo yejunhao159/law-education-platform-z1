@@ -74,16 +74,19 @@ export function RealtimeClassroomPanel({
 
   // ✅ Socket.IO连接（替代轮询）
   useEffect(() => {
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL ||
-                      (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3001` : 'http://localhost:3001');
+    const socketUrl = typeof window !== 'undefined'
+      ? `${window.location.protocol}//${window.location.host}`
+      : 'https://legal-education.deepracticex.com';
 
     console.log('🔌 [教师端] 连接Socket.IO:', socketUrl);
 
     const newSocket = io(socketUrl, {
+      path: '/socket.io/',
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 5,
-      reconnectionDelay: 1000
+      reconnectionDelay: 1000,
+      withCredentials: true
     });
 
     newSocket.on('connect', () => {

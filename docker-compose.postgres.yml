@@ -45,9 +45,8 @@ services:
       dockerfile: Dockerfile.optimized
       args:
         DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
-        NEXT_PUBLIC_AI_302_API_KEY: ${NEXT_PUBLIC_AI_302_API_KEY}
+        AI_302_API_KEY: ${AI_302_API_KEY}
         NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-http://localhost:3000}
-        NEXT_PUBLIC_SOCKET_IO_URL: ${NEXT_PUBLIC_SOCKET_IO_URL:-http://localhost:3000}
         DB_HOST: postgres
         DB_PORT: 5432
         DB_NAME: law_education
@@ -82,10 +81,8 @@ services:
 
       # API密钥
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
-      - NEXT_PUBLIC_AI_302_API_KEY=${NEXT_PUBLIC_AI_302_API_KEY}
-      - NEXT_PUBLIC_DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - AI_302_API_KEY=${AI_302_API_KEY}
       - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL:-http://localhost:3000}
-      - NEXT_PUBLIC_SOCKET_IO_URL=${NEXT_PUBLIC_SOCKET_IO_URL:-http://localhost:3000}
 
       # 游客模式（可选，默认false）
       - GUEST_MODE=${GUEST_MODE:-false}

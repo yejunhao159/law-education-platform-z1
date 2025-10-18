@@ -38,18 +38,20 @@ export default function StudentClassroomPage({ params }: PageProps) {
   // ✅ Socket.IO连接（替代SSE）
   useEffect(() => {
     // 使用相对路径通过Nginx代理连接Socket.IO（修复硬编码端口3001问题）
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL ||
-                      (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+    const socketUrl = typeof window !== 'undefined'
+      ? `${window.location.protocol}//${window.location.host}`
+      : 'https://legal-education.deepracticex.com';
 
     console.log('🔌 连接Socket.IO服务器:', socketUrl);
 
     const newSocket = io(socketUrl, {
-      path: '/socket.io',
+      path: '/socket.io/',
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
-      timeout: 20000
+      timeout: 20000,
+      withCredentials: true
     });
 
     newSocket.on('connect', () => {

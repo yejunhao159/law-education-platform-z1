@@ -135,14 +135,183 @@ interface DownloadPptResponse {
 // ========== PPT生成服务 ==========
 
 export class PptGeneratorService {
-  private apiKey: string;
+  private apiKey?: string;
   private baseUrl = 'https://api.302.ai';
+  private readonly requestTimeout = 360000; // 6分钟
 
-  constructor(apiKey: string) {
-    if (!apiKey) {
+  constructor(apiKey?: string) {
+    this.apiKey = apiKey;
+  }
+
+  private shouldUseBackendProxy(): boolean {
+    return typeof window !== 'undefined' && (!this.apiKey || this.apiKey.length === 0);
+  }
+
+  private createAbortController(timeout: number = this.requestTimeout): { controller: AbortController; timer: ReturnType<typeof setTimeout> } {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    return { controller, timer };
+  }
+
+  private async fetchGenerate(requestBody: any): Promise<Response> {
+    if (this.shouldUseBackendProxy()) {
+      return this.fetchFromBackend('generate', requestBody);
+    }
+
+    return this.fetchDirectGenerate(requestBody);
+  }
+
+  private async fetchStatus(pptId: string): Promise<AsyncPptInfo> {
+    if (this.shouldUseBackendProxy()) {
+      return this.fetchJsonFromBackend<AsyncPptInfo>('status', { pptId });
+    }
+
+    return this.fetchDirectStatus(pptId);
+  }
+
+  private async fetchDownload(pptId: string): Promise<DownloadPptResponse> {
+    if (this.shouldUseBackendProxy()) {
+      return this.fetchJsonFromBackend<DownloadPptResponse>('download', { pptId });
+    }
+
+    return this.fetchDirectDownload(pptId);
+  }
+
+  private async fetchFromBackend(action: 'generate', payload: any): Promise<Response> {
+    const { controller, timer } = this.createAbortController();
+
+    try {
+      const response = await fetch('/api/ppt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ action, payload }),
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`PPT服务调用失败 (${response.status}): ${errorText}`);
+      }
+
+      return response;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private async fetchJsonFromBackend<T>(action: 'status' | 'download', payload: any): Promise<T> {
+    const { controller, timer } = this.createAbortController();
+
+    try {
+      const response = await fetch('/api/ppt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ action, payload }),
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(`PPT服务调用失败 (${response.status}): ${text}`);
+      }
+
+      return text ? (JSON.parse(text) as T) : ({} as T);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private async fetchDirectGenerate(requestBody: any): Promise<Response> {
+    if (!this.apiKey) {
       throw new Error('PPT生成服务需要 AI_302_API_KEY');
     }
-    this.apiKey = apiKey;
+
+    const { controller, timer } = this.createAbortController();
+
+    try {
+      const response = await fetch(`${this.baseUrl}/302/ppt/generatecontent`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`302.ai API调用失败 (${response.status}): ${errorText}`);
+      }
+
+      return response;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private async fetchDirectStatus(pptId: string): Promise<AsyncPptInfo> {
+    if (!this.apiKey) {
+      throw new Error('PPT生成服务需要 AI_302_API_KEY');
+    }
+
+    const { controller, timer } = this.createAbortController();
+
+    try {
+      const response = await fetch(`${this.baseUrl}/302/ppt/asyncpptinfo?pptId=${pptId}`, {
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        signal: controller.signal,
+      });
+
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(`查询状态失败 (${response.status}): ${text}`);
+      }
+
+      return text ? (JSON.parse(text) as AsyncPptInfo) : { code: -1, message: 'Empty response' };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private async fetchDirectDownload(pptId: string): Promise<DownloadPptResponse> {
+    if (!this.apiKey) {
+      throw new Error('PPT生成服务需要 AI_302_API_KEY');
+    }
+
+    const { controller, timer } = this.createAbortController();
+
+    try {
+      const response = await fetch(`${this.baseUrl}/302/ppt/downloadpptx`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id: pptId,
+          refresh: false
+        }),
+        signal: controller.signal,
+      });
+
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(`下载PPT失败 (${response.status}): ${text}`);
+      }
+
+      return text ? (JSON.parse(text) as DownloadPptResponse) : { code: -1, message: 'Empty response' };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**
@@ -546,8 +715,6 @@ export class PptGeneratorService {
     });
 
     // 2. 调用302.ai generatecontent接口（异步模式）
-    const endpoint = `${this.baseUrl}/302/ppt/generatecontent`;
-
     const requestBody = {
       outlineMarkdown: outlineMarkdown,
       stream: true,
@@ -558,19 +725,7 @@ export class PptGeneratorService {
     };
 
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`302.ai API调用失败 (${response.status}): ${errorText}`);
-      }
+      const response = await this.fetchGenerate(requestBody);
 
       // 3. 处理流式响应，获取pptId
       const pptId = await this.handleStreamResponse(response, options);
@@ -710,20 +865,7 @@ export class PptGeneratorService {
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const response = await fetch(
-          `${this.baseUrl}/302/ppt/asyncpptinfo?pptId=${pptId}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${this.apiKey}`
-            }
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`查询状态失败: ${response.status}`);
-        }
-
-        const result: AsyncPptInfo = await response.json();
+        const result = await this.fetchStatus(pptId);
 
         const current = result.data?.current || 0;
         const total = result.data?.total || 0;
@@ -780,27 +922,7 @@ export class PptGeneratorService {
     console.log('📥 [PptGenerator] 调用下载接口获取PPT文件链接, pptId:', pptId);
 
     try {
-      const response = await fetch(
-        `${this.baseUrl}/302/ppt/downloadpptx`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            id: pptId,
-            refresh: false
-          })
-        }
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`下载PPT失败 (${response.status}): ${errorText}`);
-      }
-
-      const result: DownloadPptResponse = await response.json();
+      const result = await this.fetchDownload(pptId);
 
       if (result.code !== 0 || !result.data?.fileUrl) {
         throw new Error(result.message || '未能获取PPT下载链接');
@@ -862,8 +984,6 @@ export class PptGeneratorService {
       });
 
       // 调用302.ai generatecontent接口
-      const endpoint = `${this.baseUrl}/302/ppt/generatecontent`;
-
       const requestBody = {
         outlineMarkdown: markdownText,
         stream: true,
@@ -872,19 +992,7 @@ export class PptGeneratorService {
         templateId: options.templateId
       };
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`302.ai API调用失败 (${response.status}): ${errorText}`);
-      }
+      const response = await this.fetchGenerate(requestBody);
 
       // 处理流式响应，获取pptId
       const pptId = await this.handleStreamResponse(response, {

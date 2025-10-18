@@ -58,6 +58,7 @@ jobs:
           tags: |
             type=raw,value=latest
             type=sha,prefix=main-
+            type=raw,value=deploy-${{ github.run_number }}
 
       - name: Build and push Docker image
         id: build
@@ -130,6 +131,7 @@ jobs:
           echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Registry:** \`${{ env.REGISTRY }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Additional Tag:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:deploy-${{ github.run_number }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### ✅ 核心改进" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ **依赖自动化管理**：使用 \`npm ci --only=production\` 自动安装所有依赖" >> $GITHUB_STEP_SUMMARY
@@ -161,8 +163,6 @@ jobs:
           echo "### ⚠️ 部署前必读" >> $GITHUB_STEP_SUMMARY
           echo "**必需的环境变量**（容器启动时会自动验证）：" >> $GITHUB_STEP_SUMMARY
           echo "- \`DEEPSEEK_API_KEY\` - DeepSeek AI密钥" >> $GITHUB_STEP_SUMMARY
-          echo "- \`NEXT_PUBLIC_DEEPSEEK_API_KEY\` - 前端调用密钥" >> $GITHUB_STEP_SUMMARY
-          echo "- \`NEXT_PUBLIC_AI_302_API_KEY\` - PPT功能密钥（可选但推荐）" >> $GITHUB_STEP_SUMMARY
-          echo "- \`NEXT_PUBLIC_SOCKET_URL\` - Socket.IO服务器地址（可选）" >> $GITHUB_STEP_SUMMARY
+          echo "- \`AI_302_API_KEY\` - 302.ai PPT生成密钥（服务端读取，前端仅访问 \`/api/ppt\`）" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "如果环境变量缺失，容器将拒绝启动并显示详细错误信息。" >> $GITHUB_STEP_SUMMARY

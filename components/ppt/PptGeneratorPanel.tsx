@@ -87,14 +87,8 @@ export function PptGeneratorPanel({
       setError(null);
       setProgress({ stage: 'outline', progress: 10, message: '正在初始化...' });
 
-      // 获取API Key
-      const apiKey = process.env.NEXT_PUBLIC_AI_302_API_KEY;
-      if (!apiKey) {
-        throw new Error('PPT生成服务API Key未配置，请在环境变量中设置 NEXT_PUBLIC_AI_302_API_KEY');
-      }
-
-      // 初始化服务
-      const service = new PptGeneratorService(apiKey);
+      // 初始化服务（通过服务端代理访问PPT生成API）
+      const service = new PptGeneratorService();
 
       const options: PptGenerationOptions = {
         template: selectedTemplate,  // 使用用户选择的模板
@@ -131,13 +125,7 @@ export function PptGeneratorPanel({
       setOutline(editedOutline);
       setProgress({ stage: 'content', progress: 35, message: '开始生成PPT...' });
 
-      // 获取API Key
-      const apiKey = process.env.NEXT_PUBLIC_AI_302_API_KEY;
-      if (!apiKey) {
-        throw new Error('PPT生成服务API Key未配置');
-      }
-
-      const service = new PptGeneratorService(apiKey);
+      const service = new PptGeneratorService();
 
       const options: PptGenerationOptions = {
         template: selectedTemplate,  // 使用用户选择的模板

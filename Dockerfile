@@ -21,9 +21,7 @@ WORKDIR /app
 # 接收构建参数（从GitHub Actions或docker build --build-arg传入）
 # =============================================================================
 ARG DEEPSEEK_API_KEY=""
-ARG NEXT_PUBLIC_AI_302_API_KEY=""
 ARG NEXT_PUBLIC_BASE_URL="http://localhost:3000"
-ARG NEXT_PUBLIC_SOCKET_IO_URL="http://localhost:3001"
 
 # =============================================================================
 # 构建阶段
@@ -47,9 +45,7 @@ COPY . .
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
-ENV NEXT_PUBLIC_AI_302_API_KEY=${NEXT_PUBLIC_AI_302_API_KEY}
 ENV NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
-ENV NEXT_PUBLIC_SOCKET_IO_URL=${NEXT_PUBLIC_SOCKET_IO_URL}
 
 # 构建 Next.js 应用
 RUN npm run build
@@ -125,7 +121,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # =============================================================================
 # 流程：
 # 1. generate-env.sh   → 运行时生成.env.production
-# 2. check-env.sh      → 验证必要的API密钥（DEEPSEEK_API_KEY、NEXT_PUBLIC_AI_302_API_KEY）
+# 2. check-env.sh      → 验证必要的API密钥（DEEPSEEK_API_KEY、AI_302_API_KEY）
 # 3. start.sh          → 启动Next.js（3000）+ Socket.IO（3001）
 #
 # 优势：

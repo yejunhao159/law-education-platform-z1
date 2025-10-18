@@ -81,7 +81,7 @@ async function verifyFunctionality() {
 
     // 4. 302.ai PPT API 连接测试
     console.log('\n🎨 [VERIFY] 验证302.ai PPT API连接...');
-    const pptApiKey = process.env.NEXT_PUBLIC_AI_302_API_KEY;
+    const pptApiKey = process.env.AI_302_API_KEY;
     if (pptApiKey) {
       try {
         const response = await fetch('https://api.302.ai/302/ppt/template/list', {
@@ -104,7 +104,7 @@ async function verifyFunctionality() {
         console.log('❌ [VERIFY] 302.ai PPT API连接异常:', error.message);
       }
     } else {
-      console.log('❌ [VERIFY] 302.ai PPT API密钥未配置');
+      console.log('❌ [VERIFY] 302.ai PPT API密钥未配置 (AI_302_API_KEY)');
     }
 
     // 5. PPT生成功能测试

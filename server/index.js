@@ -85,6 +85,7 @@ app.prepare().then(() => {
   // ---------------------------------------------------------------------------
   const socketServer = createServer();
   const io = new Server(socketServer, {
+    path: '/socket.io/',
     cors: {
       origin: process.env.NODE_ENV === 'production'
         ? [
