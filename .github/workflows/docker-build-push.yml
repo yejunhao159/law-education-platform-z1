@@ -9,6 +9,12 @@ on:
       - 'v*'
   workflow_dispatch:  # 允许手动触发
 
+# 权限配置
+permissions:
+  contents: read
+  packages: write
+  security-events: write  # 允许上传安全扫描结果
+
 jobs:
   build-and-verify:
     runs-on: ubuntu-latest
