@@ -79,19 +79,66 @@ jobs:
           echo "检查Socket.IO服务..."
           docker run --rm legal-education:${{ steps.meta.outputs.tag_name }} ls -la /app/server/
 
-      # Step 7: 输出结果
-      - name: ✅ Build verification result
+      # Step 7: 登录阿里云容器镜像仓库
+      - name: 🔐 Login to Aliyun Container Registry
         run: |
-          echo "🎉 Docker镜像构建和验证成功！"
+          echo "🔐 登录阿里云容器镜像仓库..."
+          echo "${{ secrets.ALIYUN_REGISTRY_PASSWORD }}" | docker login \
+            --username "${{ secrets.ALIYUN_REGISTRY_USER }}" \
+            --password-stdin \
+            "${{ secrets.ALIYUN_REGISTRY }}"
+
+      # Step 8: 标记并推送镜像到阿里云
+      - name: 🚀 Tag and Push to Aliyun Registry
+        run: |
+          # 构建完整的阿里云镜像地址
+          ALIYUN_IMAGE="${{ secrets.ALIYUN_REGISTRY }}/${{ secrets.ALIYUN_IMAGE_REPO }}:${{ steps.meta.outputs.tag_name }}"
+          ALIYUN_IMAGE_LATEST="${{ secrets.ALIYUN_REGISTRY }}/${{ secrets.ALIYUN_IMAGE_REPO }}:latest"
+
+          echo "📦 标记镜像..."
+          docker tag legal-education:${{ steps.meta.outputs.tag_name }} $ALIYUN_IMAGE
+          docker tag legal-education:${{ steps.meta.outputs.tag_name }} $ALIYUN_IMAGE_LATEST
+
+          echo "🚀 推送到阿里云..."
+          docker push $ALIYUN_IMAGE
+          docker push $ALIYUN_IMAGE_LATEST
+
+          echo ""
+          echo "✅ 镜像已成功推送到阿里云！"
+          echo "📦 镜像地址："
+          echo "  - $ALIYUN_IMAGE"
+          echo "  - $ALIYUN_IMAGE_LATEST"
+
+      # Step 9: 输出部署命令
+      - name: ✅ Deployment instructions
+        run: |
+          echo "🎉 Docker镜像构建和推送成功！"
           echo ""
           echo "✅ 验证项目："
           echo "  ✓ 镜像成功构建"
           echo "  ✓ 镜像启动成功"
           echo "  ✓ 关键文件完整"
-          echo "  ✓ 所有依赖正确安装"
+          echo "  ✓ 已推送到阿里云"
           echo ""
           echo "📦 镜像信息："
-          echo "  镜像名称: legal-education:${{ steps.meta.outputs.tag_name }}"
+          echo "  本地镜像: legal-education:${{ steps.meta.outputs.tag_name }}"
+          echo "  阿里云镜像: ${{ secrets.ALIYUN_REGISTRY }}/${{ secrets.ALIYUN_IMAGE_REPO }}:${{ steps.meta.outputs.tag_name }}"
           echo "  构建时间: $(date)"
           echo ""
-          echo "💾 本地镜像已生成，可用于本地测试或手动推送"
+          echo "🚀 部署命令（在服务器上运行）："
+          echo "-----------------------------------"
+          echo "# 1. 拉取镜像"
+          echo "docker pull ${{ secrets.ALIYUN_REGISTRY }}/${{ secrets.ALIYUN_IMAGE_REPO }}:latest"
+          echo ""
+          echo "# 2. 停止旧容器（如果存在）"
+          echo "docker stop law-edu-platform || true"
+          echo "docker rm law-edu-platform || true"
+          echo ""
+          echo "# 3. 启动新容器"
+          echo "docker run -d --name law-edu-platform \\"
+          echo "  -p 3000:3000 -p 3001:3001 \\"
+          echo "  -e GUEST_MODE=true \\"
+          echo "  -e DEEPSEEK_API_KEY=your-key \\"
+          echo "  -e NEXT_PUBLIC_AI_302_API_KEY=your-key \\"
+          echo "  ${{ secrets.ALIYUN_REGISTRY }}/${{ secrets.ALIYUN_IMAGE_REPO }}:latest"
+          echo "-----------------------------------"
