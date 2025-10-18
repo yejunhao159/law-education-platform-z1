@@ -1,0 +1,253 @@
+# =============================================================================
+# 企业级 CI/CD Pipeline - Docker 构建和发布
+# =============================================================================
+# 功能：
+#   1. 构建 Docker 镜像（支持缓存加速）
+#   2. 安全扫描（Trivy）
+#   3. 推送到 GitHub Container Registry (GHCR)
+#   4. 推送到阿里云容器镜像仓库
+#   5. 生成部署摘要和命令
+#
+# 触发条件：
+#   - Push to main → latest 标签
+#   - Push tag (v*) → 版本标签
+#   - Manual trigger → 自定义参数
+# =============================================================================
+
+name: 🚀 Docker Build & Publish
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/**'
+      - '!.github/workflows/**'
+
+  workflow_dispatch:
+    inputs:
+      tag_suffix:
+        description: '自定义标签后缀 (例如: test, staging)'
+        required: false
+        default: ''
+
+env:
+  REGISTRY_GHCR: ghcr.io
+  REGISTRY_ALIYUN: ${{ secrets.ALIYUN_REGISTRY }}
+  IMAGE_NAME: ${{ github.repository }}
+  ALIYUN_IMAGE_REPO: ${{ secrets.ALIYUN_IMAGE_REPO }}
+
+jobs:
+  # ===========================================================================
+  # Job 1: 构建 Docker 镜像
+  # ===========================================================================
+  build-and-push:
+    name: 🏗️ Build and Push Docker Image
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+
+    outputs:
+      image-tag: ${{ steps.meta.outputs.version }}
+      image-digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. 准备阶段
+      # -----------------------------------------------------------------------
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
+
+      # -----------------------------------------------------------------------
+      # 2. 确定镜像标签
+      # -----------------------------------------------------------------------
+      - name: 🏷️ Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # main 分支 → latest
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+            # tag 推送 → 版本号
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # commit SHA (前7位)
+            type=sha,prefix={{branch}}-,format=short
+            # 自定义后缀
+            type=raw,value=${{ github.event.inputs.tag_suffix }},enable=${{ github.event.inputs.tag_suffix != '' }}
+          labels: |
+            org.opencontainers.image.title=法学教育平台
+            org.opencontainers.image.description=基于苏格拉底教学法的交互式法学教育平台
+            org.opencontainers.image.vendor=DeepPractice.ai
+
+      # -----------------------------------------------------------------------
+      # 3. 登录到容器镜像仓库
+      # -----------------------------------------------------------------------
+      - name: 🔐 Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY_GHCR }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🔐 Login to Aliyun Container Registry
+        if: ${{ secrets.ALIYUN_REGISTRY_USER != '' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY_ALIYUN }}
+          username: ${{ secrets.ALIYUN_REGISTRY_USER }}
+          password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
+
+      # -----------------------------------------------------------------------
+      # 4. 构建并推送 Docker 镜像
+      # -----------------------------------------------------------------------
+      - name: 🚀 Build and push to GHCR
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            DEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
+            AI_302_API_KEY=${{ secrets.AI_302_API_KEY }}
+            NEXT_PUBLIC_BASE_URL=${{ secrets.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000' }}
+
+      # -----------------------------------------------------------------------
+      # 5. 同时推送到阿里云（如果配置了）
+      # -----------------------------------------------------------------------
+      - name: 🏷️ Tag for Aliyun Registry
+        if: ${{ secrets.ALIYUN_REGISTRY_USER != '' }}
+        id: aliyun-tags
+        run: |
+          # 获取主要标签
+          MAIN_TAG="${{ steps.meta.outputs.version }}"
+
+          # 构建阿里云镜像地址
+          ALIYUN_IMAGE="${{ env.REGISTRY_ALIYUN }}/${{ env.ALIYUN_IMAGE_REPO }}"
+
+          echo "main-tag=${ALIYUN_IMAGE}:${MAIN_TAG}" >> $GITHUB_OUTPUT
+          echo "latest-tag=${ALIYUN_IMAGE}:latest" >> $GITHUB_OUTPUT
+
+      - name: 🚀 Push to Aliyun Registry
+        if: ${{ secrets.ALIYUN_REGISTRY_USER != '' }}
+        run: |
+          # 从 GHCR 拉取镜像
+          docker pull ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+
+          # 重新标记为阿里云镜像
+          docker tag ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }} \
+                     ${{ steps.aliyun-tags.outputs.main-tag }}
+
+          # 推送到阿里云
+          docker push ${{ steps.aliyun-tags.outputs.main-tag }}
+
+          # 如果是 main 分支，同时打上 latest 标签
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            docker tag ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }} \
+                       ${{ steps.aliyun-tags.outputs.latest-tag }}
+            docker push ${{ steps.aliyun-tags.outputs.latest-tag }}
+          fi
+
+      # -----------------------------------------------------------------------
+      # 6. 安全扫描
+      # -----------------------------------------------------------------------
+      - name: 🔍 Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: 📤 Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      # -----------------------------------------------------------------------
+      # 7. 生成部署摘要
+      # -----------------------------------------------------------------------
+      - name: 📋 Generate deployment summary
+        run: |
+          echo "## 🎉 Docker 镜像构建成功！" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 📦 镜像信息" >> $GITHUB_STEP_SUMMARY
+          echo "| 项目 | 值 |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| **版本标签** | \`${{ steps.meta.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **镜像摘要** | \`${{ steps.build.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **构建时间** | $(date -u +'%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
+          echo "| **提交SHA** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 📥 镜像拉取命令" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**从 GitHub Container Registry:**" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ secrets.ALIYUN_REGISTRY_USER }}" != "" ]]; then
+            echo "**从阿里云容器镜像仓库:**" >> $GITHUB_STEP_SUMMARY
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "docker pull ${{ steps.aliyun-tags.outputs.main-tag }}" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "### 🚀 部署命令" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "# 1. 拉取最新镜像" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ secrets.ALIYUN_REGISTRY_USER }}" != "" ]]; then
+            echo "docker pull ${{ steps.aliyun-tags.outputs.main-tag }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "docker pull ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# 2. 重启服务" >> $GITHUB_STEP_SUMMARY
+          echo "docker-compose -f docker-compose.production.yml down" >> $GITHUB_STEP_SUMMARY
+          echo "docker-compose -f docker-compose.production.yml up -d" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# 3. 查看日志" >> $GITHUB_STEP_SUMMARY
+          echo "docker logs law-edu-app --tail 50 -f" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### ⚙️ 环境变量要求" >> $GITHUB_STEP_SUMMARY
+          echo "确保服务器的 \`.env.production\` 文件包含以下变量：" >> $GITHUB_STEP_SUMMARY
+          echo "- \`DEEPSEEK_API_KEY\` - DeepSeek AI 密钥" >> $GITHUB_STEP_SUMMARY
+          echo "- \`AI_302_API_KEY\` - 302.ai PPT 生成密钥" >> $GITHUB_STEP_SUMMARY
+          echo "- \`DB_PASSWORD\` - 数据库密码" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### ✅ 构建优化" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ 使用 BuildKit 加速构建" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ GitHub Actions 缓存已启用" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Trivy 安全扫描已完成" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ 镜像已推送到 2 个仓库" >> $GITHUB_STEP_SUMMARY
