@@ -34,6 +34,7 @@ jobs:
     permissions:
       contents: read
       packages: write  # 允许推送到 GHCR
+      security-events: write  # 允许上传安全扫描结果
 
     steps:
       # 1. 检出代码
