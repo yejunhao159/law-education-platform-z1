@@ -524,9 +524,9 @@ export class PptGeneratorService {
 
     // 🔧 根据PPT长度动态计算maxTokens（防止大纲被截断）
     const maxTokensMap = {
-      short: 5000,   // 10-15页 → 约3000-4500 tokens + 结构
-      medium: 8000,  // 20-25页 → 约4000-6000 tokens + 结构
-      long: 12000    // 25-35页 → 约5000-8000 tokens + 结构
+      short: 8000,   // 10-15页 → 提高60%，确保完整性和质量
+      medium: 12000, // 20-25页 → 提高50%，支持更详细的内容
+      long: 16000    // 25-35页 → 提高33%，适应超长复杂PPT
     };
     const maxTokens = maxTokensMap[options.length || 'medium'];
 
@@ -623,9 +623,9 @@ export class PptGeneratorService {
 
     // 🔧 根据PPT长度动态计算maxTokens（防止大纲被截断）
     const maxTokensMap = {
-      short: 5000,   // 10-15页 → 约3000-4500 tokens + 结构
-      medium: 8000,  // 20-25页 → 约4000-6000 tokens + 结构
-      long: 12000    // 25-35页 → 约5000-8000 tokens + 结构
+      short: 8000,   // 10-15页 → 提高60%，确保完整性和质量
+      medium: 12000, // 20-25页 → 提高50%，支持更详细的内容
+      long: 16000    // 25-35页 → 提高33%，适应超长复杂PPT
     };
     const maxTokens = maxTokensMap[options.length || 'medium'];
 

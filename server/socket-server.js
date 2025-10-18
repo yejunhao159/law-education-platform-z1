@@ -40,8 +40,8 @@ const io = new Server(3001, {
     methods: ['GET', 'POST'],
     credentials: true
   },
-  // 连接配置
-  pingTimeout: 60000,
+  // 连接配置（提高超时以支持长时间PPT生成）
+  pingTimeout: 120000,  // 2分钟（提高到120秒，支持PPT生成等长时间操作）
   pingInterval: 25000,
   // 传输方式（优先WebSocket）
   transports: ['websocket', 'polling']

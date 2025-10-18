@@ -100,7 +100,8 @@ app.prepare().then(() => {
       methods: ['GET', 'POST'],
       credentials: true
     },
-    pingTimeout: 60000,
+    // 连接配置（提高超时以支持长时间PPT生成）
+    pingTimeout: 120000,  // 2分钟（提高到120秒，支持PPT生成等长时间操作）
     pingInterval: 25000,
     transports: ['websocket', 'polling']
   });

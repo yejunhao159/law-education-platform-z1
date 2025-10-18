@@ -21,6 +21,7 @@ WORKDIR /app
 # 接收构建参数（从GitHub Actions或docker build --build-arg传入）
 # =============================================================================
 ARG DEEPSEEK_API_KEY=""
+ARG AI_302_API_KEY=""
 ARG NEXT_PUBLIC_BASE_URL="http://localhost:3000"
 
 # =============================================================================
@@ -45,6 +46,7 @@ COPY . .
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+ENV AI_302_API_KEY=${AI_302_API_KEY}
 ENV NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
 
 # 构建 Next.js 应用

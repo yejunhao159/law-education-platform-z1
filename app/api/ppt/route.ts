@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const API_BASE_URL = 'https://api.302.ai';
-const REQUEST_TIMEOUT = 360_000; // 6 minutes
+const REQUEST_TIMEOUT = 480_000; // 8 minutes (increased for complex PPT generation)
 
 type SupportedAction = 'generate' | 'status' | 'download';
 
