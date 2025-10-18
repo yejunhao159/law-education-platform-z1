@@ -1,10 +1,19 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git clone:*)",
-      "Bash(rm:*)",
-      "Bash(git fetch:*)",
-      "Bash(git add:*)"
+      "Bash(docker exec -it law-edu-postgres psql -U postgres -d law_education -c \"\\dt\")",
+      "Bash(docker exec law-edu-postgres psql -U postgres -d law_education -c \"\\dt\")",
+      "Bash(docker exec law-edu-postgres psql -U postgres -d law_education -c \"SELECT id, username, display_name, role FROM users ORDER BY id;\")",
+      "Bash(find /home/yejh0725/law-education-platform-z1 -maxdepth 1 -type f ( -name \"*.yml\" -o -name \"*.yaml\" -o -name \"Dockerfile*\" ) -exec ls -lh {} ;)",
+      "Bash(find /home/yejh0725/law-education-platform-z1/scripts -type f -name \"*.sh\" -exec ls -lh {} ;)",
+      "Bash(cat /home/yejh0725/law-education-platform-z1/ecosystem.config.js)",
+      "Bash(awk '{print $9}')",
+      "Bash(./scripts/check-deployment-readiness.sh)",
+      "Bash(timeout 10 ./scripts/check-deployment-readiness.sh)",
+      "Bash(echo \"退出码: $?\")",
+      "Bash(bash -x ./scripts/check-deployment-readiness.sh)",
+      "Read(//tmp/**)",
+      "Bash(git add .)"
     ],
     "deny": [],
     "ask": []

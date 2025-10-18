@@ -17,21 +17,23 @@ export async function GET(request: NextRequest) {
 
   try {
     // 2. 获取所有用户
-    const users = userDb.findAll();
+    const users = await userDb.findAll();
 
     // 3. 为每个用户添加统计信息
-    const usersWithStats = users.map((user) => {
-      const loginCount = loginLogDb.countByUser(user.id);
-      const lastLoginTime = loginLogDb.getLastLoginTime(user.id);
+    const usersWithStats = await Promise.all(
+      users.map(async (user) => {
+        const loginCount = await loginLogDb.countByUser(user.id);
+        const lastLoginTime = await loginLogDb.getLastLoginTime(user.id);
 
-      return {
-        ...user,
-        stats: {
-          loginCount,
-          lastLoginTime,
-        },
-      };
-    });
+        return {
+          ...user,
+          stats: {
+            loginCount,
+            lastLoginTime,
+          },
+        };
+      })
+    );
 
     return NextResponse.json({
       users: usersWithStats,

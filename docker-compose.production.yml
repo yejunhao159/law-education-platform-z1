@@ -1,0 +1,183 @@
+# =============================================================================
+# 生产环境 Docker Compose 配置
+# =============================================================================
+# 架构：单服务器部署，包含 PostgreSQL 数据库 + Nginx 反向代理
+# 使用方法：
+#   1. 配置环境变量：cp .env.example .env.production && vim .env.production
+#   2. 启动服务：docker-compose -f docker-compose.production.yml up -d
+#   3. 查看日志：docker-compose -f docker-compose.production.yml logs -f
+#   4. 停止服务：docker-compose -f docker-compose.production.yml down
+# =============================================================================
+
+version: '3.9'
+
+services:
+  # ===========================================================================
+  # PostgreSQL 数据库
+  # ===========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: law-edu-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${DB_NAME:-law_education}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?请设置数据库密码}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+
+    ports:
+      - "127.0.0.1:5432:5432"  # 仅监听本地，避免外部访问
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - law-edu-network
+
+  # ===========================================================================
+  # 主应用（Next.js + Socket.IO）
+  # ===========================================================================
+  app:
+    image: ${DOCKER_IMAGE:-registry.cn-shenzhen.aliyuncs.com/yejunhao/legal-education:latest}
+    container_name: law-edu-app
+    restart: unless-stopped
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    ports:
+      - "127.0.0.1:3000:3000"  # Next.js（仅本地访问）
+      - "127.0.0.1:3001:3001"  # Socket.IO（仅本地访问）
+
+    environment:
+      # Node.js环境
+      NODE_ENV: production
+      PORT: 3000
+      SOCKET_PORT: 3001
+      HOSTNAME: 0.0.0.0
+
+      # 数据库连接
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-law_education}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:?请设置数据库密码}
+
+      # API密钥
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?请设置DEEPSEEK_API_KEY}
+      NEXT_PUBLIC_AI_302_API_KEY: ${NEXT_PUBLIC_AI_302_API_KEY:?请设置NEXT_PUBLIC_AI_302_API_KEY}
+      NEXT_PUBLIC_DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+
+      # 前端配置（根据实际域名修改）
+      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-https://your-domain.com}
+      NEXT_PUBLIC_SOCKET_IO_URL: ${NEXT_PUBLIC_SOCKET_IO_URL:-https://your-domain.com}
+
+      # 游客模式（生产环境建议关闭）
+      GUEST_MODE: ${GUEST_MODE:-false}
+
+      # 自动种子数据（首次部署设为true）
+      AUTO_SEED_DATABASE: ${AUTO_SEED_DATABASE:-true}
+
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    networks:
+      - law-edu-network
+
+  # ===========================================================================
+  # Nginx 反向代理
+  # ===========================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: law-edu-nginx
+    restart: unless-stopped
+
+    depends_on:
+      - app
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      # Nginx配置
+      - ./nginx.conf:/etc/nginx/conf.d/law-education.conf:ro
+
+      # SSL证书（需要提前生成）
+      - ./ssl:/etc/nginx/ssl:ro
+
+      # Let's Encrypt证书验证目录
+      - ./certbot/www:/var/www/certbot:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+
+      # 日志
+      - nginx_logs:/var/log/nginx
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+    networks:
+      - law-edu-network
+
+  # ===========================================================================
+  # PostgreSQL 管理工具（可选，仅开发/调试时使用）
+  # ===========================================================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: law-edu-pgadmin
+    restart: unless-stopped
+
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@law-edu.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?请设置pgAdmin密码}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+
+    ports:
+      - "127.0.0.1:5050:80"  # 仅本地访问
+
+    depends_on:
+      - postgres
+
+    networks:
+      - law-edu-network
+
+    profiles:
+      - admin  # 仅在需要时启动：docker-compose --profile admin up
+
+# =============================================================================
+# 网络配置
+# =============================================================================
+networks:
+  law-edu-network:
+    name: law-edu-network
+    driver: bridge
+
+# =============================================================================
+# 数据卷
+# =============================================================================
+volumes:
+  postgres_data:
+    name: law-edu-postgres-data
+  nginx_logs:
+    name: law-edu-nginx-logs

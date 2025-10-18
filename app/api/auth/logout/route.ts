@@ -14,7 +14,7 @@ export async function POST(_request: NextRequest) {
 
     // 2. 如果有登录日志 ID，记录登出时间
     if (user?.loginLogId) {
-      loginLogDb.recordLogout(user.loginLogId);
+      await loginLogDb.recordLogout(user.loginLogId);
     }
 
     // 3. 清除 Cookie

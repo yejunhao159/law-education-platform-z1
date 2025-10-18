@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     const { username, password } = validation.data;
 
     // 2. 查找用户
-    const user = userDb.findByUsername(username);
+    const user = await userDb.findByUsername(username);
 
     if (!user) {
       return NextResponse.json(
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
     const userAgent = request.headers.get('user-agent') || 'unknown';
 
-    const loginLog = loginLogDb.recordLogin({
+    const loginLog = await loginLogDb.recordLogin({
       user_id: user.id,
       ip_address: ip,
       user_agent: userAgent,

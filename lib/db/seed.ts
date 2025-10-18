@@ -1,9 +1,9 @@
 /**
- * 数据库种子数据
+ * 数据库种子数据 - PostgreSQL版本
  * 创建5个预置账号
+ * 从 SQLite 迁移到 PostgreSQL - 所有操作改为异步
  */
 
-import { initDatabase, db } from './index';
 import { userDb } from './users';
 import { passwordUtils } from '../auth/password';
 
@@ -42,84 +42,95 @@ const SEED_USERS = [
 ];
 
 /**
- * 初始化数据库并创建种子数据
+ * 初始化数据库并创建种子数据（异步版本）
  */
-export function seedDatabase() {
+export async function seedDatabase() {
   console.log('🌱 Starting database seeding...');
 
-  // 1. 初始化表结构
-  initDatabase();
+  try {
+    // 1. 检查是否已有用户
+    const existingUsers = await userDb.findAll();
+    if (existingUsers.length > 0) {
+      console.log(`⚠️  Database already has ${existingUsers.length} users. Skipping seed.`);
+      return;
+    }
 
-  // 2. 检查是否已有用户
-  const existingUsers = userDb.findAll();
-  if (existingUsers.length > 0) {
-    console.log(`⚠️  Database already has ${existingUsers.length} users. Skipping seed.`);
-    return;
-  }
+    // 2. 创建5个预置账号
+    console.log('📝 Creating seed users...');
 
-  // 3. 创建5个预置账号
-  console.log('📝 Creating seed users...');
+    for (const userData of SEED_USERS) {
+      const passwordHash = passwordUtils.hashSync(userData.password);
 
-  for (const userData of SEED_USERS) {
-    const passwordHash = passwordUtils.hashSync(userData.password);
+      try {
+        // 检查用户是否已存在（避免唯一约束冲突）
+        const existingUser = await userDb.findByUsername(userData.username);
+        if (existingUser) {
+          console.log(`  ⏭️  User ${userData.username} already exists. Skipping...`);
+          continue;
+        }
 
-    try {
-      // 检查用户是否已存在（避免唯一约束冲突）
-      const existingUser = userDb.findByUsername(userData.username);
-      if (existingUser) {
-        console.log(`  ⏭️  User ${userData.username} already exists. Skipping...`);
-        continue;
-      }
+        const user = await userDb.create({
+          username: userData.username,
+          password_hash: passwordHash,
+          display_name: userData.display_name,
+          role: userData.role,
+        });
 
-      const user = userDb.create({
-        username: userData.username,
-        password_hash: passwordHash,
-        display_name: userData.display_name,
-        role: userData.role,
-      });
-
-      console.log(`  ✅ Created user: ${user.username} (${user.display_name}) - Role: ${user.role}`);
-    } catch (error: any) {
-      // 忽略唯一约束错误（用户已存在）
-      if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-        console.log(`  ⏭️  User ${userData.username} already exists. Skipping...`);
-      } else {
-        console.error(`  ❌ Failed to create user ${userData.username}:`, error);
+        console.log(`  ✅ Created user: ${user.username} (${user.display_name}) - Role: ${user.role}`);
+      } catch (error: any) {
+        // PostgreSQL唯一约束错误
+        if (error.code === '23505') {
+          console.log(`  ⏭️  User ${userData.username} already exists. Skipping...`);
+        } else {
+          console.error(`  ❌ Failed to create user ${userData.username}:`, error);
+        }
       }
     }
-  }
 
-  console.log('🎉 Database seeding completed!');
-  console.log('');
-  console.log('📋 Login credentials:');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('Username     │ Password │ Role');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  SEED_USERS.forEach((user) => {
-    const roleDisplay = user.role === 'admin' ? '管理员' : '教师';
-    console.log(`${user.username.padEnd(12)} │ ${user.password.padEnd(8)} │ ${roleDisplay}`);
-  });
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('');
+    console.log('🎉 Database seeding completed!');
+    console.log('');
+    console.log('📋 Login credentials:');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('Username     │ Password │ Role');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    SEED_USERS.forEach((user) => {
+      const roleDisplay = user.role === 'admin' ? '管理员' : '教师';
+      console.log(`${user.username.padEnd(12)} │ ${user.password.padEnd(8)} │ ${roleDisplay}`);
+    });
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('');
+  } catch (error) {
+    console.error('❌ Database seeding failed:', error);
+    throw error;
+  }
 }
 
 /**
  * 重置数据库（危险操作！）
  */
-export function resetDatabase() {
+export async function resetDatabase() {
   console.log('⚠️  Resetting database...');
 
-  db.exec('DROP TABLE IF EXISTS activity_stats');
-  db.exec('DROP TABLE IF EXISTS login_logs');
-  db.exec('DROP TABLE IF EXISTS users');
+  const { pool } = await import('./index');
+
+  await pool.query('DROP TABLE IF EXISTS activity_stats CASCADE');
+  await pool.query('DROP TABLE IF EXISTS login_logs CASCADE');
+  await pool.query('DROP TABLE IF EXISTS users CASCADE');
 
   console.log('✅ Database tables dropped');
 
-  seedDatabase();
+  await seedDatabase();
 }
 
 // 如果直接运行此脚本，则执行种子数据
 if (require.main === module) {
-  seedDatabase();
-  process.exit(0);
+  seedDatabase()
+    .then(() => {
+      console.log('✅ Seed script completed');
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error('❌ Seed script failed:', error);
+      process.exit(1);
+    });
 }

@@ -1,155 +1,199 @@
 /**
- * SQLite 数据库连接和初始化
- * 使用 better-sqlite3 提供同步 API，适合 Next.js
+ * PostgreSQL 数据库连接和初始化
+ * 使用 pg 提供连接池，适合生产环境
  *
- * 🎯 游客模式支持：数据库变成可选依赖
- * - 如果better-sqlite3不可用，系统仍然可以启动
- * - 游客模式下不需要数据库功能
+ * 从 SQLite (better-sqlite3) 迁移到 PostgreSQL
+ * 优势：
+ * - ✅ 无需编译原生模块
+ * - ✅ 容器友好
+ * - ✅ 支持并发
+ * - ✅ 易于横向扩展
+ * - ✅ 生产级数据库
  */
 
-import path from 'path';
-import fs from 'fs';
+import { Pool, PoolClient, QueryResult } from 'pg';
 
-// 尝试导入better-sqlite3（可选依赖）
-let Database: any;
-let DB_AVAILABLE = false;
+// =============================================================================
+// 数据库连接配置
+// =============================================================================
+const config = {
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '5432', 10),
+  database: process.env.DB_NAME || 'law_education',
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || 'postgres',
 
-try {
-  Database = require('better-sqlite3');
-  DB_AVAILABLE = true;
-  console.log('✅ better-sqlite3 loaded successfully');
-} catch (error) {
-  console.warn('⚠️  better-sqlite3 not available - running in database-free mode');
-  console.warn('   This is normal in GUEST_MODE. Database features will be disabled.');
-  DB_AVAILABLE = false;
-}
+  // 连接池配置
+  max: 20, // 最大连接数
+  idleTimeoutMillis: 30000, // 空闲连接超时
+  connectionTimeoutMillis: 2000, // 连接超时
+};
 
-// 数据库文件路径
-const DB_DIR = path.join(process.cwd(), 'data');
-const DB_PATH = path.join(DB_DIR, 'app.db');
-
-// 创建数据库连接（单例模式）
+// =============================================================================
+// 创建连接池（单例模式）
+// =============================================================================
 const globalForDb = globalThis as unknown as {
-  db: any;
+  pool: Pool | undefined;
   dbInitialized: boolean | undefined;
 };
 
-// 仅在数据库可用时初始化
-if (DB_AVAILABLE && !globalForDb.db) {
-  try {
-    // 确保数据目录存在
-    if (!fs.existsSync(DB_DIR)) {
-      fs.mkdirSync(DB_DIR, { recursive: true });
-      console.log(`📁 Created database directory: ${DB_DIR}`);
-    }
+if (!globalForDb.pool) {
+  console.log('🔧 Initializing PostgreSQL connection pool...');
+  console.log(`📍 Database: ${config.host}:${config.port}/${config.database}`);
 
-    // 创建数据库连接
-    globalForDb.db = new Database(DB_PATH);
-    console.log('✅ Database connection created:', DB_PATH);
-  } catch (error) {
-    console.error('❌ Failed to create database connection:', error);
-    console.warn('   Continuing without database support');
-    globalForDb.db = null;
-  }
-} else if (!DB_AVAILABLE) {
-  globalForDb.db = null;
-  console.log('ℹ️  Database disabled (GUEST_MODE)');
+  globalForDb.pool = new Pool(config);
+
+  // 监听连接池事件
+  globalForDb.pool.on('connect', () => {
+    console.log('✅ New client connected to PostgreSQL');
+  });
+
+  globalForDb.pool.on('error', (err) => {
+    console.error('❌ Unexpected error on idle client', err);
+    process.exit(-1);
+  });
 }
 
-export const db = globalForDb.db;
-export const isDatabaseAvailable = () => DB_AVAILABLE && db !== null;
+export const pool = globalForDb.pool;
 
-// 自动初始化数据库表结构（仅在数据库可用时）
-if (DB_AVAILABLE && db && !globalForDb.dbInitialized) {
+// =============================================================================
+// 数据库初始化
+// =============================================================================
+export async function initDatabase() {
   try {
     console.log('🔧 Initializing database schema...');
-    initDatabase();
-    globalForDb.dbInitialized = true;
+
+    // 用户表
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(255) UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        display_name VARCHAR(255) NOT NULL,
+        role VARCHAR(20) DEFAULT 'teacher' CHECK(role IN ('admin', 'teacher')),
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 登录日志表
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS login_logs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        login_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        logout_time TIMESTAMP,
+        ip_address VARCHAR(45),
+        user_agent TEXT
+      )
+    `);
+
+    // 活动统计表
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS activity_stats (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        action_type VARCHAR(100) NOT NULL,
+        action_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        metadata JSONB
+      )
+    `);
+
+    // 创建索引提升查询性能
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_login_logs_user_id ON login_logs(user_id);
+      CREATE INDEX IF NOT EXISTS idx_login_logs_time ON login_logs(login_time);
+      CREATE INDEX IF NOT EXISTS idx_activity_stats_user_id ON activity_stats(user_id);
+      CREATE INDEX IF NOT EXISTS idx_activity_stats_time ON activity_stats(action_time);
+    `);
+
+    console.log('✅ Database schema initialized successfully');
 
     // 仅在生产环境且明确启用时才自动种子数据
     if (process.env.NODE_ENV === 'production' && process.env.AUTO_SEED_DATABASE === 'true') {
       console.log('🌱 Auto-seeding database in production...');
-      setTimeout(() => {
-        import('./seed')
-          .then(({ seedDatabase }) => {
-            seedDatabase();
-          })
-          .catch((err) => {
-            console.error('Failed to seed database:', err);
-          });
-      }, 100);
+      try {
+        const { seedDatabase } = await import('./seed');
+        await seedDatabase();
+      } catch (err) {
+        console.error('Failed to seed database:', err);
+      }
     }
   } catch (error) {
     console.error('❌ Failed to initialize database:', error);
+    throw error;
   }
-} else if (!DB_AVAILABLE) {
-  console.log('ℹ️  Skipping database initialization (database not available)');
 }
 
-// 初始化数据库表结构
-export function initDatabase() {
-  if (!db) {
-    console.warn('⚠️  Cannot initialize database: database not available');
-    return;
-  }
-
-  // 用户表
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
-      display_name TEXT NOT NULL,
-      role TEXT DEFAULT 'teacher' CHECK(role IN ('admin', 'teacher')),
-      is_active INTEGER DEFAULT 1,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    )
-  `);
-
-  // 登录日志表
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS login_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      login_time TEXT NOT NULL,
-      logout_time TEXT,
-      ip_address TEXT,
-      user_agent TEXT,
-      FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-  `);
-
-  // 活动统计表
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS activity_stats (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      action_type TEXT NOT NULL,
-      action_time TEXT NOT NULL,
-      metadata TEXT,
-      FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-  `);
-
-  // 创建索引提升查询性能
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_login_logs_user_id ON login_logs(user_id);
-    CREATE INDEX IF NOT EXISTS idx_login_logs_time ON login_logs(login_time);
-    CREATE INDEX IF NOT EXISTS idx_activity_stats_user_id ON activity_stats(user_id);
-    CREATE INDEX IF NOT EXISTS idx_activity_stats_time ON activity_stats(action_time);
-  `);
-
-  console.log('✅ Database initialized successfully');
+// 自动初始化数据库表结构（仅在首次连接时）
+if (!globalForDb.dbInitialized) {
+  initDatabase()
+    .then(() => {
+      globalForDb.dbInitialized = true;
+    })
+    .catch((error) => {
+      console.error('❌ Database initialization failed:', error);
+      // 不要退出进程，允许应用继续运行（可能在后续连接中成功）
+    });
 }
 
-// 导出数据库操作辅助函数
+// =============================================================================
+// 数据库操作辅助函数
+// =============================================================================
 export const dbUtils = {
   // 获取当前时间戳（ISO 格式）
   now: () => new Date().toISOString(),
 
   // 执行事务
-  transaction: <T>(fn: () => T): T => {
-    return db.transaction(fn)();
+  async transaction<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await callback(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  // 查询单行
+  async queryOne<T = any>(text: string, params: any[] = []): Promise<T | null> {
+    const result = await pool.query(text, params);
+    return result.rows[0] || null;
+  },
+
+  // 查询多行
+  async queryMany<T = any>(text: string, params: any[] = []): Promise<T[]> {
+    const result = await pool.query(text, params);
+    return result.rows;
+  },
+
+  // 执行插入/更新/删除，返回受影响的行数
+  async execute(text: string, params: any[] = []): Promise<number> {
+    const result = await pool.query(text, params);
+    return result.rowCount || 0;
   },
 };
+
+// =============================================================================
+// 优雅关闭
+// =============================================================================
+export async function closeDatabase() {
+  console.log('🔌 Closing database connections...');
+  await pool.end();
+  console.log('✅ Database connections closed');
+}
+
+// 监听进程退出事件
+process.on('SIGTERM', async () => {
+  await closeDatabase();
+});
+
+process.on('SIGINT', async () => {
+  await closeDatabase();
+});

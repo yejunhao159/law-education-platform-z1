@@ -1,18 +1,27 @@
 # =============================================================================
-# Docker 构建排除文件
+# Docker 构建排除文件 - 优化版
 # =============================================================================
-# 目的：减小构建上下文体积，加快构建速度
+# 目的：减小构建上下文体积，加快构建速度，同时确保关键文件不被排除
 # =============================================================================
 
-# Docker 构建排除文件
-# 注意：.next 和 node_modules 会在Docker构建过程中动态生成
+# ⚠️ 关键提醒：
+# 以下目录必须保留，不要添加到忽略列表：
+# - app/            (Next.js页面和API路由)
+# - server/         (Socket.IO服务器)
+# - scripts/        (运行时脚本: generate-env.sh, check-env.sh, start.sh)
+# - lib/            (核心库代码)
+# - components/     (React组件)
+# - public/         (静态资源)
+# =============================================================================
 
 # 日志文件
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.log
 
-# 构建产物和临时目录
+# 构建产物和临时目录（会在Docker中重新生成）
+.next
 out
 dist
 build
@@ -20,16 +29,14 @@ coverage
 .nyc_output
 
 # 测试相关
-coverage
-.nyc_output
-*.test.ts
-*.test.tsx
-*.spec.ts
-*.spec.tsx
 __tests__
 __mocks__
 test-results
 playwright-report
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
 
 # 环境变量（敏感信息，不应打包到镜像）
 .env
@@ -51,46 +58,34 @@ playwright-report
 *.swp
 *.swo
 *~
-.DS_Store
 
-# 文档
+# 文档（减少镜像体积）
 README.md
 CLAUDE.md
-DEPLOYMENT.md
-docs
+docs/
 *.md
 
-# CI/CD
-.github/workflows
-
-# 日志文件
-logs
-*.log
-
 # 临时文件
-tmp
-temp
-.tmp
+tmp/
+temp/
+.tmp/
 
 # 备份文件
 *.backup
 *.bak
-context-manager.backup_*
+*.sqlite-backup
+lib/db/*.sqlite-backup
 
-# macOS
+# 操作系统文件
 .DS_Store
 .AppleDouble
 .LSOverride
-
-# Windows
 Thumbs.db
 ehthumbs.db
 Desktop.ini
-
-# Linux
 .directory
 
-# 包管理器锁文件（会使用 package-lock.json）
+# 包管理器锁文件（保留package-lock.json）
 yarn.lock
 pnpm-lock.yaml
 
@@ -100,7 +95,26 @@ pnpm-lock.yaml
 # Playwright
 .playwright
 
-# 其他
+# Docker 相关（避免循环）
 .dockerignore
-Dockerfile
-docker-compose*.yml
+Dockerfile.optimized
+Dockerfile.simple
+Dockerfile.slim
+docker-compose.yml
+docker-compose.prod.yml
+docker-compose.blue-green.yml
+
+# 多余的脚本（核心脚本会被明确COPY）
+scripts/deploy*.sh
+scripts/test*.sh
+scripts/build-and-export*.sh
+scripts/split-image.sh
+scripts/transfer*.sh
+scripts/download*.sh
+scripts/install-docker-wsl2.sh
+scripts/quick-deploy.sh
+
+# 数据文件（避免打包本地数据）
+data/
+*.db
+*.sqlite

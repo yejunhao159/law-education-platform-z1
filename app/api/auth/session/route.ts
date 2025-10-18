@@ -20,7 +20,7 @@ export async function GET(_request: NextRequest) {
     }
 
     // 2. 从数据库获取最新用户信息
-    const user = userDb.findById(jwtPayload.userId);
+    const user = await userDb.findById(jwtPayload.userId);
 
     if (!user) {
       // 用户已被删除
