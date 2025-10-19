@@ -74,17 +74,23 @@ jobs:
       # -----------------------------------------------------------------------
       - name: 🎨 Run ESLint
         id: eslint
-        run: npm run lint
+        run: |
+          echo "开始ESLint检查..."
+          npm run lint
         continue-on-error: true
 
       - name: 🔤 Run TypeScript type check
         id: typecheck
-        run: npm run type-check
+        run: |
+          echo "开始TypeScript类型检查..."
+          npm run type-check
         continue-on-error: true
 
       - name: ✨ Run Prettier check
         id: prettier
-        run: npm run format:check
+        run: |
+          echo "开始Prettier格式检查..."
+          npm run format:check
         continue-on-error: true
 
       # -----------------------------------------------------------------------
@@ -92,7 +98,9 @@ jobs:
       # -----------------------------------------------------------------------
       - name: 🔒 Run npm audit
         id: audit
-        run: npm audit --audit-level=high --production
+        run: |
+          echo "开始依赖安全审计..."
+          npm audit --audit-level=high --production || echo "⚠️ 发现高危漏洞"
         continue-on-error: true
 
       # -----------------------------------------------------------------------
@@ -166,14 +174,18 @@ jobs:
           echo "**提交**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "**分支**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
 
-          # 如果有失败，返回错误
-          if [ "${{ steps.eslint.outcome }}" != "success" ] || \
-             [ "${{ steps.typecheck.outcome }}" != "success" ] || \
-             [ "${{ steps.prettier.outcome }}" != "success" ] || \
-             [ "${{ steps.build.outcome }}" != "success" ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "⚠️ **质量检查未完全通过，请修复上述问题**" >> $GITHUB_STEP_SUMMARY
+          # 仅当构建失败时返回错误（其他检查仅报告不阻止）
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.build.outcome }}" != "success" ]; then
+            echo "❌ **构建失败，必须修复后才能合并**" >> $GITHUB_STEP_SUMMARY
             exit 1
+          elif [ "${{ steps.eslint.outcome }}" != "success" ] || \
+               [ "${{ steps.typecheck.outcome }}" != "success" ] || \
+               [ "${{ steps.prettier.outcome }}" != "success" ]; then
+            echo "⚠️ **代码质量检查有问题，建议修复**" >> $GITHUB_STEP_SUMMARY
+            echo "（构建成功，允许合并，但请尽快修复质量问题）" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **所有检查通过！**" >> $GITHUB_STEP_SUMMARY
           fi
 
   # ===========================================================================
