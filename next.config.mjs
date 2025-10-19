@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Docker 部署优化：生成 standalone 输出
-  output: 'standalone',
+  // Docker 部署优化：禁用standalone输出（避免构建时文件复制问题）
+  // output: 'standalone', // 暂时禁用，等构建稳定后再启用
 
   eslint: {
     ignoreDuringBuilds: true,
