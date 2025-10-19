@@ -62,7 +62,12 @@ jobs:
           cache: 'npm'
 
       - name: 📦 Install dependencies
-        run: npm ci --prefer-offline --no-audit --legacy-peer-deps
+        run: |
+          echo "安装依赖中..."
+          npm ci --prefer-offline --no-audit --legacy-peer-deps
+          echo "✅ 依赖安装完成"
+          echo "已安装的关键依赖版本:"
+          npm list zod @typescript-eslint/eslint-plugin eslint react --depth=0 || true
 
       # -----------------------------------------------------------------------
       # 2. 代码质量检查
@@ -91,12 +96,22 @@ jobs:
       # 4. 构建验证
       # -----------------------------------------------------------------------
       - name: 🏗️ Verify build
-        run: npm run build
+        run: |
+          echo "开始构建验证..."
+          npm run build
+          echo "✅ 构建成功完成"
         env:
           # 使用测试环境变量
           DEEPSEEK_API_KEY: test-key
           AI_302_API_KEY: test-key
           NODE_ENV: production
+          # 数据库配置（CI环境不需要真实数据库）
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: test
+          DB_USER: test
+          DB_PASSWORD: test
 
       # -----------------------------------------------------------------------
       # 5. 生成报告
