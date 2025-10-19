@@ -30,8 +30,7 @@ import type {
   EvidenceQuizSectionProps,
   EvidenceQuizSession,
   EvidenceQuiz,
-  Evidence,
-  TimelineEvent
+  Evidence
 } from '@/types/timeline-claim-analysis';
 
 export function EvidenceQuizSection({

@@ -182,7 +182,7 @@ async function checkCache(): Promise<ComponentHealth> {
     const testKey = 'health-check-test';
     const testValue = { timestamp: Date.now() };
     
-    await cacheManager.set(testKey, testValue, 10);
+    await cacheManager.set(testKey, testValue, { ttl: 10_000 });
     const retrieved = await cacheManager.get(testKey);
     
     if (!retrieved) {
@@ -190,17 +190,18 @@ async function checkCache(): Promise<ComponentHealth> {
     }
     
     // 获取缓存统计
-    const stats = cacheManager.getStats();
+    const stats = await cacheManager.getStats();
     
     return {
       name: 'cache',
       status: 'up',
       responseTime: Date.now() - startTime,
       metadata: {
-        hitRate: stats.hitRate,
-        totalHits: stats.hits,
-        totalMisses: stats.misses,
-        totalEvictions: stats.evictions
+        hitRate: stats.summary.overallHitRate,
+        totalHits: stats.summary.totalHits,
+        totalRequests: stats.summary.totalRequests,
+        memoryUsage: stats.summary.memoryUsage,
+        entries: stats.summary.totalEntries
       }
     };
   } catch (error) {

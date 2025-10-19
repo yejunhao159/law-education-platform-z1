@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
     const totalLoginsResult = await pool.query<{ count: string }>(
       'SELECT COUNT(*) as count FROM login_logs'
     );
-    const totalLogins = parseInt(totalLoginsResult.rows[0].count, 10);
+    const totalLoginsRow = totalLoginsResult.rows[0];
+    const totalLogins = totalLoginsRow ? parseInt(totalLoginsRow.count ?? '0', 10) : 0;
 
     // 4. 获取最近7天的登录统计
     const sevenDaysAgo = new Date();
@@ -37,14 +38,16 @@ export async function GET(request: NextRequest) {
       'SELECT COUNT(*) as count FROM login_logs WHERE login_time >= $1',
       [sevenDaysAgoISO]
     );
-    const recentLogins = parseInt(recentLoginsResult.rows[0].count, 10);
+    const recentLoginsRow = recentLoginsResult.rows[0];
+    const recentLogins = recentLoginsRow ? parseInt(recentLoginsRow.count ?? '0', 10) : 0;
 
     // 5. 获取活跃用户数（最近7天登录过的）
     const activeUsersResult = await pool.query<{ count: string }>(
       'SELECT COUNT(DISTINCT user_id) as count FROM login_logs WHERE login_time >= $1',
       [sevenDaysAgoISO]
     );
-    const activeUsers = parseInt(activeUsersResult.rows[0].count, 10);
+    const activeUsersRow = activeUsersResult.rows[0];
+    const activeUsers = activeUsersRow ? parseInt(activeUsersRow.count ?? '0', 10) : 0;
 
     // 6. 获取最近登录记录（最近10条）
     const recentLoginLogs = await loginLogDb.findAll(10);

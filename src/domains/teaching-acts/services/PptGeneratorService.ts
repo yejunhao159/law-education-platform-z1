@@ -13,10 +13,7 @@
 import { callUnifiedAI } from '@/src/infrastructure/ai/AICallProxy';
 import { useTeachingStore } from '../stores/useTeachingStore';
 import { PptContentExtractor, type PptKeyElements } from './PptContentExtractor';
-import { PptPromptBuilder, type PptTemplate as PptTemplateType } from './prompts/PptPromptBuilder';
-
-// ========== 重新导出类型（保持向后兼容） ==========
-export type PptTemplate = PptTemplateType;
+import { PptPromptBuilder } from './prompts/PptPromptBuilder';
 
 // ========== 类型定义 ==========
 
@@ -39,12 +36,11 @@ export interface PptResult {
  * PPT生成选项
  */
 export interface PptGenerationOptions {
-  template: PptTemplate;
-  style?: 'formal' | 'modern' | 'academic';
+  style?: 'formal' | 'modern' | 'academic';  // 内容风格
   language?: 'zh' | 'zh-Hant' | 'en' | 'ja' | 'ko' | 'ar' | 'de' | 'fr' | 'it' | 'pt' | 'es' | 'ru';
-  length?: 'short' | 'medium' | 'long';  // 10-15页 / 20-30页 / 25-35页
-  includeDialogue?: boolean;
-  templateId?: string;  // 302.ai模板ID，不传使用随机模板
+  length?: 'short' | 'medium' | 'long';  // 内容长度：10-15页 / 20-25页 / 25-35页
+  includeDialogue?: boolean;              // 是否包含苏格拉底对话
+  templateId?: string;                    // 302.ai视觉模板ID，不传使用随机模板
   onProgress?: (progress: PptGenerationProgress) => void;  // 进度回调
 }
 
@@ -509,12 +505,11 @@ export class PptGeneratorService {
     const extractor = new PptContentExtractor();
     const keyElements = extractor.extract(data);
 
-    // 构建System Prompt
-    const systemPrompt = promptBuilder.buildSystemPrompt(options.template);
+    // 构建System Prompt（标准的法学案例教学课件）
+    const systemPrompt = promptBuilder.buildSystemPrompt();
 
     // 构建User Prompt
     const userPrompt = promptBuilder.buildUserPrompt({
-      template: options.template,
       style: options.style,
       length: options.length,
       includeDialogue: options.includeDialogue,
@@ -609,12 +604,11 @@ export class PptGeneratorService {
     const extractor = new PptContentExtractor();
     const keyElements = extractor.extract(data);
 
-    // 构建System Prompt
-    const systemPrompt = promptBuilder.buildSystemPrompt(options.template);
+    // 构建System Prompt（标准的法学案例教学课件）
+    const systemPrompt = promptBuilder.buildSystemPrompt();
 
     // 构建User Prompt
     const userPrompt = promptBuilder.buildUserPrompt({
-      template: options.template,
       style: options.style,
       length: options.length,
       includeDialogue: options.includeDialogue,
@@ -998,7 +992,6 @@ export class PptGeneratorService {
 
       // 处理流式响应，获取pptId
       const pptId = await this.handleStreamResponse(response, {
-        template: 'education-bureau',
         onProgress: options.onProgress
       });
 
@@ -1017,7 +1010,6 @@ export class PptGeneratorService {
 
       // 轮询查询PPT生成状态
       await this.pollPptStatus(pptId, {
-        template: 'education-bureau',
         onProgress: options.onProgress
       });
 

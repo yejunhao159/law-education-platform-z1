@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { jwtUtils } from '@/lib/auth/jwt'
 import { userDb } from '@/lib/db/users'
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     // 验证JWT token
     const payload = await jwtUtils.getCurrentUser()

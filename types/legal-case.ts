@@ -228,6 +228,15 @@ export const MetadataSchema = z.object({
   processingTime: z.number(),
   extractionMethod: z.enum(['pure-ai', 'hybrid', 'rule-enhanced', 'manual']),
   version: z.string().optional(),
+  confidenceReport: z.object({
+    overall: z.number().min(0).max(100),
+    details: z.array(z.object({
+      module: z.enum(['facts', 'evidence', 'reasoning']),
+      score: z.number().min(0).max(100),
+      factors: z.array(z.string()).optional(),
+      warnings: z.array(z.string()).optional(),
+    }))
+  }).optional(),
 })
 
 // ========== 完整案件数据 ==========
@@ -270,6 +279,7 @@ export type LogicStep = z.infer<typeof LogicStepSchema>
 export type Reasoning = z.infer<typeof ReasoningSchema>
 export type ThreeElements = z.infer<typeof ThreeElementsSchema>
 export type Metadata = z.infer<typeof MetadataSchema>
+export type ConfidenceReport = NonNullable<Metadata['confidenceReport']>
 export type LegalCase = z.infer<typeof LegalCaseSchema>
 
 // ========== AI分析相关类型导出 ==========
