@@ -45,7 +45,7 @@ services:
   # 主应用（Next.js + Socket.IO）
   # ===========================================================================
   app:
-    image: ${DOCKER_IMAGE:-registry.cn-shenzhen.aliyuncs.com/yejunhao/legal-education:latest}
+    image: ${DOCKER_IMAGE:-ghcr.io/yejunhao159/law-education-platform-z1:latest}
     container_name: law-edu-app
     restart: unless-stopped
 
