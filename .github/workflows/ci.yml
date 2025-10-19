@@ -64,38 +64,42 @@ jobs:
       - name: 📦 Install dependencies
         run: |
           echo "安装依赖中..."
-          npm ci --prefer-offline --no-audit --legacy-peer-deps
+          npm ci --legacy-peer-deps
           echo "✅ 依赖安装完成"
           echo "已安装的关键依赖版本:"
           npm list zod @typescript-eslint/eslint-plugin eslint react --depth=0 || true
 
       # -----------------------------------------------------------------------
-      # 2. 代码质量检查
+      # 2. 代码质量检查（严格模式：失败即停止）
       # -----------------------------------------------------------------------
       - name: 🎨 Run ESLint
-        run: npm run lint || true
+        id: eslint
+        run: npm run lint
         continue-on-error: true
 
       - name: 🔤 Run TypeScript type check
-        run: npm run type-check || true
+        id: typecheck
+        run: npm run type-check
         continue-on-error: true
 
       - name: ✨ Run Prettier check
-        run: npm run format:check || true
+        id: prettier
+        run: npm run format:check
         continue-on-error: true
 
       # -----------------------------------------------------------------------
-      # 3. 依赖安全审计
+      # 3. 依赖安全审计（仅高危漏洞会导致失败）
       # -----------------------------------------------------------------------
       - name: 🔒 Run npm audit
-        run: |
-          npm audit --audit-level=high --production || true
+        id: audit
+        run: npm audit --audit-level=high --production
         continue-on-error: true
 
       # -----------------------------------------------------------------------
-      # 4. 构建验证
+      # 4. 构建验证（必须通过）
       # -----------------------------------------------------------------------
       - name: 🏗️ Verify build
+        id: build
         run: |
           echo "开始构建验证..."
           npm run build
@@ -114,22 +118,63 @@ jobs:
           DB_PASSWORD: test
 
       # -----------------------------------------------------------------------
-      # 5. 生成报告
+      # 5. 生成真实状态报告
       # -----------------------------------------------------------------------
       - name: 📊 Generate quality report
         if: always()
         run: |
-          echo "## ✅ 代码质量检查完成" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔍 代码质量检查报告" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 检查项目" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ ESLint 检查" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ TypeScript 类型检查" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Prettier 格式检查" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ 依赖安全审计" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ 构建验证" >> $GITHUB_STEP_SUMMARY
+          echo "### 检查结果" >> $GITHUB_STEP_SUMMARY
+
+          # ESLint
+          if [ "${{ steps.eslint.outcome }}" == "success" ]; then
+            echo "- ✅ ESLint 检查通过" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ ESLint 检查失败" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # TypeScript
+          if [ "${{ steps.typecheck.outcome }}" == "success" ]; then
+            echo "- ✅ TypeScript 类型检查通过" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ TypeScript 类型检查失败" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Prettier
+          if [ "${{ steps.prettier.outcome }}" == "success" ]; then
+            echo "- ✅ Prettier 格式检查通过" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ Prettier 格式检查失败" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Audit
+          if [ "${{ steps.audit.outcome }}" == "success" ]; then
+            echo "- ✅ 依赖安全审计通过" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ⚠️ 依赖安全审计发现问题" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Build
+          if [ "${{ steps.build.outcome }}" == "success" ]; then
+            echo "- ✅ 构建验证通过" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ 构建验证失败" >> $GITHUB_STEP_SUMMARY
+          fi
+
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**提交**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "**分支**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+
+          # 如果有失败，返回错误
+          if [ "${{ steps.eslint.outcome }}" != "success" ] || \
+             [ "${{ steps.typecheck.outcome }}" != "success" ] || \
+             [ "${{ steps.prettier.outcome }}" != "success" ] || \
+             [ "${{ steps.build.outcome }}" != "success" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ **质量检查未完全通过，请修复上述问题**" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
 
   # ===========================================================================
   # Job 2: 单元测试（可选，如果有测试）

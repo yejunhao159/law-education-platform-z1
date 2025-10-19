@@ -131,9 +131,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            DEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
-            AI_302_API_KEY=${{ secrets.AI_302_API_KEY }}
             NEXT_PUBLIC_BASE_URL=${{ secrets.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000' }}
+          # ⚠️ 安全说明：API密钥不应在构建时注入，应在运行时通过环境变量提供
+          # 这样可以避免密钥被写入镜像层，防止泄露
 
       # -----------------------------------------------------------------------
       # 5. 同时推送到阿里云（如果配置了）
@@ -175,7 +175,7 @@ jobs:
       # 6. 安全扫描
       # -----------------------------------------------------------------------
       - name: 🔍 Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
           format: 'sarif'
@@ -239,11 +239,16 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          echo "### ⚙️ 环境变量要求" >> $GITHUB_STEP_SUMMARY
+          echo "### ⚙️ 环境变量要求（运行时注入）" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **安全说明**：API密钥不在镜像中，必须在运行时提供" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "确保服务器的 \`.env.production\` 文件包含以下变量：" >> $GITHUB_STEP_SUMMARY
-          echo "- \`DEEPSEEK_API_KEY\` - DeepSeek AI 密钥" >> $GITHUB_STEP_SUMMARY
-          echo "- \`AI_302_API_KEY\` - 302.ai PPT 生成密钥" >> $GITHUB_STEP_SUMMARY
-          echo "- \`DB_PASSWORD\` - 数据库密码" >> $GITHUB_STEP_SUMMARY
+          echo "- \`DEEPSEEK_API_KEY\` - DeepSeek AI 密钥 **（必需）**" >> $GITHUB_STEP_SUMMARY
+          echo "- \`AI_302_API_KEY\` - 302.ai PPT 生成密钥 **（必需）**" >> $GITHUB_STEP_SUMMARY
+          echo "- \`DB_PASSWORD\` - 数据库密码 **（必需）**" >> $GITHUB_STEP_SUMMARY
+          echo "- \`NEXT_PUBLIC_BASE_URL\` - 前端基础URL（可选，默认镜像内置）" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "使用 \`docker-compose -f docker-compose.production.yml --env-file .env.production up -d\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           echo "### ✅ 构建优化" >> $GITHUB_STEP_SUMMARY
