@@ -112,7 +112,7 @@
     "uuid": "^12.0.0",
     "vaul": "^0.9.9",
     "word-extractor": "^1.0.4",
-    "zod": "^3.25.67",
+    "zod": "^3.25.76",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
@@ -128,8 +128,8 @@
     "@types/pg": "^8.10.9",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.19.1",
+    "@typescript-eslint/parser": "^8.19.1",
     "chalk": "^5.6.0",
     "concurrently": "^8.2.2",
     "eslint": "^9.35.0",
