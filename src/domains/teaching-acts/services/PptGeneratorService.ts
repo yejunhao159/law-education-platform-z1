@@ -523,10 +523,11 @@ export class PptGeneratorService {
     });
 
     // 🔧 根据PPT长度动态计算maxTokens（防止大纲被截断）
+    // ⚠️ DeepSeek API max_tokens最大值为8192，需要在此范围内
     const maxTokensMap = {
-      short: 8000,   // 10-15页 → 提高60%，确保完整性和质量
-      medium: 12000, // 20-25页 → 提高50%，支持更详细的内容
-      long: 16000    // 25-35页 → 提高33%，适应超长复杂PPT
+      short: 4000,   // 10-15页 → 约50%容量，确保完整性
+      medium: 6000,  // 20-25页 → 约75%容量，支持更详细的内容
+      long: 8000     // 25-35页 → 约98%容量，充分利用API限制
     };
     const maxTokens = maxTokensMap[options.length || 'medium'];
 
@@ -622,10 +623,11 @@ export class PptGeneratorService {
     });
 
     // 🔧 根据PPT长度动态计算maxTokens（防止大纲被截断）
+    // ⚠️ DeepSeek API max_tokens最大值为8192，需要在此范围内
     const maxTokensMap = {
-      short: 8000,   // 10-15页 → 提高60%，确保完整性和质量
-      medium: 12000, // 20-25页 → 提高50%，支持更详细的内容
-      long: 16000    // 25-35页 → 提高33%，适应超长复杂PPT
+      short: 4000,   // 10-15页 → 约50%容量，确保完整性
+      medium: 6000,  // 20-25页 → 约75%容量，支持更详细的内容
+      long: 8000     // 25-35页 → 约98%容量，充分利用API限制
     };
     const maxTokens = maxTokensMap[options.length || 'medium'];
 
