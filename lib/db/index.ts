@@ -108,6 +108,66 @@ export async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_activity_stats_time ON activity_stats(action_time);
     `);
 
+    // 🆕 教学会话表（四幕快照存储）
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS teaching_sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+        -- 案例基本信息
+        case_title VARCHAR(500) NOT NULL,
+        case_number VARCHAR(200),
+        court_name VARCHAR(200),
+
+        -- 四幕数据（JSONB）
+        act1_upload JSONB NOT NULL DEFAULT '{}'::jsonb,
+        act2_analysis JSONB NOT NULL DEFAULT '{}'::jsonb,
+        act3_socratic JSONB NOT NULL DEFAULT '{}'::jsonb,
+        act4_summary JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+        -- 元数据
+        status VARCHAR(20) NOT NULL DEFAULT 'completed'
+          CHECK(status IN ('completed', 'archived')),
+        current_act VARCHAR(20) NOT NULL DEFAULT 'summary'
+          CHECK(current_act IN ('upload', 'analysis', 'socratic', 'summary')),
+
+        -- 时间戳
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP,
+        last_viewed_at TIMESTAMP,
+
+        -- 全文搜索向量
+        search_vector tsvector GENERATED ALWAYS AS (
+          to_tsvector('simple', coalesce(case_title, '') || ' ' || coalesce(case_number, ''))
+        ) STORED
+      )
+    `);
+
+    // 教学会话表索引
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_teaching_sessions_user_id ON teaching_sessions(user_id);
+      CREATE INDEX IF NOT EXISTS idx_teaching_sessions_created_at ON teaching_sessions(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_teaching_sessions_search ON teaching_sessions USING GIN(search_vector);
+    `);
+
+    // 教学会话表触发器（自动更新updated_at）
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION update_teaching_sessions_timestamp()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        NEW.updated_at = CURRENT_TIMESTAMP;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      DROP TRIGGER IF EXISTS trigger_update_teaching_sessions_timestamp ON teaching_sessions;
+      CREATE TRIGGER trigger_update_teaching_sessions_timestamp
+        BEFORE UPDATE ON teaching_sessions
+        FOR EACH ROW
+        EXECUTE FUNCTION update_teaching_sessions_timestamp();
+    `);
+
     console.log('✅ Database schema initialized successfully');
 
     // 仅在生产环境且明确启用时才自动种子数据
