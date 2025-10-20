@@ -118,3 +118,14 @@ scripts/quick-deploy.sh
 data/
 *.db
 *.sqlite
+
+# 配置冲突文件（避免与package.json冲突）
+.browserslistrc
+.babelrc
+.eslintrc.local
+
+# 临时和备份文件（构建时不需要）
+*.tsx.backup
+*.ts.backup
+app/*.backup
+components/*.backup
