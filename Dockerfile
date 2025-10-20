@@ -58,12 +58,13 @@ RUN npm run build
 # 生产运行环境准备
 # =============================================================================
 
+# 安装PM2（全局安装，在创建用户之前，显式指定registry避免网络问题）
+RUN npm install -g pm2 --registry=https://registry.npmmirror.com || \
+    npm install -g pm2 --registry=https://registry.npmjs.org
+
 # 创建非 root 用户
 RUN addgroup --system --gid 1001 nodejs \
     && adduser --system --uid 1001 nextjs
-
-# 安装PM2（全局安装，使用国内镜像）
-RUN npm install -g pm2
 
 # 清理构建依赖（重新安装仅生产依赖）
 # 🎯 游客模式：允许better-sqlite3安装失败
