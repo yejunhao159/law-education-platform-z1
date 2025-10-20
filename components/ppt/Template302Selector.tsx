@@ -6,10 +6,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Shuffle, Loader2, AlertCircle } from 'lucide-react';
+import { Shuffle, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface Template302 {
   id: string;
@@ -76,15 +75,6 @@ export function Template302Selector({ selected, onSelect }: Template302SelectorP
         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
         <span className="ml-3 text-gray-600">加载模板中...</span>
       </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <Alert variant="destructive">
-        <AlertCircle className="w-4 h-4" />
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
     );
   }
 
