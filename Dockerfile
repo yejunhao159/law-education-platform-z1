@@ -35,6 +35,9 @@ ARG NEXT_PUBLIC_BASE_URL="http://localhost:3000"
 #     python3 make g++ \
 #     && rm -rf /var/lib/apt/lists/*
 
+# 配置npm使用国内镜像源（解决网络问题）
+RUN npm config set registry https://registry.npmmirror.com
+
 # 安装依赖（允许可选依赖失败）
 COPY package.json package-lock.json ./
 RUN npm ci --legacy-peer-deps || npm ci --legacy-peer-deps --no-optional
@@ -55,23 +58,19 @@ RUN npm run build
 # 生产运行环境准备
 # =============================================================================
 
-# 清理构建依赖（保留生产依赖）
-# 🎯 游客模式：允许better-sqlite3安装失败
-# 跳过prepare脚本（husky install不需要在生产环境运行）
-RUN npm ci --only=production --legacy-peer-deps --omit=dev --ignore-scripts || \
-    npm ci --only=production --legacy-peer-deps --omit=dev --no-optional --ignore-scripts
-
 # 创建非 root 用户
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && addgroup --system --gid 1001 nodejs \
+RUN addgroup --system --gid 1001 nodejs \
     && adduser --system --uid 1001 nextjs
 
-# =============================================================================
-# 安装PM2并修复权限问题（方案A：PM2只管理Socket.IO）
-# =============================================================================
+# 安装PM2（全局安装，使用国内镜像）
 RUN npm install -g pm2
+
+# 清理构建依赖（重新安装仅生产依赖）
+# 🎯 游客模式：允许better-sqlite3安装失败
+# 跳过prepare脚本（husky install不需要在生产环境运行）
+RUN rm -rf node_modules \
+    && npm ci --only=production --legacy-peer-deps --omit=dev --ignore-scripts || \
+    npm ci --only=production --legacy-peer-deps --omit=dev --no-optional --ignore-scripts
 
 # 创建PM2工作目录，解决权限问题
 # 关键：设置PM2_HOME到/app/.pm2，避免使用/nonexistent目录
