@@ -5,14 +5,16 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Download, FileText, Scale, Shield, MessageCircle, Lightbulb, CheckCircle, Quote, Clock, Target, Presentation } from 'lucide-react';
+import { Download, FileText, Scale, Shield, MessageCircle, Lightbulb, CheckCircle, Quote, Clock, Target, Presentation, Save } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useTeachingStore } from '@/src/domains/teaching-acts/stores/useTeachingStore';
+import { SnapshotConverter } from '@/src/domains/teaching-acts/utils/SnapshotConverter';
 import type { CaseLearningReport } from '@/src/types';
+import { toast } from 'sonner';
 
 export function ActFour() {
   const router = useRouter();
@@ -25,6 +27,7 @@ export function ActFour() {
   } = useTeachingStore();
 
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     // 进入第四幕时自动生成报告
@@ -86,6 +89,53 @@ export function ActFour() {
     // 重置状态，开始新案例
     useTeachingStore.getState().reset();
     setCurrentAct('upload');
+  };
+
+  const completeAndSaveCase = async () => {
+    try {
+      setIsSaving(true);
+
+      // 1. 从Store创建快照
+      const storeState = useTeachingStore.getState();
+      const snapshot = SnapshotConverter.fromStore(storeState);
+
+      console.log('💾 [ActFour] 准备保存教学会话快照:', snapshot.caseTitle);
+
+      // 2. 调用API保存快照
+      const response = await fetch('/api/teaching-sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ snapshot })
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.message || '保存失败');
+      }
+
+      console.log('✅ [ActFour] 教学会话保存成功:', result.data.sessionId);
+
+      // 3. 显示成功提示
+      toast.success('案例学习已保存', {
+        description: `${snapshot.caseTitle} 已保存到"我的课件"`
+      });
+
+      // 4. 清空Store
+      useTeachingStore.getState().reset();
+
+      // 5. 跳转到Dashboard
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 500);
+
+    } catch (err) {
+      console.error('❌ [ActFour] 保存教学会话失败:', err);
+      toast.error('保存失败', {
+        description: err instanceof Error ? err.message : '请稍后重试'
+      });
+      setIsSaving(false);
+    }
   };
 
   // 加载状态
@@ -332,7 +382,18 @@ export function ActFour() {
           生成教学PPT
         </Button>
 
-        <Button onClick={startNewCase}>
+        {/* 完成学习按钮 - 保存快照并清空Store */}
+        <Button
+          variant="default"
+          onClick={completeAndSaveCase}
+          disabled={isSaving}
+          className="bg-green-600 hover:bg-green-700"
+        >
+          <Save className="w-4 h-4 mr-2" />
+          {isSaving ? '正在保存...' : '完成学习'}
+        </Button>
+
+        <Button variant="outline" onClick={startNewCase}>
           学习下一个案例
         </Button>
       </div>

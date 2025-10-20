@@ -13,7 +13,7 @@ import type { TeachingSessionSnapshot } from '@/src/domains/teaching-acts/reposi
 export async function POST(request: NextRequest) {
   try {
     // 1. 验证JWT Token
-    const payload = await jwtUtils.verify();
+    const payload = await jwtUtils.getCurrentUser();
     if (!payload) {
       return NextResponse.json(
         { error: 'Unauthorized', message: '请先登录' },
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     // 1. 验证JWT Token
-    const payload = await jwtUtils.verify();
+    const payload = await jwtUtils.getCurrentUser();
     if (!payload) {
       return NextResponse.json(
         { error: 'Unauthorized', message: '请先登录' },

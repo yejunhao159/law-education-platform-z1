@@ -9,12 +9,12 @@ import { jwtUtils } from '@/lib/auth/jwt';
 import { teachingSessionRepository } from '@/src/domains/teaching-acts/repositories/PostgreSQLTeachingSessionRepository';
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
     // 1. 验证JWT Token
-    const payload = await jwtUtils.verify();
+    const payload = await jwtUtils.getCurrentUser();
     if (!payload) {
       return NextResponse.json(
         { error: 'Unauthorized', message: '请先登录' },
@@ -53,12 +53,12 @@ export async function GET(
 }
 
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
     // 1. 验证JWT Token
-    const payload = await jwtUtils.verify();
+    const payload = await jwtUtils.getCurrentUser();
     if (!payload) {
       return NextResponse.json(
         { error: 'Unauthorized', message: '请先登录' },

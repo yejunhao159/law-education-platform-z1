@@ -10,7 +10,7 @@ const navigation = [
   { name: "合同学习", href: "/dashboard/contract", icon: FileText },
   { name: "我的课程", href: "/dashboard/courses", icon: BookOpen },
   { name: "虚拟法庭", href: "/dashboard/classroom", icon: Users },
-  { name: "课件存储", href: "/dashboard/courseware", icon: Folder },
+  { name: "我的课件", href: "/dashboard/my-courseware", icon: Folder },
   { name: "收藏", href: "/dashboard/favorites", icon: Star },
 ]
 
