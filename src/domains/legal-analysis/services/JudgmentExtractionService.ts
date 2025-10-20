@@ -21,6 +21,13 @@ import type {
   Metadata,
 } from '@/types/legal-case';
 import { DeeChatAIClient, createDeeChatConfig } from '@/src/domains/socratic-dialogue/services/DeeChatAIClient';
+import {
+  processJudgmentText,
+  type ProcessedJudgmentText,
+} from './utils/JudgmentTextProcessor';
+import { extractRuleBasicInfo, type RuleBasicInfo } from './extraction/RuleBasedExtractor';
+import { validateFacts, validateEvidence, validateReasoning } from './extraction/JudgmentValidators';
+import { buildConfidenceReport } from './extraction/ConfidenceCalculator';
 
 const logger = createLogger('JudgmentExtractionService');
 
@@ -85,15 +92,46 @@ export class JudgmentExtractionService {
   async extractThreeElements(documentText: string): Promise<JudgmentExtractedData> {
     const startTime = Date.now();
 
+    const processedText = processJudgmentText(documentText);
+    const ruleBasicInfo = extractRuleBasicInfo(processedText);
+    logger.info('判决书文本预处理完成', processedText.stats);
+    logger.info('规则抽取基础信息覆盖率', { coverage: `${ruleBasicInfo.coverage}%` });
+
     try {
       logger.info('开始使用AI进行判决书深度分析...');
 
       // 🔧 WSL2修复：改为顺序执行,避免并发API调用触发undici连接池问题
       // 之前的Promise.all并行会导致4个fetch同时发起,在WSL2+Node20环境下触发连接超时
-      const basicInfo = await this.extractBasicInfo(documentText);
-      const facts = await this.extractFacts(documentText);
-      const evidence = await this.extractEvidence(documentText);
-      const reasoning = await this.extractReasoning(documentText);
+      const basicInfoAI = await this.extractBasicInfo(processedText, ruleBasicInfo);
+      const basicInfo = this.mergeBasicInfo(ruleBasicInfo, basicInfoAI);
+      const facts = await this.extractFacts(processedText);
+      const evidence = await this.extractEvidence(processedText);
+      const reasoning = await this.extractReasoning(processedText);
+
+      const factsValidation = validateFacts(facts);
+      const evidenceValidation = validateEvidence(evidence);
+      const reasoningValidation = validateReasoning(reasoning);
+
+      if (!factsValidation.valid) {
+        logger.warn('事实提取校验未通过', { warnings: factsValidation.warnings });
+      }
+      if (!evidenceValidation.valid) {
+        logger.warn('证据提取校验未通过', { warnings: evidenceValidation.warnings });
+      }
+      if (!reasoningValidation.valid) {
+        logger.warn('裁判理由提取校验未通过', { warnings: reasoningValidation.warnings });
+      }
+
+      const confidenceReport = buildConfidenceReport({
+        facts,
+        evidence,
+        reasoning,
+        validations: {
+          facts: factsValidation,
+          evidence: evidenceValidation,
+          reasoning: reasoningValidation
+        }
+      });
 
       const processingTime = Date.now() - startTime;
 
@@ -104,11 +142,12 @@ export class JudgmentExtractionService {
         reasoning,
         metadata: {
           extractedAt: new Date().toISOString(),
-          confidence: this.calculateConfidence(facts, evidence, reasoning),
+          confidence: confidenceReport.overall,
           processingTime,
           aiModel: `DeepSeek-${this.model}`,
-          extractionMethod: 'pure-ai',
-          version: '2.0.0'
+          extractionMethod: 'rule-enhanced',
+          version: '2.1.0',
+          confidenceReport
         }
       };
     } catch (error) {
@@ -120,7 +159,9 @@ export class JudgmentExtractionService {
   /**
    * 提取基本信息
    */
-  private async extractBasicInfo(text: string): Promise<BasicInfo> {
+  private async extractBasicInfo(processed: ProcessedJudgmentText, ruleInfo: RuleBasicInfo): Promise<BasicInfo> {
+    const context = this.buildBasicInfoContext(processed, ruleInfo);
+
     const prompt = `你是一位专业的法律文书分析专家。请从以下判决书中提取基本信息。
 
 任务要求：
@@ -161,7 +202,7 @@ export class JudgmentExtractionService {
 }
 
 判决书内容（节选）：
-${text.substring(0, 2000)}`;
+${context}`;
 
     try {
       const response = await this.callDeepSeekAPI(prompt);
@@ -172,18 +213,99 @@ ${text.substring(0, 2000)}`;
     }
   }
 
+  private buildBasicInfoContext(processed: ProcessedJudgmentText, ruleInfo: RuleBasicInfo): string {
+    const segments: string[] = [];
+
+    if (processed.sections.header) {
+      segments.push(processed.sections.header);
+    }
+    if (processed.sections.parties) {
+      segments.push(processed.sections.parties);
+    }
+    if (processed.sections.claims) {
+      segments.push(processed.sections.claims);
+    }
+    if (processed.sections.trial) {
+      segments.push(processed.sections.trial);
+    }
+    if (ruleInfo.coverage > 0) {
+      segments.push('【规则抽取结果（供核验）】\n' + JSON.stringify({
+        caseNumber: ruleInfo.caseNumber,
+        court: ruleInfo.court,
+        judgeDate: ruleInfo.judgeDate,
+        judges: ruleInfo.judges,
+        clerk: ruleInfo.clerk,
+        parties: ruleInfo.parties
+      }, null, 2));
+    }
+    if (processed.sections.ending) {
+      segments.push('【落款信息】\n' + processed.sections.ending);
+    } else {
+      // 若未识别落款，附加原文末尾作为参考
+      const tailSnippet = processed.normalized.slice(-800);
+      segments.push('【原文结尾片段】\n' + tailSnippet);
+    }
+
+    const context = segments.join('\n\n').trim();
+    return this.truncateContext(context, 4000);
+  }
+
+  private truncateContext(text: string, limit = 4000): string {
+    if (text.length <= limit) {
+      return text;
+    }
+
+    const head = text.slice(0, Math.floor(limit * 0.75));
+    const tail = text.slice(-Math.floor(limit * 0.25));
+    return `${head}\n...\n${tail}`;
+  }
+
+  private mergeBasicInfo(ruleInfo: RuleBasicInfo, aiInfo: BasicInfo): BasicInfo {
+    const merged: BasicInfo = {
+      caseNumber: aiInfo.caseNumber || ruleInfo.caseNumber || '',
+      court: aiInfo.court || ruleInfo.court || '',
+      judgeDate: aiInfo.judgeDate || ruleInfo.judgeDate || new Date().toISOString().split('T')[0],
+      caseType: aiInfo.caseType,
+      judge: aiInfo.judge && aiInfo.judge.length > 0 ? aiInfo.judge : (ruleInfo.judges ?? []),
+      clerk: aiInfo.clerk || ruleInfo.clerk,
+      parties: {
+        plaintiff: aiInfo.parties?.plaintiff?.length
+          ? aiInfo.parties.plaintiff
+          : ruleInfo.parties.plaintiff.map(name => ({ name })),
+        defendant: aiInfo.parties?.defendant?.length
+          ? aiInfo.parties.defendant
+          : ruleInfo.parties.defendant.map(name => ({ name })),
+        thirdParty: aiInfo.parties?.thirdParty?.length
+          ? aiInfo.parties.thirdParty
+          : ruleInfo.parties.thirdParty.map(name => ({ name })),
+      },
+    };
+
+    if (merged.parties.plaintiff.length === 0) {
+      merged.parties.plaintiff.push({ name: '未提取' });
+    }
+    if (merged.parties.defendant.length === 0) {
+      merged.parties.defendant.push({ name: '未提取' });
+    }
+
+    return merged;
+  }
+
   /**
    * 提取案件事实
    */
-  private async extractFacts(text: string): Promise<Facts> {
-    // 智能定位事实认定段落
-    const factsSection = this.locateSection(text, [
-      '经审理查明',
-      '本院查明',
-      '查明',
-      '经查明',
-      '审理查明'
-    ]);
+  private async extractFacts(processed: ProcessedJudgmentText): Promise<Facts> {
+    const factsSection =
+      processed.sections.facts ||
+      processed.sections.trial ||
+      processed.sections.arguments ||
+      this.locateSection(processed.normalized, [
+        '经审理查明',
+        '本院查明',
+        '查明',
+        '经查明',
+        '审理查明'
+      ]);
 
     logger.info(`事实认定段落定位成功，长度: ${factsSection.length}字`);
 
@@ -292,7 +414,7 @@ ${factsSection}`;
       return this.parseFactsResponse(response);
     } catch (error) {
       logger.error('提取事实失败', error);
-      return this.getDefaultFacts();
+      return this.createFailedFacts('调用 AI 服务提取事实失败');
     }
   }
 
@@ -319,7 +441,10 @@ ${factsSection}`;
           }
         }
 
-        return text.substring(index, endIndex);
+        const bufferStart = Math.max(0, index - 200);
+        const bufferEnd = Math.min(text.length, endIndex + 200);
+
+        return text.substring(bufferStart, bufferEnd);
       }
     }
 
@@ -330,15 +455,19 @@ ${factsSection}`;
   /**
    * 提取证据分析（教学核心）
    */
-  private async extractEvidence(text: string): Promise<Evidence> {
+  private async extractEvidence(processed: ProcessedJudgmentText): Promise<Evidence> {
     // 智能定位证据段落（通常在"经审理查明"部分）
-    const evidenceSection = this.locateSection(text, [
-      '经审理查明',
-      '本院查明',
-      '查明',
-      '经查明',
-      '证据及事实'
-    ]);
+    const evidenceSection =
+      processed.sections.evidence ||
+      processed.sections.facts ||
+      processed.sections.arguments ||
+      this.locateSection(processed.normalized, [
+        '经审理查明',
+        '本院查明',
+        '查明',
+        '经查明',
+        '证据及事实'
+      ]);
 
     logger.info(`证据段落定位成功，长度: ${evidenceSection.length}字`);
 
@@ -442,21 +571,23 @@ ${evidenceSection}`;
       return this.parseEvidenceResponse(response);
     } catch (error) {
       logger.error('提取证据失败', error);
-      return this.getDefaultEvidence();
+      return this.createFailedEvidence('调用 AI 服务提取证据失败');
     }
   }
 
   /**
    * 提取裁判理由（教学核心）
    */
-  private async extractReasoning(text: string): Promise<Reasoning> {
+  private async extractReasoning(processed: ProcessedJudgmentText): Promise<Reasoning> {
     // 智能定位法官说理段落（通常在"本院认为"部分）
-    const reasoningSection = this.locateSection(text, [
-      '本院认为',
-      '经本院审理认为',
-      '本院审理后认为',
-      '合议庭认为'
-    ]);
+    const reasoningSection =
+      processed.sections.reasoning ||
+      this.locateSection(processed.normalized, [
+        '本院认为',
+        '经本院审理认为',
+        '本院审理后认为',
+        '合议庭认为'
+      ]);
 
     logger.info(`法官说理段落定位成功，长度: ${reasoningSection.length}字`);
 
@@ -605,7 +736,7 @@ ${reasoningSection}`;
       return this.parseReasoningResponse(response);
     } catch (error) {
       logger.error('提取裁判理由失败', error);
-      return this.getDefaultReasoning();
+      return this.createFailedReasoning('调用 AI 服务提取裁判理由失败');
     }
   }
 
@@ -699,17 +830,22 @@ ${reasoningSection}`;
         response = JSON.parse(response);
       } catch (e) {
         logger.error('解析JSON失败，使用默认值');
-        return this.getDefaultFacts();
+        return this.createFailedFacts('AI 返回内容无法解析为 JSON');
       }
     }
 
     if (!response) {
       logger.error('响应为空，使用默认值');
-      return this.getDefaultFacts();
+      return this.createFailedFacts('AI 未返回事实内容');
     }
 
-    const facts = {
-      summary: response.summary || '基于AI分析的事实摘要',
+    const summary =
+      typeof response.summary === 'string' && response.summary.trim().length > 0
+        ? response.summary.trim()
+        : '提取失败：AI 未能提供事实摘要';
+
+    const facts: Facts = {
+      summary,
       timeline: Array.isArray(response.timeline) ? response.timeline.map((t: any) => ({
         date: t.date || '',
         event: t.event || '',
@@ -723,15 +859,8 @@ ${reasoningSection}`;
       undisputedFacts: Array.isArray(response.undisputedFacts) ? response.undisputedFacts : []
     };
 
-    // 验证并补充缺失的数据
     if (facts.timeline.length === 0) {
-      logger.warn('时间线为空，使用默认时间线');
-      facts.timeline = this.getDefaultFacts().timeline;
-    }
-
-    if (facts.keyFacts.length === 0) {
-      logger.warn('关键事实为空，使用默认关键事实');
-      facts.keyFacts = this.getDefaultFacts().keyFacts;
+      logger.warn('AI 未生成事实时间线');
     }
 
     logger.info('事实解析完成');
@@ -750,17 +879,22 @@ ${reasoningSection}`;
         response = JSON.parse(response);
       } catch (e) {
         logger.error('解析JSON失败，使用默认值');
-        return this.getDefaultEvidence();
+        return this.createFailedEvidence('AI 返回内容无法解析为 JSON');
       }
     }
 
     if (!response) {
       logger.error('响应为空，使用默认值');
-      return this.getDefaultEvidence();
+      return this.createFailedEvidence('AI 未返回证据信息');
     }
 
-    const evidence = {
-      summary: response.summary || '暂无摘要',
+    const summary =
+      typeof response.summary === 'string' && response.summary.trim().length > 0
+        ? response.summary.trim()
+        : '提取失败：AI 未能提供证据摘要';
+
+    const evidence: Evidence = {
+      summary,
       items: Array.isArray(response.items) ? response.items.map((item: any) => ({
         id: item.id,
         name: item.name || '未知证据',
@@ -774,13 +908,19 @@ ${reasoningSection}`;
         relatedFacts: Array.isArray(item.relatedFacts) ? item.relatedFacts : []
       })) : [],
       chainAnalysis: {
-        complete: response.chainAnalysis?.complete || false,
-        missingLinks: Array.isArray(response.chainAnalysis?.missingLinks) ? response.chainAnalysis.missingLinks : [],
-        strength: response.chainAnalysis?.strength as any || 'moderate',
+        complete: response.chainAnalysis?.complete ?? false,
+        missingLinks: Array.isArray(response.chainAnalysis?.missingLinks)
+          ? response.chainAnalysis.missingLinks
+          : ['AI 未给出证据链分析'],
+        strength: (response.chainAnalysis?.strength as any) || 'weak',
         analysis: response.chainAnalysis?.analysis
       },
       crossExamination: response.crossExamination
     };
+
+    if (evidence.items.length === 0) {
+      logger.warn('AI 未生成证据列表');
+    }
 
     logger.info('证据解析完成');
     return evidence;
@@ -798,17 +938,22 @@ ${reasoningSection}`;
         response = JSON.parse(response);
       } catch (e) {
         logger.error('解析JSON失败，使用默认值');
-        return this.getDefaultReasoning();
+        return this.createFailedReasoning('AI 返回内容无法解析为 JSON');
       }
     }
 
     if (!response) {
       logger.error('响应为空，使用默认值');
-      return this.getDefaultReasoning();
+      return this.createFailedReasoning('AI 未返回裁判理由');
     }
 
-    const reasoning = {
-      summary: response.summary || '暂无摘要',
+    const summary =
+      typeof response.summary === 'string' && response.summary.trim().length > 0
+        ? response.summary.trim()
+        : '提取失败：AI 未能提供裁判理由摘要';
+
+    const reasoning: Reasoning = {
+      summary,
       legalBasis: Array.isArray(response.legalBasis) ? response.legalBasis.map((lb: any) => ({
         law: lb.law || '',
         article: lb.article || '',
@@ -823,7 +968,7 @@ ${reasoningSection}`;
         supportingEvidence: Array.isArray(lc.supportingEvidence) ? lc.supportingEvidence : []
       })) : [],
       keyArguments: Array.isArray(response.keyArguments) ? response.keyArguments : [],
-      judgment: response.judgment || '',
+      judgment: response.judgment || '提取失败：未识别裁判主文',
       dissenting: response.dissenting
     };
 
@@ -849,102 +994,47 @@ ${reasoningSection}`;
   /**
    * 默认事实结构
    */
-  private getDefaultFacts(): Facts {
+  private createFailedFacts(reason: string): Facts {
     return {
-      summary: '本案涉及合同履行纠纷，双方当事人就货物交付和付款问题产生争议。原告主张被告未按约定履行合同义务，被告则认为原告提供的货物存在质量问题。',
-      timeline: [
-        {
-          date: '2023年1月',
-          event: '双方签订买卖合同',
-          importance: 'critical' as const,
-          actors: ['原告', '被告'],
-          location: '合同签订地',
-          relatedEvidence: ['合同文本']
-        },
-        {
-          date: '2023年3月',
-          event: '货物交付',
-          importance: 'critical' as const,
-          actors: ['原告'],
-          location: '交货地点',
-          relatedEvidence: ['送货单']
-        },
-        {
-          date: '2023年5月',
-          event: '发生争议',
-          importance: 'important' as const,
-          actors: ['原告', '被告'],
-          location: '',
-          relatedEvidence: []
-        }
-      ],
-      keyFacts: [
-        '双方签订了买卖合同',
-        '原告已交付货物',
-        '被告未按期付款',
-        '被告主张货物存在质量问题'
-      ],
-      disputedFacts: [
-        '货物质量是否符合约定',
-        '交付时间是否违约',
-        '付款条件是否成就'
-      ],
-      undisputedFacts: [
-        '双方存在买卖合同关系',
-        '货物已经交付',
-        '存在未付款项'
-      ]
+      summary: `提取失败：${reason}`,
+      timeline: [],
+      keyFacts: [],
+      disputedFacts: [],
+      undisputedFacts: []
     };
   }
 
   /**
    * 默认证据结构
    */
-  private getDefaultEvidence(): Evidence {
+  private createFailedEvidence(reason: string): Evidence {
     return {
-      summary: '基于规则提取的证据摘要',
+      summary: `提取失败：${reason}`,
       items: [],
       chainAnalysis: {
         complete: false,
-        missingLinks: [],
-        strength: 'moderate'
-      }
+        missingLinks: [reason],
+        strength: 'weak',
+        analysis: undefined
+      },
+      crossExamination: undefined
     };
   }
 
   /**
    * 默认裁判理由结构
    */
-  private getDefaultReasoning(): Reasoning {
+  private createFailedReasoning(reason: string): Reasoning {
     return {
-      summary: '基于规则提取的理由摘要',
+      summary: `提取失败：${reason}`,
       legalBasis: [],
       logicChain: [],
       keyArguments: [],
-      judgment: ''
+      judgment: `提取失败：${reason}`,
+      dissenting: undefined
     };
   }
 
-  /**
-   * 计算提取结果的置信度
-   */
-  private calculateConfidence(
-    facts: any,
-    evidence: any,
-    reasoning: any
-  ): number {
-    let confidence = 0;
-
-    // 基于提取的完整性计算置信度
-    if (facts.summary && facts.summary !== '基于规则提取的事实摘要') confidence += 20;
-    if (facts.timeline.length > 0) confidence += 15;
-    if (evidence.items.length > 0) confidence += 20;
-    if (evidence.chainAnalysis) confidence += 15;
-    if (reasoning.legalBasis.length > 0) confidence += 15;
-    if (reasoning.judgment) confidence += 15;
-
-    return Math.min(confidence, 100);
-  }
 }
 
 /**

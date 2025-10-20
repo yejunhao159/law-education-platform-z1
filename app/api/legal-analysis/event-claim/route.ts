@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
       }
     )
 
-    let analysisData
+let analysisData: EventClaimAnalysis
     try {
       // 处理可能的markdown包装
       let jsonContent = result.content.trim()
@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      analysisData = JSON.parse(jsonContent)
+      analysisData = JSON.parse(jsonContent) as EventClaimAnalysis
     } catch (parseError) {
       console.error('解析AI响应失败:', parseError)
       // 返回基础分析结构

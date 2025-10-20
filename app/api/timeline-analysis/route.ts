@@ -89,32 +89,15 @@ async function parseRequest(req: NextRequest) {
 }
 
 /**
- * 获取错误状态码
- */
-function _getErrorStatusCode(errorCode?: TimelineErrorCode): number {
-  switch (errorCode) {
-    case TimelineErrorCode.INVALID_EVENTS:
-    case TimelineErrorCode.MISSING_DATA:
-      return 400;
-    case TimelineErrorCode.AI_SERVICE_ERROR:
-      return 503;
-    case TimelineErrorCode.PROCESSING_ERROR:
-    case TimelineErrorCode.INTERNAL_ERROR:
-    default:
-      return 500;
-  }
-}
-
-/**
  * 统一错误处理
  */
 function handleError(error: unknown): NextResponse {
-  const _message = error instanceof Error ? error.message : '未知错误';
+  const message = error instanceof Error ? error.message : '未知错误';
 
   return NextResponse.json({
     success: false,
     error: {
-      message: '服务器内部错误',
+      message: process.env.NODE_ENV === 'development' ? message : '服务器内部错误',
       code: TimelineErrorCode.INTERNAL_ERROR
     }
   }, {

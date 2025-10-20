@@ -9,11 +9,11 @@
  * - AI驱动的法律故事化表达
  * - 基于时间轴和争议焦点的结构化叙述
  * - 教学导向的内容组织
- * - 自动降级和错误处理
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { caseNarrativeService } from '@/src/domains/legal-analysis/services/CaseNarrativeService';
+import type { NarrativeGenerationRequest } from '@/src/domains/legal-analysis/services/CaseNarrativeService';
 
 /**
  * POST /api/legal-analysis/intelligent-narrative - 智能案情叙事生成处理器
@@ -31,7 +31,6 @@ import { caseNarrativeService } from '@/src/domains/legal-analysis/services/Case
  *       "reasoning": { "summary": "" }
  *     }
  *   },
- *   "narrativeStyle": "story" | "professional" | "educational",
  *   "depth": "basic" | "detailed" | "comprehensive",
  *   "focusAreas": ["timeline", "parties", "disputes", "evidence", "legal-reasoning"]
  * }
@@ -88,7 +87,6 @@ export async function POST(request: NextRequest) {
 
     const {
       caseData,
-      narrativeStyle = 'story',
       depth = 'detailed',
       focusAreas = ['timeline', 'parties', 'disputes']
     } = body;
@@ -109,17 +107,27 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 3: 构建叙事生成请求
-    const narrativeRequest = {
+    const allowedDepth: Array<NarrativeGenerationRequest['depth']> = ['basic', 'detailed', 'comprehensive'];
+    const sanitizedDepth: NarrativeGenerationRequest['depth'] =
+      allowedDepth.includes(depth) ? depth : 'detailed';
+
+    const allowedFocus = ['timeline', 'parties', 'disputes', 'evidence', 'legal-reasoning'] as const;
+    type FocusArea = typeof allowedFocus[number];
+    const sanitizedFocusAreas: FocusArea[] = Array.isArray(focusAreas)
+      ? focusAreas.filter((area): area is FocusArea => allowedFocus.includes(area as FocusArea))
+      : [];
+
+    const narrativeRequest: NarrativeGenerationRequest = {
       caseData,
-      narrativeStyle,
-      depth,
-      focusAreas
+      narrativeStyle: 'story',
+      depth: sanitizedDepth,
+      focusAreas: sanitizedFocusAreas.length ? sanitizedFocusAreas : ['timeline', 'parties', 'disputes']
     };
 
     console.log('📝 叙事生成配置:', {
       caseNumber: caseData.basicInfo?.caseNumber,
       timelineLength: caseData.threeElements?.facts?.timeline?.length || 0,
-      style: narrativeStyle,
+      style: 'story',
       depth: depth
     });
 
@@ -172,12 +180,6 @@ export async function GET() {
         required: true,
         description: '案例完整数据，包含基本信息和三要素'
       },
-      narrativeStyle: {
-        type: 'string',
-        enum: ['story', 'professional', 'educational'],
-        default: 'story',
-        description: '叙事风格：故事化、专业化、教学化'
-      },
       depth: {
         type: 'string',
         enum: ['basic', 'detailed', 'comprehensive'],
@@ -202,8 +204,7 @@ export async function GET() {
       'AI驱动的专业法律叙事',
       '基于时间轴的结构化组织',
       '争议焦点导向的内容展现',
-      '教学价值最大化',
-      '自动降级和错误处理'
+      '教学价值最大化'
     ],
     example: {
       request: {

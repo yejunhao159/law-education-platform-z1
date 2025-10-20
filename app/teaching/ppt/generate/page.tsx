@@ -16,7 +16,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, FileText, Loader2, Download, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { useTeachingStore } from '@/src/domains/teaching-acts/stores/useTeachingStore';
 import { Template302Selector } from '@/components/ppt/Template302Selector';
@@ -88,14 +88,17 @@ export default function PptGeneratePage() {
     const data = service.collectData();
 
     // 🚀 使用真正的流式API生成大纲 - 直接返回Markdown
+    const outlineOptions = {
+      // ⚠️ templateId留空让302.AI自动选择模板(我们没有官方模板ID列表)
+      templateId: undefined,
+      style: 'formal' as const,
+      length: 'medium' as const,
+      includeDialogue: true
+    };
+
     const markdownText = await service.generateOutlineStream(
       data,
-      {
-        template: 'education-bureau',
-        style: 'formal',
-        length: 'medium',
-        includeDialogue: true
-      },
+      outlineOptions,
       (chunk: string) => {
         // 实时更新UI显示 - 用户能看到可读的Markdown而非JSON
         setStreamingText(prev => prev + chunk);
@@ -110,6 +113,7 @@ export default function PptGeneratePage() {
 
     // 🎯 关键简化：直接使用Markdown，无需转换
     setOutlineText(markdownText);
+    setStreamingText(markdownText);
     return markdownText;
   }
 
@@ -125,7 +129,8 @@ export default function PptGeneratePage() {
 
       // 调用PPT生成服务
       const result = await service.generateFromMarkdown(outlineText, {
-        templateId: selectedTemplateId,
+        // ⚠️ templateId留空让302.AI自动选择模板(自定义ID无效)
+        templateId: undefined,
         language: 'zh',
         onProgress: (prog) => {
           console.log('📊 进度更新:', prog);

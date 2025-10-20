@@ -35,7 +35,7 @@ export class ErrorBoundary extends Component<Props, State> {
     }
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught:', error, errorInfo)
     
     this.setState({
@@ -69,7 +69,7 @@ export class ErrorBoundary extends Component<Props, State> {
     })
   }
 
-  render() {
+  override render() {
     if (this.state.hasError) {
       // 如果提供了自定义 fallback
       if (this.props.fallback) {

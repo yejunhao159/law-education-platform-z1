@@ -112,7 +112,6 @@ export function PptDataFlowDebugger() {
         name: '阶段2: CollectedData → KeyElements (Extractor)',
         status: (extractedFactCount > 0 || extractedDisputedCount > 0) ? 'success' : 'error',
         data: {
-          caseOverview: keyElements.caseOverview,
           teachingHighlights: {
             factAnalysis: {
               keyFacts: extractedFactCount,

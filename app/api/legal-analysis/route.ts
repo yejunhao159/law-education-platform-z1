@@ -67,9 +67,8 @@ export async function GET() {
     const healthStatus = legalAnalysisFacade.getHealthStatus();
 
     return NextResponse.json({
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      ...healthStatus
+      ...healthStatus,
+      timestamp: new Date().toISOString()
     }, {
       status: 200,
       headers: {

@@ -1,18 +1,21 @@
 /**
- * 全量提示词构建器
+ * 全量提示词构建器 v3.0
  * 将所有prompts模块完整注入到System Prompt
  *
- * 设计理念：
- * 1. 基于AI注意力机制优化注入顺序（开头和结尾是高注意力区）
- * 2. 使用清晰的分隔符和标题结构
- * 3. 保持所有教学知识的完整性
- * 4. 适配DeepSeek 128K Context Window
+ * 设计理念（Sean优化版）：
+ * 1. 价值前置（65%）：核心驱动力，让AI理解"为什么存在"
+ * 2. 方法论（30%）：工具箱，灵活使用
+ * 3. 硬性边界（5%）：安全合规
+ * 4. 三阶段流程：ISSUE+苏格拉底融合
+ * 5. 适配DeepSeek 128K Context Window
  */
 
-import { getSocraticIdentityPrompt } from '../prompts/core/SocraticIdentity';
-import { getCognitiveConstraintsPrompt } from '../prompts/core/CognitiveConstraints';
+// v3.0: 使用新的提示词架构
+import { getSocraticMasterPrompt } from '../prompts/SocraticMasterPrompt-v3';
+
+// 可选模块（仅在明确请求时才加载）
 import { getChineseLegalThinkingPrompt } from '../prompts/core/ChineseLegalThinking';
-import { getTeachingPrinciplesPrompt } from '../prompts/core/TeachingPrinciples';
+import { getLegalMethodologyPrompt } from '../prompts/core/LegalMethodology';
 
 export interface FullPromptContext {
   /** 当前教学模式 */
@@ -24,7 +27,22 @@ export interface FullPromptContext {
   /** 当前讨论主题（可选） */
   topic?: string;
 
-  /** 当前ISSUE阶段（可选） */
+  /**
+   * 【智能拼接】当前对话轮数（从1开始）
+   *
+   * 重要：此参数控制ISSUE方法论的智能注入
+   * - 第1-2轮：自动包含ISSUE开场指导（识别矛盾 + 选择框架）
+   * - 第3轮及之后：完全去掉ISSUE，使用纯苏格拉底核心提示词
+   *
+   * 如果提供此参数，将优先使用轮数判断，忽略issuePhase
+   */
+  currentRound?: number;
+
+  /**
+   * 当前ISSUE阶段（可选，向后兼容）
+   *
+   * 注意：如果提供了currentRound，将优先使用轮数判断
+   */
   issuePhase?: 'initiate' | 'structure' | 'socratic' | 'unify' | 'execute';
 
   /** 是否为初始问题生成（需要AI先分析案件再生成问题） */
@@ -32,6 +50,14 @@ export interface FullPromptContext {
 
   /** 是否包含诊断信息 */
   includeDiagnostics?: boolean;
+
+  /** 可选模块配置（不会一次性全部注入） */
+  optionalModules?: {
+    /** 是否包含详细的中国法学思维框架（17K tokens） */
+    includeChineseLegalThinking?: boolean;
+    /** 是否包含完整的12种法学方法论（17K tokens） */
+    includeLegalMethodology?: boolean;
+  };
 }
 
 /**
@@ -40,14 +66,14 @@ export interface FullPromptContext {
  */
 export class FullPromptBuilder {
   /**
-   * 构建完整的System Prompt
+   * 构建完整的System Prompt v3.0
    *
-   * 注入顺序说明（精简后的4模块架构）：
-   * 1. 核心身份 (M1) - AI首先需要知道"我是谁"（锋利+幽默+严肃）
-   * 2. 强制约束 (M2) - 明确"我不能做什么"（案件锚定、禁止软性引导）
-   * 3. 中国法学思维框架 (M3) - 四层思维路径（案件→法条→法理→社会效果）
-   * 4. 教学原则 (M4) - 核心提问技术（三大武器 + 记忆锚点）
-   * 5. 执行总结 - 重申当前任务（高注意力区）
+   * 新架构（Sean优化版）：
+   * 1. 使用SocraticMasterPrompt-v3作为核心
+   * 2. 整合了价值层（65%）+ 方法论（30%）+ 硬性边界（5%）
+   * 3. 融合了ISSUE三阶段流程
+   * 4. 包含中国法学特色和联网搜索指南
+   * 5. 根据context动态调整（完整版 vs 精简版）
    *
    * @param context - 当前教学上下文
    * @returns 完整的System Prompt字符串
@@ -57,43 +83,75 @@ export class FullPromptBuilder {
     const separator = "\n\n" + "=".repeat(80) + "\n\n";
 
     // ========================================
-    // 第一部分：核心身份和约束（高注意力区）
+    // v3.0: 使用新的主提示词架构
     // ========================================
 
     sections.push(this.buildSectionHeader(
-      "🎭 第一部分：核心身份认知",
-      "定义你的身份：锋利+幽默+严肃的精神助产士"
+      "🎯 苏格拉底对话系统 v3.0",
+      "价值前置 + 三阶段流程 + 中国法学特色"
     ));
-    sections.push(getSocraticIdentityPrompt());
 
-    sections.push(this.buildSectionHeader(
-      "⚖️ 第二部分：强制性认知约束",
-      "不可违反的硬性限制：案件锚定、禁止软性引导"
-    ));
-    sections.push(getCognitiveConstraintsPrompt());
+    // 根据context选择完整版或精简版
+    const useCompact = context.includeDiagnostics === false; // 生产环境用精简版
 
     // ========================================
-    // 第二部分：教学框架和方法
+    // 【智能拼接】基于对话轮数决定是否包含ISSUE
+    // ========================================
+    let includeISSUE = false;
+    let reason = '';
+
+    if (context.currentRound !== undefined) {
+      // 优先使用轮数判断（智能拼接）
+      includeISSUE = context.currentRound <= 2;
+      reason = context.currentRound <= 2
+        ? `第${context.currentRound}轮（前2轮自动包含ISSUE）`
+        : `第${context.currentRound}轮（第3轮起使用纯苏格拉底）`;
+    } else if (context.issuePhase) {
+      // 向后兼容：使用阶段判断
+      includeISSUE = context.issuePhase === 'initiate' || context.issuePhase === 'structure';
+      reason = includeISSUE
+        ? `阶段: ${context.issuePhase}（包含ISSUE）`
+        : `阶段: ${context.issuePhase}（纯苏格拉底）`;
+    } else {
+      // 默认：不包含ISSUE（使用纯苏格拉底核心）
+      includeISSUE = false;
+      reason = '未指定轮数/阶段（默认纯苏格拉底）';
+    }
+
+    const masterPrompt = getSocraticMasterPrompt(
+      useCompact ? 'compact' : 'full',
+      true, // includeWebSearch
+      includeISSUE
+    );
+
+    sections.push(masterPrompt);
+
+    // ========================================
+    // 可选模块（仅在明确请求时才注入）
+    // ========================================
+
+    if (context.optionalModules?.includeChineseLegalThinking) {
+      sections.push(this.buildSectionHeader(
+        "📚 中国法学思维框架（详细版）",
+        "四层结构：案件事实 → 法条适用 → 法理依据 → 社会效果"
+      ));
+      sections.push(getChineseLegalThinkingPrompt());
+    }
+
+    if (context.optionalModules?.includeLegalMethodology) {
+      sections.push(this.buildSectionHeader(
+        "⚖️ 法学方法论工具箱",
+        "12种法学方法：6种解释方法 + 3种推理方法 + 3种论证方法"
+      ));
+      sections.push(getLegalMethodologyPrompt());
+    }
+
+    // ========================================
+    // 执行要求（高注意力区）
     // ========================================
 
     sections.push(this.buildSectionHeader(
-      "🧠 第三部分：中国法学思维框架",
-      "四层思维路径：案件事实 → 法条适用 → 法理依据 → 社会效果"
-    ));
-    sections.push(getChineseLegalThinkingPrompt());
-
-    sections.push(this.buildSectionHeader(
-      "🎯 第四部分：苏格拉底教学原则",
-      "核心提问技术（三大武器）+ 案件-法条-法理链接 + 记忆锚点策略"
-    ));
-    sections.push(getTeachingPrinciplesPrompt());
-
-    // ========================================
-    // 第三部分：执行要求（高注意力区）
-    // ========================================
-
-    sections.push(this.buildSectionHeader(
-      "🚀 第五部分：立即执行要求",
+      "🚀 立即执行要求",
       "当前对话的核心任务和优先级"
     ));
     sections.push(this.buildExecutionSummary(context));
@@ -103,7 +161,7 @@ export class FullPromptBuilder {
     // ========================================
 
     if (context.includeDiagnostics) {
-      sections.push(this.buildDiagnostics(context));
+      sections.push(this.buildDiagnostics(context, includeISSUE, reason));
     }
 
     return sections.join(separator);
@@ -531,61 +589,93 @@ C. 从裁判结果倒推（先想法官会怎么判）
 
   /**
    * 构建诊断信息（可选）
-   * 更新为新的4模块架构
+   * v3.0: 使用新的价值层架构 + 智能拼接
    */
-  private static buildDiagnostics(context: FullPromptContext): string {
-    // 估算各模块的token数（基于实际文件大小）
-    const tokenEstimates = {
-      'm1_identity': 8000,           // M1: SocraticIdentity（新版，锋利+幽默+严肃）
-      'm2_constraints': 6500,        // M2: CognitiveConstraints（精简版）
-      'm3_chineseThinking': 12000,   // M3: ChineseLegalThinking（新增）
-      'm4_principles': 8000,         // M4: TeachingPrinciples（精简版）
-      'executionSummary': 2500       // ExecutionSummary（精简版）
+  private static buildDiagnostics(
+    context: FullPromptContext,
+    includeISSUE: boolean,
+    reason: string
+  ): string {
+    // 估算各模块的token数（基于v3.0架构）
+    const tokenEstimates: Record<string, number> = {
+      'SocraticCore-v3': 15000,      // 核心提示词（价值层65% + 方法论30% + 边界5%）
+      'ChineseLegalContext': 3000,    // 中国法学特色
+      'WebSearchGuide': 2000,         // 联网搜索指南（可选）
+      'executionSummary': 2500        // 执行要求
     };
+
+    // ISSUE方法论：智能拼接（基于轮数或阶段）
+    if (includeISSUE) {
+      tokenEstimates['ISSUE-Opening (智能拼接)'] = 4000; // 精简版ISSUE，从12000压缩到4000
+    }
+
+    // 可选模块（仅在请求时计入）
+    if (context.optionalModules?.includeChineseLegalThinking) {
+      tokenEstimates['ChineseLegalThinking-详细版'] = 11000;
+    }
+    if (context.optionalModules?.includeLegalMethodology) {
+      tokenEstimates['LegalMethodology-完整版'] = 11000;
+    }
 
     const totalTokens = Object.values(tokenEstimates).reduce((sum, val) => sum + val, 0);
     const contextUsage = (totalTokens / 128000 * 100).toFixed(1);
     const remainingTokens = 128000 - totalTokens;
 
     // 对比原始架构
-    const oldTotalTokens = 95800; // 原7模块总计
+    const oldTotalTokens = 95800; // 原多模块架构总计
     const tokenSaved = oldTotalTokens - totalTokens;
     const reductionPercent = ((tokenSaved / oldTotalTokens) * 100).toFixed(1);
 
     return `
 ---
 
-# 📊 构建诊断信息
+# 📊 构建诊断信息 v3.0
 
 > 此信息仅供调试使用，不影响教学对话
 
 ## Token使用统计
 
-- **总Token数**：${totalTokens.toLocaleString()} tokens (精简后)
+- **总Token数**：${totalTokens.toLocaleString()} tokens
 - **Context占用**：${contextUsage}% (共128K)
 - **剩余空间**：${remainingTokens.toLocaleString()} tokens
 
-## 模块分布（新架构）
+## 模块分布（v3.0架构）
 
 ${Object.entries(tokenEstimates)
   .map(([module, tokens]) => `- ${module}: ${tokens.toLocaleString()} tokens`)
   .join('\n')}
 
-## 优化效果
+## v3.0优化效果
 
-- **原架构Token数**：${oldTotalTokens.toLocaleString()} tokens (7模块)
-- **新架构Token数**：${totalTokens.toLocaleString()} tokens (4模块)
+- **原架构Token数**：${oldTotalTokens.toLocaleString()} tokens (多模块)
+- **新架构Token数**：${totalTokens.toLocaleString()} tokens (价值前置)
 - **节省Token**：${tokenSaved.toLocaleString()} tokens
 - **压缩比例**：${reductionPercent}%
 
-## 配置信息
+## 架构特点
 
-- 讨论主题: ${context.topic || '未指定'}
-- 难度级别: ${context.difficulty}
+- **价值层（65%）**：为什么存在、教学使命、成功标准
+- **方法论（30%）**：三大武器（助产术、反诘法、归谬法）
+- **硬性边界（5%）**：安全合规要求
+- **ISSUE方法论**：${includeISSUE ? '✅ 已注入' : '❌ 未注入'}
+
+## 【智能拼接】配置信息
+
+- **对话轮数**: ${context.currentRound !== undefined ? `第${context.currentRound}轮` : '未指定'}
+- **拼接决策**: ${reason}
+- **讨论主题**: ${context.topic || '未指定'}
+- **难度级别**: ${context.difficulty}
+- **ISSUE阶段**: ${context.issuePhase || '未指定（使用轮数判断）'}
+
+## 智能拼接逻辑
+
+- 第1-2轮：自动包含ISSUE开场指导（识别矛盾 + 选择框架）
+- 第3轮及之后：完全去掉ISSUE，使用纯苏格拉底核心提示词
+- 优先级：currentRound > issuePhase > 默认（纯苏格拉底）
 
 ---
 
-*Prompt构建完成，精简架构已生效。*
+*Prompt构建完成，v3.0价值前置架构已生效。*
 `.trim();
   }
 
