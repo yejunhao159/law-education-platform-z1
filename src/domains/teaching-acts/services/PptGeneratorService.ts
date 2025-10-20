@@ -576,13 +576,16 @@ export class PptGeneratorService {
         console.warn('⚠️ [PptGenerator] 生成的内容不包含页面标题标记(##)，可能格式不正确');
       }
 
+      const outline = this.markdownToOutline(markdownContent);
+      const sanitizedMarkdown = this.outlineToMarkdown(outline);
+
       console.log('✅ [PptGenerator] Markdown大纲生成完成:', {
-        contentLength: markdownContent.length,
-        estimatedPages: (markdownContent.match(/##/g) || []).length,
-        hasDesignHints: markdownContent.includes('💡 设计提示')
+        contentLength: sanitizedMarkdown.length,
+        estimatedPages: outline.slides.length,
+        hasDesignHints: sanitizedMarkdown.includes('💡 设计提示')
       });
 
-      return markdownContent;
+      return sanitizedMarkdown;
 
     } catch (error) {
       console.error('❌ [PptGenerator] AI大纲流式生成失败:', error);
@@ -703,6 +706,10 @@ export class PptGeneratorService {
       language: options.language || 'zh',
       length: options.length || 'medium'
     });
+
+    // 🔍 调试：查看实际传递的Markdown（前500字符）
+    console.log('🔍 [Debug] Markdown前500字符:\n', outlineMarkdown.substring(0, 500));
+    console.log('🔍 [Debug] Markdown后500字符:\n', outlineMarkdown.substring(Math.max(0, outlineMarkdown.length - 500)));
 
     options.onProgress?.({
       stage: 'content',
@@ -874,9 +881,14 @@ export class PptGeneratorService {
           hasData: !!result.data
         });
 
-        // 如果data为null，可能是30秒缓存已过期，或PPT已完成
+        // 🔑 关键修复: data为null表示PPT已完成(302.AI的设计)
+        if (!result.data) {
+          console.log('✅ [PptGenerator] PPT渲染完成(data为null表示完成)！');
+          return; // 成功完成
+        }
+
         // 如果current >= total，说明PPT已生成完成
-        if (result.data && current >= total && total > 0) {
+        if (current >= total && total > 0) {
           console.log('✅ [PptGenerator] PPT渲染完成！');
           return; // 成功完成
         }
@@ -913,30 +925,62 @@ export class PptGeneratorService {
 
   /**
    * 下载PPT，获取最终的fileUrl
+   *
+   * 🔑 关键逻辑：
+   * 1. PPT内容生成完成(data=null)后，文件还在最后渲染阶段
+   * 2. 需要轮询downloadpptx接口，直到fileUrl不为null
+   * 3. 最多轮询30次（1分钟），每2秒一次
    */
   private async downloadPpt(pptId: string): Promise<DownloadPptResponse['data']> {
     console.log('📥 [PptGenerator] 调用下载接口获取PPT文件链接, pptId:', pptId);
 
-    try {
-      const result = await this.fetchDownload(pptId);
+    const maxAttempts = 30;  // 最多轮询30次
+    const interval = 2000;   // 每2秒查询一次
 
-      if (result.code !== 0 || !result.data?.fileUrl) {
-        throw new Error(result.message || '未能获取PPT下载链接');
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const result = await this.fetchDownload(pptId);
+
+        // 🔍 调试日志：查看实际返回的数据
+        console.log(`🔍 [Debug] 下载接口返回 (${attempt}/${maxAttempts}):`, {
+          code: result.code,
+          hasData: !!result.data,
+          hasFileUrl: !!result.data?.fileUrl
+        });
+
+        if (result.code !== 0) {
+          throw new Error(result.message || '下载接口返回错误');
+        }
+
+        // ✅ 如果fileUrl已生成，直接返回
+        if (result.data?.fileUrl) {
+          console.log('✅ [PptGenerator] 成功获取PPT下载链接:', {
+            id: result.data.id,
+            name: result.data.name,
+            fileUrl: result.data.fileUrl,
+            coverUrl: result.data.coverUrl
+          });
+          return result.data;
+        }
+
+        // ⏳ fileUrl还未生成，继续等待
+        console.log(`⏳ [PptGenerator] 文件还在渲染中，等待${interval/1000}秒后重试...`);
+        await new Promise(resolve => setTimeout(resolve, interval));
+
+      } catch (error) {
+        console.error(`❌ [PptGenerator] 下载尝试 ${attempt}/${maxAttempts} 失败:`, error);
+
+        // 如果是最后一次尝试，抛出错误
+        if (attempt === maxAttempts) {
+          throw new Error(`下载PPT失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        }
+
+        // 否则继续重试
+        await new Promise(resolve => setTimeout(resolve, interval));
       }
-
-      console.log('✅ [PptGenerator] 成功获取PPT下载链接:', {
-        id: result.data.id,
-        name: result.data.name,
-        fileUrl: result.data.fileUrl,
-        coverUrl: result.data.coverUrl
-      });
-
-      return result.data;
-
-    } catch (error) {
-      console.error('❌ [PptGenerator] 下载PPT失败:', error);
-      throw new Error(`下载PPT失败: ${error instanceof Error ? error.message : '未知错误'}`);
     }
+
+    throw new Error('下载PPT超时：文件生成时间过长，请稍后重试');
   }
 
 
@@ -959,6 +1003,97 @@ export class PptGeneratorService {
     };
   }
 
+  private markdownToOutline(markdown: string): PptOutline {
+    const normalized = markdown.replace(/\r\n/g, '\n');
+    const lines = normalized.split('\n');
+
+    let targetAudience = '未指定';
+    const slides: PptOutline['slides'] = [];
+
+    const firstLine = lines[0]?.trim();
+    if (firstLine && firstLine.startsWith('#')) {
+      targetAudience = firstLine.replace(/^#\s*/, '').replace(/专用PPT$/i, '').trim() || '未指定';
+      lines.shift();
+    }
+
+    let currentTitle: string | null = null;
+    let contentLines: string[] = [];
+    let visualHints: string[] = [];
+
+    const flushSlide = () => {
+      if (!currentTitle) return;
+
+      const content = contentLines.join('\n').trim() || '（内容待完善）';
+      const hintsText = visualHints.join('\n').trim() || undefined;
+
+      slides.push({
+        title: currentTitle,
+        content,
+        type: this.detectSlideType(currentTitle),
+        ...(hintsText ? { visualHints: hintsText } : {})
+      });
+
+      contentLines = [];
+      visualHints = [];
+    };
+
+    for (const rawLine of lines) {
+      const line = rawLine.trimEnd();
+
+      if (!line) {
+        contentLines.push('');
+        continue;
+      }
+
+      if (line.startsWith('## ')) {
+        flushSlide();
+        currentTitle = line.replace(/^##\s*/, '').trim() || '未命名页面';
+        continue;
+      }
+
+      if (line.startsWith('---')) {
+        flushSlide();
+        currentTitle = null;
+        continue;
+      }
+
+      if (line.startsWith('>')) {
+        visualHints.push(line.replace(/^>\s*/, ''));
+        continue;
+      }
+
+      contentLines.push(line);
+    }
+
+    flushSlide();
+
+    if (slides.length === 0) {
+      slides.push({
+        title: '课程概览',
+        content: normalized,
+        type: 'content'
+      });
+    }
+
+    const metadata = {
+      totalSlides: slides.length,
+      estimatedMinutes: Math.ceil(slides.length * 1.5),
+      targetAudience
+    };
+
+    return { slides, metadata };
+  }
+
+  private detectSlideType(title: string): PptOutline['slides'][number]['type'] {
+    const lower = title.toLowerCase();
+    if (/封面|开场|cover/.test(title)) return 'cover';
+    if (/总结|结论|closing|结束/.test(title)) return 'conclusion';
+    if (/时间轴|timeline|图表|chart|关系图|结构图/.test(title)) return 'chart';
+    if (/图片|视觉|示意|visual/.test(title)) return 'image';
+    if (lower.includes('封面')) return 'cover';
+    return 'content';
+  }
+
   /**
    * 直接从Markdown文本生成PPT（新方法，用于独立页面）
    */
@@ -973,6 +1108,9 @@ export class PptGeneratorService {
     console.log('🚀 [PptGenerator] 从Markdown生成PPT');
 
     try {
+      const outline = this.markdownToOutline(markdownText);
+      const sanitizedMarkdown = this.outlineToMarkdown(outline);
+
       options.onProgress?.({
         stage: 'content',
         progress: 40,
@@ -981,7 +1119,7 @@ export class PptGeneratorService {
 
       // 调用302.ai generatecontent接口
       const requestBody = {
-        outlineMarkdown: markdownText,
+        outlineMarkdown: sanitizedMarkdown,
         stream: true,
         asyncGenPptx: true,
         lang: options.language || 'zh',
@@ -1047,37 +1185,33 @@ export class PptGeneratorService {
   /**
    * 将大纲转换为Markdown格式（302.ai API需要）
    * 公开此方法供UI层使用
+   *
+   * ⚠️ 重要：302.AI需要纯净的Markdown格式
+   * - 使用 # 和 ## 标题
+   * - 不要添加额外的分隔符（如 ---）
+   * - 不要添加元信息（会被当作额外页面）
    */
   public outlineToMarkdown(outline: PptOutline): string {
+    // 一级标题：PPT总标题
     let markdown = `# ${outline.metadata.targetAudience}专用PPT\n\n`;
 
-    outline.slides.forEach((slide, index) => {
-      // 使用二级标题表示每一页
+    outline.slides.forEach((slide) => {
+      // 二级标题：每一页的标题（302.AI会自动识别为新页面）
       markdown += `## ${slide.title}\n\n`;
 
-      // 内容（保持原格式）
+      // 内容：保持原格式（支持列表、段落等）
       markdown += `${slide.content}\n\n`;
 
-      // 如果有可视化提示，添加为引用
+      // ✅ 保留visualHints，但简化格式（去掉引用块）
       if (slide.visualHints) {
-        markdown += `> 💡 设计提示：${slide.visualHints}\n\n`;
-      }
-
-      // 页面分隔
-      if (index < outline.slides.length - 1) {
-        markdown += '---\n\n';
+        markdown += `${slide.visualHints}\n\n`;
       }
     });
 
-    // 添加元信息
-    markdown += `\n---\n\n`;
-    markdown += `**元信息**\n`;
-    markdown += `- 总页数：${outline.metadata.totalSlides}\n`;
-    markdown += `- 预估时长：${outline.metadata.estimatedMinutes}分钟\n`;
-    markdown += `- 目标受众：${outline.metadata.targetAudience}\n`;
-
-    return markdown;
+    // ⚠️ 去掉元信息和分隔符，避免被当作额外页面
+    return markdown.trim();
   }
+
 }
 
 // ========== 默认导出 ==========

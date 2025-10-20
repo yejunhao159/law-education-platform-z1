@@ -89,7 +89,8 @@ export default function PptGeneratePage() {
 
     // 🚀 使用真正的流式API生成大纲 - 直接返回Markdown
     const outlineOptions = {
-      templateId: selectedTemplateId ?? 'education-bureau',
+      // ⚠️ templateId留空让302.AI自动选择模板(我们没有官方模板ID列表)
+      templateId: undefined,
       style: 'formal' as const,
       length: 'medium' as const,
       includeDialogue: true
@@ -112,6 +113,7 @@ export default function PptGeneratePage() {
 
     // 🎯 关键简化：直接使用Markdown，无需转换
     setOutlineText(markdownText);
+    setStreamingText(markdownText);
     return markdownText;
   }
 
@@ -127,7 +129,8 @@ export default function PptGeneratePage() {
 
       // 调用PPT生成服务
       const result = await service.generateFromMarkdown(outlineText, {
-        templateId: selectedTemplateId,
+        // ⚠️ templateId留空让302.AI自动选择模板(自定义ID无效)
+        templateId: undefined,
         language: 'zh',
         onProgress: (prog) => {
           console.log('📊 进度更新:', prog);

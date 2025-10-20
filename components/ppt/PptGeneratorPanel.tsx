@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
-import { PptGeneratorService, type PptResult, type PptGenerationOptions, type PptTemplate, type PptGenerationProgress } from '@/src/domains/teaching-acts/services/PptGeneratorService';
+import { PptGeneratorService, type PptResult, type PptGenerationOptions, type PptGenerationProgress } from '@/src/domains/teaching-acts/services/PptGeneratorService';
 import { PptOutlineEditor } from './PptOutlineEditor';
 
 // ========== 类型定义 ==========
@@ -37,6 +37,14 @@ interface PptOutline {
 }
 
 type GenerationStage = 'idle' | 'generating-outline' | 'editing-outline' | 'generating-ppt' | 'completed' | 'error';
+
+type PptTemplate =
+  | 'school-leadership'
+  | 'teacher-training'
+  | 'education-bureau'
+  | 'parent-meeting'
+  | 'academic-conference'
+  | 'technical';
 
 interface PptGeneratorPanelProps {
   /**
@@ -91,7 +99,7 @@ export function PptGeneratorPanel({
       const service = new PptGeneratorService();
 
       const options: PptGenerationOptions = {
-        template: selectedTemplate,  // 使用用户选择的模板
+        templateId: selectedTemplate,  // 使用用户选择的模板
         language: 'zh',
         length: 'medium',
         onProgress: (prog) => {
@@ -128,7 +136,7 @@ export function PptGeneratorPanel({
       const service = new PptGeneratorService();
 
       const options: PptGenerationOptions = {
-        template: selectedTemplate,  // 使用用户选择的模板
+        templateId: selectedTemplate,  // 使用用户选择的模板
         includeDialogue: true,
         language: 'zh',
         length: 'medium',

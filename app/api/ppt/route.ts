@@ -68,7 +68,29 @@ async function proxyGenerateRequest(payload: any, apiKey: string): Promise<Respo
 
     if (!response.ok) {
       const errorText = await response.text();
-      return NextResponse.json({ error: errorText || 'PPT generation failed' }, { status: response.status });
+
+      // 🔧 解析302.AI的错误响应，提供友好的错误提示
+      let friendlyError = errorText || 'PPT generation failed';
+      try {
+        const errorData = JSON.parse(errorText);
+        const apiError = errorData.error;
+
+        // 识别常见错误类型
+        if (apiError?.err_code === -10006 || apiError?.message?.includes('Quota')) {
+          friendlyError = '💰 302.AI API 配额已用完。请访问 302.AI 充值或更换 API 密钥。';
+        } else if (apiError?.err_code === -10001 || apiError?.message?.includes('Invalid API key')) {
+          friendlyError = '🔑 API 密钥无效。请检查 AI_302_API_KEY 环境变量。';
+        } else if (apiError?.message_cn) {
+          // 使用中文错误信息（更友好）
+          friendlyError = `302.AI 错误: ${apiError.message_cn}`;
+        } else if (apiError?.message) {
+          friendlyError = `302.AI 错误: ${apiError.message}`;
+        }
+      } catch (e) {
+        // 如果解析失败，使用原始错误
+      }
+
+      return NextResponse.json({ error: friendlyError }, { status: response.status });
     }
 
     const headers = new Headers(response.headers);
@@ -107,7 +129,17 @@ async function proxyStatusRequest(payload: any, apiKey: string): Promise<Respons
 
     const text = await response.text();
     if (!response.ok) {
-      return NextResponse.json({ error: text || 'Failed to query PPT status' }, { status: response.status });
+      let friendlyError = text || 'Failed to query PPT status';
+      try {
+        const errorData = JSON.parse(text);
+        const apiError = errorData.error;
+        if (apiError?.err_code === -10006) {
+          friendlyError = '💰 302.AI API 配额已用完。';
+        } else if (apiError?.message_cn) {
+          friendlyError = `302.AI 错误: ${apiError.message_cn}`;
+        }
+      } catch (e) {}
+      return NextResponse.json({ error: friendlyError }, { status: response.status });
     }
 
     const data = text ? JSON.parse(text) : {};
@@ -149,7 +181,17 @@ async function proxyDownloadRequest(payload: any, apiKey: string): Promise<Respo
 
     const text = await response.text();
     if (!response.ok) {
-      return NextResponse.json({ error: text || 'Failed to download PPT' }, { status: response.status });
+      let friendlyError = text || 'Failed to download PPT';
+      try {
+        const errorData = JSON.parse(text);
+        const apiError = errorData.error;
+        if (apiError?.err_code === -10006) {
+          friendlyError = '💰 302.AI API 配额已用完。';
+        } else if (apiError?.message_cn) {
+          friendlyError = `302.AI 错误: ${apiError.message_cn}`;
+        }
+      } catch (e) {}
+      return NextResponse.json({ error: friendlyError }, { status: response.status });
     }
 
     const data = text ? JSON.parse(text) : {};

@@ -32,9 +32,9 @@ export function StreamingOutlineEditor({
     }
   }, [content, isStreaming]);
 
-  // 计算字数和预估页数
+  // 计算字数和预估页数（基于 ## 二级标题）
   const charCount = content.length;
-  const estimatedPages = Math.max(1, Math.ceil(content.split('---').length - 1));
+  const estimatedPages = Math.max(1, (content.match(/^##\s+/gm) || []).length);
 
   return (
     <Card className={`${isStreaming ? 'ring-2 ring-blue-500 ring-opacity-50' : ''}`}>
@@ -88,9 +88,10 @@ export function StreamingOutlineEditor({
         <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-gray-700">
           <p className="font-medium mb-1">💡 编辑提示：</p>
           <ul className="space-y-1 text-xs">
-            <li>• 使用 <code className="bg-white px-1 rounded">---</code> 分隔不同的PPT页面</li>
-            <li>• 每页建议包含：标题（第一行）+ 简短内容描述</li>
-            <li>• 保持每页内容简洁（50-150字为宜）</li>
+            <li>• 使用 <code className="bg-white px-1 rounded">## 标题</code> 表示一页PPT（二级标题自动分页）</li>
+            <li>• 使用 <code className="bg-white px-1 rounded">### 小节</code> 表示页面内的内容块</li>
+            <li>• 支持Markdown格式：列表（-）、表格（|）、引用（&gt;）、代码块等</li>
+            <li>• 每页内容应完整详细，302.AI只负责视觉渲染</li>
             <li>• 可以自由添加、删除、调整页面顺序</li>
           </ul>
         </div>

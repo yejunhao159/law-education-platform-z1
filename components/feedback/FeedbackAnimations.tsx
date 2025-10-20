@@ -170,11 +170,15 @@ interface SuccessBurstProps {
 }
 
 export function SuccessBurst({ x = 0, y = 0, particleCount = 8 }: SuccessBurstProps) {
-  const particles = Array.from({ length: particleCount }, (_, i) => ({
-    id: i,
-    angle: (360 / particleCount) * i,
-    icon: [Star, Heart, Sparkles, Zap][i % 4]
-  }));
+  const iconSet = [Star, Heart, Sparkles, Zap] as const;
+  const particles = Array.from({ length: particleCount }, (_, i) => {
+    const IconComponent = iconSet[i % iconSet.length];
+    return {
+      id: i,
+      angle: (360 / particleCount) * i,
+      icon: IconComponent
+    };
+  });
 
   return (
     <div className="fixed pointer-events-none z-50" style={{ left: x, top: y }}>
