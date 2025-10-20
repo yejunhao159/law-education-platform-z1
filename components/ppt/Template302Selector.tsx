@@ -27,7 +27,6 @@ interface Template302SelectorProps {
 export function Template302Selector({ selected, onSelect }: Template302SelectorProps) {
   const [templates, setTemplates] = useState<Template302[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // 加载预设模板

@@ -16,9 +16,9 @@ import { Badge } from '@/components/ui/badge';
 // ========== 类型定义 ==========
 
 interface PptSlide {
-  title: string;
-  content: string;
-  type: 'cover' | 'content' | 'image' | 'chart' | 'conclusion';
+  title?: string;
+  content?: string;
+  type?: 'cover' | 'content' | 'image' | 'chart' | 'conclusion';
   visualHints?: string;
 }
 

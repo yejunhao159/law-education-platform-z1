@@ -106,7 +106,7 @@ export default function ContractLearningPage() {
   }
 
   // 模拟AI分析合同
-  const simulateAnalysis = (file: File) => {
+  const simulateAnalysis = (_file: File) => {
     setAnalyzing(true)
     setContractText('')
     setRisks([])

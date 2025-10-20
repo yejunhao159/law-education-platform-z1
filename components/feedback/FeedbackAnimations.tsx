@@ -182,7 +182,7 @@ export function SuccessBurst({ x = 0, y = 0, particleCount = 8 }: SuccessBurstPr
 
   return (
     <div className="fixed pointer-events-none z-50" style={{ left: x, top: y }}>
-      {particles.map(({ id, angle, icon: Icon }) => (
+      {particles.map(({ id, angle, icon: IconComponent }) => (
         <motion.div
           key={id}
           initial={{ x: 0, y: 0, scale: 0, opacity: 1 }}
@@ -195,7 +195,7 @@ export function SuccessBurst({ x = 0, y = 0, particleCount = 8 }: SuccessBurstPr
           transition={{ duration: 1, ease: 'easeOut' }}
           className="absolute"
         >
-          <Icon className="w-6 h-6 text-yellow-400" />
+          <IconComponent className="w-6 h-6 text-yellow-400" />
         </motion.div>
       ))}
     </div>
@@ -256,6 +256,7 @@ export function ProgressCelebration({ progress, milestone = 100 }: ProgressCeleb
       const timer = setTimeout(() => setShowCelebration(false), 3000);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [progress, milestone]);
 
   if (!showCelebration) return null;

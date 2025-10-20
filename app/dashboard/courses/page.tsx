@@ -172,7 +172,7 @@ export default function CoursesPage() {
                     <th className="border border-border p-3 text-left font-medium text-sm w-32">
                       时间
                     </th>
-                    {weekDays.map((day, index) => (
+                    {weekDays.map((day) => (
                       <th key={day} className="border border-border p-3 text-center font-medium text-sm">
                         {day}
                       </th>

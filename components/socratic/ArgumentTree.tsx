@@ -162,7 +162,7 @@ export default function ArgumentTree({
   };
 
   // 渲染节点
-  const renderNode = (node: ArgumentNode, level: number = 0): JSX.Element => {
+  const renderNode = (node: ArgumentNode, level: number = 0): React.ReactElement => {
     const hasChildren = node.children && node.children.length > 0;
     const isExpanded = expandedNodes.has(node.id);
     const isSelected = selectedNode === node.id;
