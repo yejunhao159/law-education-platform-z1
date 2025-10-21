@@ -77,9 +77,17 @@ export function CaseOverview() {
       return
     }
 
-    // 🔄 清空旧的故事章节，防止显示缓存数据
-    console.log('[generateStoryChapters] 清空旧故事章节...');
-    useTeachingStore.getState().setStoryChapters([]);
+    // 🆕 快照模式检查: 优先使用已保存的故事章节
+    const existingChapters = useTeachingStore.getState().storyChapters;
+    if (existingChapters && existingChapters.length > 0) {
+      console.log('📂 [CaseOverview] 检测到已保存的故事章节，跳过AI生成:', {
+        章节数量: existingChapters.length,
+        来源: '数据库快照恢复',
+      });
+      setHasInitializedStory(true);
+      setIsGeneratingStory(false);
+      return; // 直接返回，不调用API
+    }
 
     // 立即标记为正在生成，防止重复调用
     setIsGeneratingStory(true)

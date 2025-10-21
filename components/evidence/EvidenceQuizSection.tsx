@@ -60,6 +60,62 @@ export function EvidenceQuizSection({
   }, [autoGenerate, evidences]);
 
   const generateQuizzes = async () => {
+    // 🆕 快照模式检查: 优先使用已保存的证据问题
+    try {
+      const { useTeachingStore } = await import('@/src/domains/teaching-acts/stores/useTeachingStore');
+      const savedAnalysis = useTeachingStore.getState().analysisData.result;
+
+      if (savedAnalysis?.evidenceQuestions && savedAnalysis.evidenceQuestions.length > 0) {
+        console.log('📂 [EvidenceQuizSection] 检测到已保存的证据问题，跳过AI生成:', {
+          问题数量: savedAnalysis.evidenceQuestions.length,
+          来源: '数据库快照恢复',
+        });
+
+        // 转换保存的格式为组件期望的格式
+        const savedQuizzes: EvidenceQuiz[] = savedAnalysis.evidenceQuestions.map((q: any) => {
+          const evidence = evidences.find(e => e.id === q.evidenceId);
+          return {
+            id: q.id,
+            evidenceId: q.evidenceId,
+            evidence: evidence || {
+              id: q.evidenceId,
+              title: '已保存证据',
+              description: '从历史记录恢复',
+              content: '',
+              type: 'document' as const,
+              relatedEvents: [],
+            },
+            questionType: q.questionType,
+            question: q.question,
+            options: q.options,
+            correctAnswer: q.correctAnswer,
+            explanation: q.explanation,
+            points: q.points || 10,
+            difficulty: q.difficulty,
+            metadata: q.metadata,
+          };
+        });
+
+        const newSession: EvidenceQuizSession = {
+          id: `quiz_restored_${Date.now()}`,
+          startTime: new Date().toISOString(),
+          currentQuizIndex: 0,
+          quizzes: savedQuizzes.slice(0, maxQuizzes),
+          userAnswers: [],
+          score: 0,
+          totalPossibleScore: savedQuizzes.slice(0, maxQuizzes).reduce((sum, quiz) => sum + (quiz.points || 10), 0),
+          completed: false
+        };
+
+        setSession(newSession);
+        setCurrentAnswers(new Array(savedQuizzes.length).fill(-1));
+        setStartTime(Date.now());
+        return; // 直接返回，不调用API
+      }
+    } catch (error) {
+      console.log('⚠️ [EvidenceQuizSection] 检查保存数据失败，继续生成新问题:', error);
+    }
+
     setIsGenerating(true);
 
     try {
@@ -80,6 +136,36 @@ export function EvidenceQuizSection({
       setSession(newSession);
       setCurrentAnswers(new Array(generatedQuizzes.length).fill(-1));
       setStartTime(Date.now());
+
+      // 🆕 保存生成的证据问题到store，以便"完成学习"时保存到数据库
+      try {
+        const { useTeachingStore } = await import('@/src/domains/teaching-acts/stores/useTeachingStore');
+        const currentAnalysis = useTeachingStore.getState().analysisData.result;
+
+        if (currentAnalysis) {
+          // 更新analysisResult，添加evidenceQuestions
+          useTeachingStore.getState().setAnalysisResult({
+            ...currentAnalysis,
+            evidenceQuestions: generatedQuizzes.map(q => ({
+              id: q.id,
+              evidenceId: q.evidenceId,
+              question: q.question,
+              questionType: q.questionType,
+              options: q.options,
+              correctAnswer: q.correctAnswer,
+              explanation: q.explanation,
+              difficulty: q.difficulty,
+              points: q.points,
+            })),
+          });
+
+          console.log('✅ [EvidenceQuizSection] 证据问题已保存到store:', {
+            问题数量: generatedQuizzes.length,
+          });
+        }
+      } catch (storeError) {
+        console.log('⚠️ [EvidenceQuizSection] 保存证据问题到store失败:', storeError);
+      }
     } catch (error) {
       console.error('生成证据问答失败:', error);
     } finally {

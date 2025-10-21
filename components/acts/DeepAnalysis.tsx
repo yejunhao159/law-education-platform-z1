@@ -495,11 +495,11 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
           // 2. 保存完整的时间线分析原始数据
           timelineAnalysis: analysisData,
 
-          // 3. 证据问题（待生成时保存）
-          evidenceQuestions: undefined, // TODO: 在EvidenceQuizSection生成后保存
+          // 3. 证据问题（从store读取，EvidenceQuizSection生成后会更新）
+          evidenceQuestions: currentStore.analysisData.result?.evidenceQuestions || undefined,
 
-          // 4. 请求权分析（待生成时保存）
-          claimAnalysis: undefined, // TODO: 在EventClaimAnalysisDialog生成后保存
+          // 4. 请求权分析（从store读取，EventClaimAnalysisDialog生成后会更新）
+          claimAnalysis: currentStore.analysisData.result?.claimAnalysis || undefined,
         };
 
         console.log('🔗 [DeepAnalysis] 准备保存扩展的分析结果:', {
