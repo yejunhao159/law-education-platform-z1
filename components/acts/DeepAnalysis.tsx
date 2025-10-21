@@ -288,6 +288,33 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
   const performTimelineAnalysis = async (sourceCaseData: typeof effectiveCaseData) => {
     if (!sourceCaseData?.threeElements?.facts?.timeline) return
 
+    // 🆕 Step 3: 优先使用已保存的分析结果
+    const { useTeachingStore } = await import('@/src/domains/teaching-acts/stores/useTeachingStore');
+    const savedAnalysis = useTeachingStore.getState().analysisData.result;
+
+    if (savedAnalysis?.timelineAnalysis) {
+      console.log('📂 [DeepAnalysis] 检测到已保存的分析结果，直接恢复:', {
+        有时间线分析: !!savedAnalysis.timelineAnalysis,
+        有故事章节: !!savedAnalysis.narrative,
+        章节数量: savedAnalysis.narrative?.chapters?.length || 0,
+      });
+
+      // 恢复到本地状态
+      setAnalysisResult(savedAnalysis.timelineAnalysis as any);
+
+      // 恢复故事章节到store（如果有）
+      if (savedAnalysis.narrative?.chapters) {
+        useTeachingStore.getState().setStoryChapters(savedAnalysis.narrative.chapters);
+      }
+
+      setIsAnalyzing(false);
+      setAnalysisComplete(true);
+      setAnalysisProgress('✅ 已从历史记录恢复分析结果');
+
+      console.log('✅ [DeepAnalysis] 分析结果恢复完成，跳过API调用');
+      return;
+    }
+
     setIsAnalyzing(true)
     setAnalysisError(null)
     setAnalysisProgress('🚀 开始综合智能分析...')
@@ -453,16 +480,48 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
         const deepAnalysisResult = adaptTimelineAnalysisToDeepAnalysisResult(analysisData);
 
         const { useTeachingStore } = await import('@/src/domains/teaching-acts/stores/useTeachingStore');
-        useTeachingStore.getState().setAnalysisResult(deepAnalysisResult);
+
+        // 🆕 Step 2: 扩展分析结果，添加所有AI生成内容
+        const currentStore = useTeachingStore.getState();
+        const enhancedAnalysisResult = {
+          ...deepAnalysisResult,
+
+          // 1. 保存AI故事章节
+          narrative: currentStore.storyChapters.length > 0 ? {
+            chapters: currentStore.storyChapters,
+            generatedAt: new Date().toISOString(),
+          } : undefined,
+
+          // 2. 保存完整的时间线分析原始数据
+          timelineAnalysis: analysisData,
+
+          // 3. 证据问题（待生成时保存）
+          evidenceQuestions: undefined, // TODO: 在EvidenceQuizSection生成后保存
+
+          // 4. 请求权分析（待生成时保存）
+          claimAnalysis: undefined, // TODO: 在EventClaimAnalysisDialog生成后保存
+        };
+
+        console.log('🔗 [DeepAnalysis] 准备保存扩展的分析结果:', {
+          有故事章节: !!enhancedAnalysisResult.narrative,
+          章节数量: currentStore.storyChapters.length,
+          有时间线分析: !!enhancedAnalysisResult.timelineAnalysis,
+          转折点数量: analysisData?.turningPoints?.length || 0,
+        });
+
+        useTeachingStore.getState().setAnalysisResult(enhancedAnalysisResult);
 
         // 验证写入
         const stored = useTeachingStore.getState().analysisData;
-        console.log('✅ [DeepAnalysis] 验证Store写入 (适配后):', {
+        console.log('✅ [DeepAnalysis] 验证Store写入 (扩展后):', {
           result存在: !!stored.result,
           result字段数: stored.result ? Object.keys(stored.result).length : 0,
           factAnalysis: stored.result?.factAnalysis,
           evidenceAnalysis: stored.result?.evidenceAnalysis,
-          legalAnalysis: stored.result?.legalAnalysis
+          legalAnalysis: stored.result?.legalAnalysis,
+          narrative存在: !!stored.result?.narrative,
+          narrative章节数: stored.result?.narrative?.chapters?.length || 0,
+          timelineAnalysis存在: !!stored.result?.timelineAnalysis,
         });
 
         const metadata = timelineResult.value.metadata || {}

@@ -5,7 +5,6 @@
  */
 
 import type { TeachingSessionSnapshot } from '../repositories/TeachingSessionRepository';
-import type { DeepAnalysisResult, CaseLearningReport } from '@/src/types';
 
 export class SnapshotConverter {
   /**
@@ -79,6 +78,9 @@ export class SnapshotConverter {
    * @param dbSession 数据库查询结果
    */
   static toStore(dbSession: any): any {
+    // 🆕 Step 5: 完整恢复扩展后的DeepAnalysisResult
+    const analysisResult = dbSession.act2_analysis?.result || null;
+
     return {
       uploadData: {
         extractedElements: dbSession.act1_upload?.extractedElements || null,
@@ -86,9 +88,12 @@ export class SnapshotConverter {
       },
 
       analysisData: {
-        result: dbSession.act2_analysis?.result || null,
+        result: analysisResult,
         isAnalyzing: false,
       },
+
+      // 🆕 恢复AI故事章节（从analysisResult.narrative中提取）
+      storyChapters: analysisResult?.narrative?.chapters || [],
 
       socraticData: {
         isActive: false,
@@ -114,6 +119,12 @@ export class SnapshotConverter {
         createdAt: dbSession.createdAt || dbSession.created_at,
         isReadOnly: true, // 标记为只读模式
         source: 'database', // 标记数据来源
+        // 新增：方便调试的元数据
+        hasNarrative: !!analysisResult?.narrative,
+        narrativeChaptersCount: analysisResult?.narrative?.chapters?.length || 0,
+        hasTimelineAnalysis: !!analysisResult?.timelineAnalysis,
+        hasEvidenceQuestions: !!analysisResult?.evidenceQuestions,
+        hasClaimAnalysis: !!analysisResult?.claimAnalysis,
       },
 
       // UI状态重置

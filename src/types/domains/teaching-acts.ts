@@ -77,6 +77,63 @@ export const DeepAnalysisResultSchema = z.object({
     precedents: z.array(z.string()),
     risks: z.array(z.string()),
   }),
+
+  // 🆕 新增：AI故事章节（智能叙事）
+  narrative: z.object({
+    chapters: z.array(StoryChapterSchema),
+    generatedAt: z.string().datetime().optional(),
+    fallbackUsed: z.boolean().optional(),
+    errorMessage: z.string().optional(),
+  }).optional(),
+
+  // 🆕 新增：证据学习问题
+  evidenceQuestions: z.array(z.object({
+    id: z.string(),
+    evidenceId: z.string(),
+    question: z.string(),
+    questionType: z.enum(['type', 'burden', 'relevance', 'admissibility', 'strength']),
+    options: z.array(z.string()),
+    correctAnswer: z.number(),
+    explanation: z.string(),
+    difficulty: z.enum(['beginner', 'intermediate', 'advanced']),
+    points: z.number().optional(),
+  })).optional(),
+
+  // 🆕 新增：请求权分析结果
+  claimAnalysis: z.object({
+    claims: z.array(z.object({
+      id: z.string(),
+      basis: z.string(),
+      basisText: z.string().optional(),
+      type: z.enum(['primary', 'alternative', 'subsidiary']),
+      elements: z.array(z.object({
+        name: z.string(),
+        description: z.string(),
+        satisfied: z.boolean(),
+        evidence: z.array(z.string()),
+        analysis: z.string().optional(),
+      })),
+      conclusion: z.enum(['established', 'partial', 'failed']),
+      reasoning: z.string().optional(),
+      priority: z.number().optional(),
+    })),
+    defenses: z.array(z.object({
+      id: z.string(),
+      type: z.enum(['denial', 'excuse', 'objection', 'counterclaim']),
+      basis: z.string(),
+      description: z.string(),
+      evidence: z.array(z.string()),
+      impact: z.enum(['blocks-claim', 'reduces-claim', 'no-impact']),
+    })).optional(),
+    strategy: z.object({
+      recommendations: z.array(z.string()),
+      risks: z.array(z.string()),
+      opportunities: z.array(z.string()),
+    }).optional(),
+  }).optional(),
+
+  // 🆕 新增：时间线AI分析（保存完整的TimelineAnalysis结果）
+  timelineAnalysis: z.record(z.unknown()).optional(),
 });
 
 // ========== 学习报告（第四幕输出） ==========

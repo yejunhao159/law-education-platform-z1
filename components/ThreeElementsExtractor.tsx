@@ -249,6 +249,25 @@ export function ThreeElementsExtractor() {
   const setCaseData = useCaseManagementStore((state) => state.setCurrentCase)
   const setCurrentAct = useTeachingStore((state) => state.setCurrentAct)
 
+  // 🆕 Step 4: 从store恢复已提取的数据（用于查看历史记录）
+  useEffect(() => {
+    const uploadData = useTeachingStore.getState().uploadData;
+
+    if (uploadData?.extractedElements && !extractedData) {
+      console.log('📂 [ThreeElementsExtractor] 检测到已保存的提取数据，正在恢复:', {
+        有数据: !!uploadData.extractedElements,
+        置信度: uploadData.confidence,
+      });
+
+      // 将store中的extractedElements恢复到本地状态
+      const restoredData = uploadData.extractedElements as unknown as ExtractedElements;
+      setExtractedData(restoredData);
+      setProgress(100);
+
+      console.log('✅ [ThreeElementsExtractor] 数据恢复完成，显示提取结果');
+    }
+  }, []); // 只在组件挂载时执行一次
+
   const handleFileSelect = useCallback(async (file: File) => {
     setError(null)
     setExtractedData(null)
