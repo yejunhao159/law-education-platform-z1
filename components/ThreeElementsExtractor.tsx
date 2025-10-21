@@ -472,7 +472,7 @@ export function ThreeElementsExtractor() {
   }, [extractedData, setCaseData])
 
   return (
-    <div className="space-y-6">
+    <div id="ThreeElementsExtractorId" className="space-y-6">
       {/* 文件上传区域 */}
       <Card>
         <CardHeader>

@@ -48,7 +48,7 @@ export default function JoinClassroomPage({ params }: PageProps) {
   }, [code]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div id="JoinClassroomPageId" className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <Card className="w-full max-w-md p-8 text-center">
         <div className="mb-6">
           <div className="w-16 h-16 bg-blue-500 rounded-full mx-auto mb-4 flex items-center justify-center">

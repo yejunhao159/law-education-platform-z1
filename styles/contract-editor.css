@@ -1,0 +1,270 @@
+/**
+ * 合同编辑器样式
+ * Tiptap编辑器的自定义样式
+ */
+
+/* 编辑器容器 */
+.contract-editor-wrapper {
+  position: relative;
+}
+
+/* Tiptap 编辑器基础样式 */
+.ProseMirror {
+  outline: none;
+  min-height: 100vh;
+  padding: 2rem;
+  line-height: 1.8;
+  font-size: 16px;
+  color: #1f2937;
+}
+
+/* 占位符样式 */
+.ProseMirror p.is-editor-empty:first-child::before {
+  color: #9ca3af;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* 标题样式 */
+.ProseMirror h1 {
+  font-size: 2rem;
+  font-weight: bold;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  color: #111827;
+  line-height: 1.25;
+}
+
+.ProseMirror h2 {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  color: #1f2937;
+  line-height: 1.35;
+}
+
+.ProseMirror h3 {
+  font-size: 1.25rem;
+  font-weight: bold;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+  color: #374151;
+  line-height: 1.45;
+}
+
+/* 段落样式 */
+.ProseMirror p {
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+/* 列表样式 */
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-left: 1.5rem;
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.ProseMirror ul li,
+.ProseMirror ol li {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.ProseMirror ul {
+  list-style-type: disc;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+}
+
+/* 高亮样式 */
+.ProseMirror mark {
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  transition: all 0.2s ease;
+}
+
+/* 风险高亮颜色 */
+.ProseMirror mark[data-color="#ff6b6b"] {
+  background-color: rgba(255, 107, 107, 0.3);
+  border-bottom: 2px solid #ff6b6b;
+}
+
+.ProseMirror mark[data-color="#ffd93d"] {
+  background-color: rgba(255, 217, 61, 0.3);
+  border-bottom: 2px solid #ffd93d;
+}
+
+.ProseMirror mark[data-color="#a8e6cf"] {
+  background-color: rgba(168, 230, 207, 0.3);
+  border-bottom: 2px solid #a8e6cf;
+}
+
+/* 选中文本样式 */
+.ProseMirror::selection {
+  background-color: rgba(59, 130, 246, 0.2);
+}
+
+.ProseMirror *::selection {
+  background-color: rgba(59, 130, 246, 0.2);
+}
+
+/* 代码块样式（如果需要） */
+.ProseMirror code {
+  background-color: #f3f4f6;
+  color: #dc2626;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 0.875em;
+}
+
+.ProseMirror pre {
+  background-color: #1f2937;
+  color: #f9fafb;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+.ProseMirror pre code {
+  background-color: transparent;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* 引用样式 */
+.ProseMirror blockquote {
+  border-left: 4px solid #3b82f6;
+  padding-left: 1rem;
+  margin-left: 0;
+  margin-right: 0;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  color: #6b7280;
+  font-style: italic;
+}
+
+/* 水平分割线 */
+.ProseMirror hr {
+  border: none;
+  border-top: 2px solid #e5e7eb;
+  margin: 2rem 0;
+}
+
+/* 加粗 */
+.ProseMirror strong {
+  font-weight: 700;
+  color: #111827;
+}
+
+/* 斜体 */
+.ProseMirror em {
+  font-style: italic;
+}
+
+/* 下划线 */
+.ProseMirror u {
+  text-decoration: underline;
+  text-decoration-color: #3b82f6;
+  text-underline-offset: 2px;
+}
+
+/* 删除线 */
+.ProseMirror s {
+  text-decoration: line-through;
+}
+
+/* 链接样式 */
+.ProseMirror a {
+  color: #3b82f6;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ProseMirror a:hover {
+  color: #2563eb;
+}
+
+/* 表格样式（如果需要） */
+.ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+}
+
+.ProseMirror th,
+.ProseMirror td {
+  border: 1px solid #d1d5db;
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.ProseMirror th {
+  background-color: #f3f4f6;
+  font-weight: 600;
+}
+
+/* 聚焦状态 */
+.ProseMirror:focus {
+  outline: none;
+}
+
+/* 打印样式 */
+@media print {
+  .ProseMirror {
+    padding: 0;
+    color: #000;
+  }
+
+  .ProseMirror mark {
+    background-color: transparent !important;
+    border-bottom: none !important;
+  }
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .ProseMirror {
+    padding: 1rem;
+    font-size: 14px;
+  }
+
+  .ProseMirror h1 {
+    font-size: 1.5rem;
+  }
+
+  .ProseMirror h2 {
+    font-size: 1.25rem;
+  }
+
+  .ProseMirror h3 {
+    font-size: 1.125rem;
+  }
+}
+
+/* 滚动条样式 */
+.ProseMirror::-webkit-scrollbar {
+  width: 8px;
+}
+
+.ProseMirror::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.ProseMirror::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.ProseMirror::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}

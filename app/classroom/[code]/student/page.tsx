@@ -130,7 +130,7 @@ export default function StudentClassroomPage({ params }: PageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div id="StudentClassroomPageId" className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       {/* 顶部状态栏 */}
       <div className="max-w-2xl mx-auto mb-4">
         <Card className="p-4 bg-white/80 backdrop-blur">

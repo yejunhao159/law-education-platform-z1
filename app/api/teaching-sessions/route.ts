@@ -8,6 +8,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { jwtUtils } from '@/lib/auth/jwt';
 import { teachingSessionRepository } from '@/src/domains/teaching-acts/repositories/PostgreSQLTeachingSessionRepository';
 import type { TeachingSessionSnapshot } from '@/src/domains/teaching-acts/repositories/TeachingSessionRepository';
+import {
+  getValidationErrorMessage,
+  validateTeachingSessionSnapshot,
+} from '@/src/domains/teaching-acts/schemas/SnapshotSchemas';
 
 // ========== POST - 保存教学会话快照 ==========
 export async function POST(request: NextRequest) {
@@ -23,32 +27,46 @@ export async function POST(request: NextRequest) {
 
     // 2. 解析请求体
     const body = await request.json();
-    const snapshot: TeachingSessionSnapshot = body.snapshot;
+    const snapshot: TeachingSessionSnapshot | undefined = body.snapshot;
+    const sessionIdFromBody: string | undefined = body.sessionId;
 
-    // 3. 验证快照数据完整性
-    if (!snapshot.caseTitle || !snapshot.act1_upload || !snapshot.act4_summary) {
+    const validation = validateTeachingSessionSnapshot(snapshot);
+    if (!validation.success || !validation.data) {
+      const message = validation.error
+        ? getValidationErrorMessage(validation.error)
+        : '教学会话数据不完整';
       return NextResponse.json(
-        { error: 'Invalid Data', message: '教学会话数据不完整' },
+        { error: 'Invalid Data', message },
         { status: 400 }
       );
     }
 
+    const snapshotData = validation.data;
+
     // 4. 保存到数据库
     const savedSession = await teachingSessionRepository.saveSnapshot(
       payload.userId,
-      snapshot
+      snapshotData,
+      sessionIdFromBody
     );
 
-    console.log('✅ [API] 教学会话快照保存成功:', savedSession.id);
+    console.log('✅ [API] 教学会话快照保存成功:', {
+      sessionId: savedSession.id,
+      sessionState: savedSession.sessionState,
+    });
 
     // 5. 返回成功响应
     return NextResponse.json({
       success: true,
-      message: '案例学习已保存',
+      message: sessionIdFromBody ? '案例学习已更新' : '案例学习已保存',
       data: {
         sessionId: savedSession.id,
         caseTitle: savedSession.caseTitle,
+        sessionState: savedSession.sessionState,
         createdAt: savedSession.createdAt,
+        updatedAt: savedSession.updatedAt,
+        completedAt: savedSession.completedAt,
+        saveType: savedSession.saveType,
       },
     });
   } catch (error) {

@@ -25,6 +25,8 @@ export {
   useCurrentSession,
   useStoryMode,
   useSocraticLevel as useTeachingSocraticLevel,
+  useTeachingSessionId,
+  useTeachingSessionState,
   useTeachingActions,
 } from './teaching-acts/stores/useTeachingStore';
 

@@ -2,7 +2,7 @@ import { Scale, FileText, BookOpen, Users, Folder, Star } from "lucide-react"
 
 export default function DashboardPage() {
   return (
-    <div className="p-8">
+    <div id="DashboardPageId" className="p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-12">

@@ -1,12 +1,18 @@
 /**
  * 单个教学会话查询
  * GET /api/teaching-sessions/:id - 获取教学会话详情
+ * PATCH /api/teaching-sessions/:id - 更新教学会话快照
  * DELETE /api/teaching-sessions/:id - 删除教学会话
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtUtils } from '@/lib/auth/jwt';
 import { teachingSessionRepository } from '@/src/domains/teaching-acts/repositories/PostgreSQLTeachingSessionRepository';
+import type { TeachingSessionSnapshot } from '@/src/domains/teaching-acts/repositories/TeachingSessionRepository';
+import {
+  getValidationErrorMessage,
+  validateTeachingSessionSnapshot,
+} from '@/src/domains/teaching-acts/schemas/SnapshotSchemas';
 
 export async function GET(
   _request: NextRequest,
@@ -86,6 +92,68 @@ export async function DELETE(
       {
         error: 'Internal Server Error',
         message: '删除失败',
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const resolvedParams = await params;
+
+    const payload = await jwtUtils.getCurrentUser();
+    if (!payload) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: '请先登录' },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const snapshot: TeachingSessionSnapshot | undefined = body.snapshot;
+
+    const validation = validateTeachingSessionSnapshot(snapshot);
+    if (!validation.success || !validation.data) {
+      const message = validation.error
+        ? getValidationErrorMessage(validation.error)
+        : '教学会话数据不完整';
+      return NextResponse.json(
+        { error: 'Invalid Data', message },
+        { status: 400 }
+      );
+    }
+
+    const updated = await teachingSessionRepository.saveSnapshot(
+      payload.userId,
+      validation.data,
+      resolvedParams.id
+    );
+
+    console.log('✅ [API] 教学会话快照更新成功:', {
+      sessionId: updated.id,
+      sessionState: updated.sessionState,
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        sessionId: updated.id,
+        sessionState: updated.sessionState,
+        updatedAt: updated.updatedAt,
+        completedAt: updated.completedAt,
+        saveType: updated.saveType,
+      },
+    });
+  } catch (error) {
+    console.error('❌ [API] 更新教学会话失败:', error);
+    return NextResponse.json(
+      {
+        error: 'Internal Server Error',
+        message: error instanceof Error ? error.message : '更新失败',
       },
       { status: 500 }
     );

@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useTeachingStore } from '@/src/domains/teaching-acts/stores/useTeachingStore';
-import { SnapshotConverter } from '@/src/domains/teaching-acts/utils/SnapshotConverter';
+import { SnapshotConverter } from '@/src/domains/teaching-acts/utils/SnapshotConverterV2';
 import type { CaseLearningReport } from '@/src/types';
 import { toast } from 'sonner';
 
@@ -97,13 +97,21 @@ export function ActFour() {
 
       // 1. 从Store创建快照
       const storeState = useTeachingStore.getState();
-      const snapshot = SnapshotConverter.fromStore(storeState);
+      const existingSessionId = storeState.sessionId;
+      const snapshot = SnapshotConverter.toDatabase(storeState, undefined, {
+        saveType: 'manual',
+      });
 
       console.log('💾 [ActFour] 准备保存教学会话快照:', snapshot.caseTitle);
 
       // 2. 调用API保存快照
-      const response = await fetch('/api/teaching-sessions', {
-        method: 'POST',
+      const endpoint = existingSessionId
+        ? `/api/teaching-sessions/${existingSessionId}`
+        : '/api/teaching-sessions';
+      const method = existingSessionId ? 'PATCH' : 'POST';
+
+      const response = await fetch(endpoint, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ snapshot })
       });
@@ -115,6 +123,13 @@ export function ActFour() {
       }
 
       console.log('✅ [ActFour] 教学会话保存成功:', result.data.sessionId);
+
+      if (result?.data?.sessionId) {
+        useTeachingStore.getState().setSessionMetadata({
+          sessionId: result.data.sessionId,
+          sessionState: result.data.sessionState ?? snapshot.sessionState,
+        });
+      }
 
       // 3. 显示成功提示
       toast.success('案例学习已保存', {
@@ -141,7 +156,7 @@ export function ActFour() {
   // 加载状态
   if (summaryData.isGenerating) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6 p-6">
+      <div id="actFourId" className="max-w-4xl mx-auto space-y-6 p-6">
         <div className="text-center">
           <h2 className="text-2xl font-bold mb-4">正在生成学习报告</h2>
           <p className="text-gray-600 mb-8">AI正在分析您的学习过程，请稍候...</p>
@@ -163,7 +178,7 @@ export function ActFour() {
   // 错误状态
   if (error) {
     return (
-      <div className="max-w-4xl mx-auto p-6">
+      <div id="actFourId" className="max-w-4xl mx-auto p-6">
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -181,7 +196,7 @@ export function ActFour() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 p-6">
+    <div id="actFourId" className="max-w-4xl mx-auto space-y-6 p-6">
       {/* 标题 */}
       <div className="text-center">
         <h2 className="text-2xl font-bold mb-2">案件学习报告</h2>

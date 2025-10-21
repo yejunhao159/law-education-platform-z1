@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 export default function FavoritesPage() {
   return (
-    <div className="p-8">
+    <div id="FavoritesPageId" className="p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">

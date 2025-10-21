@@ -63,6 +63,8 @@ export async function initDatabase() {
   try {
     console.log('🔧 Initializing database schema...');
 
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
+
     // 用户表
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -166,6 +168,78 @@ export async function initDatabase() {
         BEFORE UPDATE ON teaching_sessions
         FOR EACH ROW
         EXECUTE FUNCTION update_teaching_sessions_timestamp();
+    `);
+
+    // 🆕 教学会话表 V2（结构化存储）
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS teaching_sessions_v2 (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        schema_version INTEGER NOT NULL DEFAULT 1,
+        data_version VARCHAR(20) NOT NULL DEFAULT '1.0.0',
+        session_state VARCHAR(20) NOT NULL DEFAULT 'act1',
+        case_title VARCHAR(500) NOT NULL,
+        case_number VARCHAR(200),
+        court_name VARCHAR(200),
+        act1_basic_info JSONB,
+        act1_facts JSONB,
+        act1_evidence JSONB,
+        act1_reasoning JSONB,
+        act1_metadata JSONB,
+        act1_confidence DECIMAL(3,2),
+        act1_completed_at TIMESTAMP,
+        act2_narrative JSONB,
+        act2_timeline_analysis JSONB,
+        act2_evidence_questions JSONB,
+        act2_claim_analysis JSONB,
+        act2_completed_at TIMESTAMP,
+        act3_socratic JSONB,
+        act3_completed_at TIMESTAMP,
+        act4_learning_report JSONB,
+        act4_ppt_url TEXT,
+        act4_ppt_metadata JSONB,
+        act4_completed_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_saved_at TIMESTAMP,
+        completed_at TIMESTAMP,
+        last_viewed_at TIMESTAMP,
+        save_type VARCHAR(20) DEFAULT 'manual',
+        deleted_at TIMESTAMP,
+        CONSTRAINT teaching_sessions_v2_state CHECK (session_state IN ('act1','act2','act3','act4','completed')),
+        CONSTRAINT teaching_sessions_v2_save_type CHECK (save_type IN ('manual','auto'))
+      )
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_teaching_sessions_v2_user_created
+        ON teaching_sessions_v2 (user_id, created_at DESC)
+        WHERE deleted_at IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_teaching_sessions_v2_state
+        ON teaching_sessions_v2 (session_state)
+        WHERE deleted_at IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_teaching_sessions_v2_completed
+        ON teaching_sessions_v2 (completed_at DESC)
+        WHERE deleted_at IS NULL AND completed_at IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_teaching_sessions_v2_ppt
+        ON teaching_sessions_v2 (user_id, act4_ppt_url)
+        WHERE deleted_at IS NULL AND act4_ppt_url IS NOT NULL;
+    `);
+
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION update_teaching_sessions_v2_updated_at()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        NEW.updated_at = CURRENT_TIMESTAMP;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      DROP TRIGGER IF EXISTS trigger_update_teaching_sessions_v2_updated_at ON teaching_sessions_v2;
+      CREATE TRIGGER trigger_update_teaching_sessions_v2_updated_at
+        BEFORE UPDATE ON teaching_sessions_v2
+        FOR EACH ROW
+        EXECUTE FUNCTION update_teaching_sessions_v2_updated_at();
     `);
 
     console.log('✅ Database schema initialized successfully');

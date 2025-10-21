@@ -37,7 +37,7 @@ const MessageItem = memo(({ message, onChoiceClick, onSuggestionClick }: Message
   const alignment = isTeacher ? 'justify-end' : 'justify-start';
 
   return (
-    <div className={`flex ${alignment}`}>
+    <div id="messageItemId" className={`flex ${alignment}`}>
       <div className={`max-w-[80%] p-3 rounded-lg ${bgColor}`}>
         <div className="flex items-center mb-1">
           {isTeacher ? <User className="w-4 h-4 mr-1" /> :

@@ -14,7 +14,7 @@ export default function CoursewarePage() {
   const router = useRouter()
 
   return (
-    <div className="p-8">
+    <div id="CoursewarePageId" className="p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">

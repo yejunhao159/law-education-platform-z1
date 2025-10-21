@@ -112,7 +112,7 @@ export default function CoursesPage() {
   }
 
   return (
-    <div className="p-8">
+    <div id="CoursesPageId" className="p-8">
       <div className="max-w-[1600px] mx-auto">
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">

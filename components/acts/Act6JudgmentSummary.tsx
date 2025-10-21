@@ -15,7 +15,7 @@ export default function Act6JudgmentSummary() {
   }
 
   return (
-    <div className="space-y-8">
+    <div id="act6JudgmentSummaryId" className="space-y-8">
       <div className="text-center mb-8">
         <h2 className="text-3xl font-bold text-gray-800 mb-2">判决分析总结</h2>
         <p className="text-gray-600">分析裁判理由和法律适用</p>

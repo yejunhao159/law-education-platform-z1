@@ -481,7 +481,11 @@ export const ClassroomCode: React.FC<ClassroomCodeProps> = ({
   )
 
   // 根据角色渲染不同视图
-  return isTeacher ? renderTeacherView() : renderStudentView()
+  return (
+    <div id="ClassroomCodeId">
+      {isTeacher ? renderTeacherView() : renderStudentView()}
+    </div>
+  )
 }
 
 export default ClassroomCode

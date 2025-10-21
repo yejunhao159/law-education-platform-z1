@@ -235,7 +235,7 @@ export default function ContractLearningPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] p-8 overflow-hidden">
+    <div id="ContractPageId" className="h-[calc(100vh-4rem)] p-8 overflow-hidden">
       <div className="h-full max-w-[1800px] mx-auto flex flex-col">
         {/* Header */}
         <div className="mb-6">

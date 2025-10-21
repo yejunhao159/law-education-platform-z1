@@ -85,7 +85,7 @@ export default function TeacherClassroomPage({ params }: PageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 p-4">
+    <div id="TeacherClassroomPageId" className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 p-4">
       <div className="max-w-7xl mx-auto">
         {/* 顶部提示 */}
         <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">

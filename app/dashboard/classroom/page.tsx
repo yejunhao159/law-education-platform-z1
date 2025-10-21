@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 export default function VirtualCourtroomPage() {
   return (
-    <div className="p-8">
+    <div id="ClassroomPageId" className="p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">

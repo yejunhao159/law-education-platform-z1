@@ -47,14 +47,14 @@ export function Sidebar() {
 
   if (loading) {
     return (
-      <aside className="w-64 border-r border-border bg-sidebar flex items-center justify-center">
+      <aside id="SidebarId" className="w-64 border-r border-border bg-sidebar flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
       </aside>
     )
   }
 
   return (
-    <aside className="w-64 border-r border-border bg-sidebar flex flex-col">
+    <aside id="SidebarId" className="w-64 border-r border-border bg-sidebar flex flex-col">
       {/* Logo */}
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center gap-3">

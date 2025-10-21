@@ -6,13 +6,15 @@
 
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   useCurrentCase,
   useTeachingStore,
   useAnalysisStore
 } from '@/src/domains/stores';
 import { MainPagePresentation } from '../components/MainPagePresentation';
+import { SnapshotConverter } from '@/src/domains/teaching-acts/utils/SnapshotConverterV2';
+import { toast } from 'sonner';
 import type { ActType } from '@/src/types';
 
 // ========== 四幕定义 ==========
@@ -57,6 +59,7 @@ export const MainPageContainer: React.FC = () => {
 
   // ========== 本地状态 ==========
   const [extractedElements, setExtractedElements] = useState<any>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // ========== 派生状态计算 ==========
   const actIdToIndex: Record<string, number> = useMemo(() => ({
@@ -110,10 +113,119 @@ export const MainPageContainer: React.FC = () => {
     }
   }, [currentCase]);
 
+  // ========== 保存逻辑 ==========
+  const saveSessionSnapshot = useCallback(
+    async (options: { saveType?: 'manual' | 'auto' } = {}) => {
+      const { saveType = 'auto' } = options;
+
+      if (isSaving) {
+        console.log('⚠️ [MainPageContainer] 正在保存中，跳过');
+        return;
+      }
+
+      setIsSaving(true);
+      console.log('💾 [MainPageContainer] 开始保存教学会话快照...', { saveType });
+
+      try {
+        // 1. 从Store获取完整状态
+        const storeState = useTeachingStore.getState();
+        const existingSessionId = storeState.sessionId;
+
+        // 2. 转换为数据库快照格式
+        const snapshot = SnapshotConverter.toDatabase(storeState, undefined, {
+          saveType,
+        });
+
+        console.log('📦 [MainPageContainer] 快照数据已构建:', {
+          caseTitle: snapshot.caseTitle,
+          hasAct1: !!snapshot.act1,
+          hasAct2: !!snapshot.act2,
+          hasAct3: !!snapshot.act3,
+          hasAct4: !!snapshot.act4,
+          sessionState: snapshot.sessionState,
+          existingSessionId,
+        });
+
+        // 3. 调用API保存
+        const endpoint = existingSessionId
+          ? `/api/teaching-sessions/${existingSessionId}`
+          : '/api/teaching-sessions';
+        const method = existingSessionId ? 'PATCH' : 'POST';
+
+        const response = await fetch(endpoint, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ snapshot }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || '保存失败');
+        }
+
+        const result = await response.json();
+        console.log('✅ [MainPageContainer] 教学会话保存成功:', result.data);
+
+        if (result?.data?.sessionId) {
+          useTeachingStore.getState().setSessionMetadata({
+            sessionId: result.data.sessionId,
+            sessionState: result.data.sessionState ?? snapshot.sessionState,
+          });
+        }
+
+        toast.success('学习进度已自动保存', {
+          description: `案例: ${snapshot.caseTitle}`,
+          duration: 3000,
+        });
+
+        return result.data.sessionId as string;
+      } catch (error) {
+        console.error('❌ [MainPageContainer] 保存失败:', error);
+        toast.error('保存失败', {
+          description: error instanceof Error ? error.message : '请稍后重试',
+          duration: 5000,
+        });
+        throw error;
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [isSaving]
+  );
+
+  // ========== 页面卸载时自动保存 ==========
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const storeState = useTeachingStore.getState();
+      if (storeState.uploadData?.extractedElements) {
+        saveSessionSnapshot({ saveType: 'auto' }).catch((err) => {
+          console.error('页面卸载时保存失败:', err);
+        });
+
+        e.preventDefault();
+        e.returnValue = ''; // Chrome requires returnValue to be set
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [saveSessionSnapshot]);
+
   // ========== 事件处理函数 ==========
-  const handleActComplete = () => {
+  const handleActComplete = async () => {
     const currentActId = fourActs[currentActIndex].id;
     markActComplete(currentActId);
+
+    // 🔥 关键修复：每一幕完成后自动保存
+    try {
+      await saveSessionSnapshot();
+    } catch (error) {
+      // 保存失败不阻断流程，只记录日志
+      console.error('自动保存失败，但不影响继续学习:', error);
+    }
 
     if (currentActIndex < fourActs.length - 1) {
       const nextActId = fourActs[currentActIndex + 1].id;
@@ -178,7 +290,11 @@ export const MainPageContainer: React.FC = () => {
     onNextAct: handleNextAct,
   };
 
-  return <MainPagePresentation {...presentationProps} />;
+  return (
+    <div id="MainPageContainerId">
+      <MainPagePresentation {...presentationProps} />
+    </div>
+  );
 };
 
 // ========== 默认导出 ==========

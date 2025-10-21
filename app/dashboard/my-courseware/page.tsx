@@ -117,7 +117,7 @@ export default function MyCoursewarePage() {
   }
 
   return (
-    <div className="p-8">
+    <div id="MyCoursewarePageId" className="p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -188,24 +188,39 @@ export default function MyCoursewarePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
               {sessions.map((session) => (
                 <Card key={session.id} className="hover:shadow-lg transition-shadow">
-                  <CardHeader>
-                    <CardTitle className="text-base line-clamp-2">
+                  <CardHeader className="pb-3">
+                    {/* 案号（最突出） */}
+                    {session.caseNumber && (
+                      <div className="text-sm font-semibold text-primary mb-1">
+                        {session.caseNumber}
+                      </div>
+                    )}
+                    {/* 案件标题 */}
+                    <CardTitle className="text-base line-clamp-2 leading-tight">
                       {session.caseTitle}
                     </CardTitle>
-                    <CardDescription className="space-y-1">
-                      {session.caseNumber && (
-                        <div className="text-xs">案号：{session.caseNumber}</div>
-                      )}
-                      {session.courtName && (
-                        <div className="text-xs">法院：{session.courtName}</div>
-                      )}
-                    </CardDescription>
+                    {/* 法院 */}
+                    {session.courtName && (
+                      <CardDescription className="mt-1">
+                        <div className="text-xs flex items-center gap-1">
+                          <FileText className="w-3 h-3" />
+                          {session.courtName}
+                        </div>
+                      </CardDescription>
+                    )}
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="pt-0">
+                    {/* 创建日期 */}
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
                       <Calendar className="w-3 h-3" />
                       <span>{formatDate(session.createdAt)}</span>
+                      {session.lastViewedAt && session.lastViewedAt !== session.createdAt && (
+                        <span className="text-xs text-muted-foreground/70">
+                          · 最近查看: {formatDate(session.lastViewedAt)}
+                        </span>
+                      )}
                     </div>
+                    {/* 操作按钮 */}
                     <div className="flex gap-2">
                       <Button
                         variant="outline"

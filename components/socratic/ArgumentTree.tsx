@@ -298,7 +298,7 @@ export default function ArgumentTree({
   const treeData = buildTree(nodes);
 
   return (
-    <Card className="p-4">
+    <Card id="argumentTreeId" className="p-4">
       <div className="mb-4">
         <h3 className="text-lg font-semibold mb-2">论证结构图</h3>
         

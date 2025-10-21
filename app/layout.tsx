@@ -25,7 +25,7 @@ html {
 }
         `}</style>
       </head>
-      <body>
+      <body id="RootLayoutId">
         {children}
         <Toaster position="top-center" richColors />
       </body>

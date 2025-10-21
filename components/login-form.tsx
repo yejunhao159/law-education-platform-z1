@@ -48,7 +48,7 @@ export function LoginForm() {
   }
 
   return (
-    <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-100/50 p-8">
+    <div id="LoginFormId" className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-100/50 p-8">
       <form onSubmit={handleLogin} className="space-y-6">
         <div className="space-y-4">
           {/* Username field */}

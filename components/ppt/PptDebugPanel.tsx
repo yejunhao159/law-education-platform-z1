@@ -141,7 +141,7 @@ export function PptDebugPanel() {
   };
 
   return (
-    <Card className="border-2 border-blue-500">
+    <Card id="PptDebugPanelId" className="border-2 border-blue-500">
       <CardHeader className="bg-blue-50">
         <CardTitle className="flex items-center gap-2 text-blue-900">
           🔍 数据调试面板

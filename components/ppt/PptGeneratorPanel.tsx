@@ -202,7 +202,7 @@ export function PptGeneratorPanel({
     ];
 
     return (
-      <Card className="w-full max-w-4xl mx-auto">
+      <Card id="PptGeneratorPanelId" className="w-full max-w-4xl mx-auto">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="w-5 h-5" />
@@ -277,7 +277,7 @@ export function PptGeneratorPanel({
    */
   if (stage === 'generating-outline') {
     return (
-      <Card className="w-full max-w-4xl mx-auto">
+      <Card id="PptGeneratorPanelId" className="w-full max-w-4xl mx-auto">
         <CardContent className="pt-10 pb-10">
           <div className="text-center mb-6">
             <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4 text-blue-600" />
@@ -304,7 +304,7 @@ export function PptGeneratorPanel({
    */
   if (stage === 'editing-outline' && outline) {
     return (
-      <Card className="w-full max-w-4xl mx-auto">
+      <Card id="PptGeneratorPanelId" className="w-full max-w-4xl mx-auto">
         <CardHeader>
           <CardTitle>预览和编辑PPT大纲</CardTitle>
           <CardDescription>
@@ -327,7 +327,7 @@ export function PptGeneratorPanel({
    */
   if (stage === 'generating-ppt') {
     return (
-      <Card className="w-full max-w-4xl mx-auto">
+      <Card id="PptGeneratorPanelId" className="w-full max-w-4xl mx-auto">
         <CardContent className="pt-10 pb-10">
           <div className="text-center mb-6">
             <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4 text-blue-600" />
@@ -378,7 +378,7 @@ export function PptGeneratorPanel({
    */
   if (stage === 'completed' && pptResult) {
     return (
-      <Card className="w-full max-w-4xl mx-auto">
+      <Card id="PptGeneratorPanelId" className="w-full max-w-4xl mx-auto">
         <CardContent className="pt-10 pb-10 text-center">
           <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-600" />
           <h3 className="text-lg font-medium mb-2">PPT生成成功！</h3>
@@ -436,7 +436,7 @@ export function PptGeneratorPanel({
    */
   if (stage === 'error') {
     return (
-      <Card className="w-full max-w-4xl mx-auto">
+      <Card id="PptGeneratorPanelId" className="w-full max-w-4xl mx-auto">
         <CardContent className="pt-10 pb-10">
           <div className="text-center mb-6">
             <AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-600" />

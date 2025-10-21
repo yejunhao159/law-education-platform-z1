@@ -37,7 +37,7 @@ export function InlineEditor({
   };
 
   return (
-    <div className={`space-y-1 ${className}`}>
+    <div id="InlineEditorId" className={`space-y-1 ${className}`}>
       <label className="text-sm font-medium text-gray-700">{label}</label>
 
       {isEditing ? (

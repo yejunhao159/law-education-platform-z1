@@ -171,7 +171,7 @@ export default function PptGeneratePage() {
   // ========== 渲染 ==========
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+    <div id="PptGeneratePageId" className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
       <div className="container mx-auto py-8 max-w-6xl">
         {/* 顶部导航 */}
         <div className="mb-8">

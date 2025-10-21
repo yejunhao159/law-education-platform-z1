@@ -189,7 +189,7 @@ export function RealtimeClassroomPanel({
     : [];
 
   return (
-    <Card className="w-full shadow-lg border-2">
+    <Card id="realtimeClassroomPanelId" className="w-full shadow-lg border-2">
       <CardHeader className="bg-gradient-to-r from-purple-50 to-blue-50 border-b">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-3 text-xl">

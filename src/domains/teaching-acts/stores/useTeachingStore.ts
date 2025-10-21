@@ -17,6 +17,7 @@ import type {
   LearningReport,
   CaseLearningReport,
 } from '@/src/types';
+import type { SessionState } from '../schemas/SnapshotSchemas';
 
 // ========== 接口定义 ==========
 interface TeachingState {
@@ -58,6 +59,8 @@ interface TeachingState {
   // UI状态
   loading: boolean;
   error: string | null;
+  sessionId: string | null;
+  sessionState: SessionState;
 }
 
 interface TeachingActions {
@@ -101,6 +104,13 @@ interface TeachingActions {
   // 通用操作
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  setSessionId: (sessionId: string | null) => void;
+  setSessionState: (sessionState: SessionState) => void;
+  setSessionMetadata: (metadata: {
+    sessionId?: string | null;
+    sessionState?: SessionState;
+    lastSavedAt?: string;
+  }) => void;
   reset: () => void;
 }
 
@@ -142,6 +152,8 @@ const initialState: TeachingState = {
 
   loading: false,
   error: null,
+  sessionId: null,
+  sessionState: 'act1',
 };
 
 // ========== Store创建 ==========
@@ -159,6 +171,10 @@ export const useTeachingStore = create<TeachingStore>()(
             state.progress = session.progress;
             state.currentAct = session.progress.currentAct;
           }
+          state.sessionId = session?.id || null;
+          if ((session as any)?.sessionState) {
+            state.sessionState = (session as any).sessionState;
+          }
         }),
 
       updateSessionProgress: (progressUpdate) =>
@@ -175,6 +191,15 @@ export const useTeachingStore = create<TeachingStore>()(
           if (state.progress) {
             state.progress.currentAct = act;
           }
+          if (state.sessionState !== 'completed') {
+            const mapping: Record<ActType, SessionState> = {
+              upload: 'act1',
+              analysis: 'act2',
+              socratic: 'act3',
+              summary: 'act4',
+            };
+            state.sessionState = mapping[act] || 'act1';
+          }
         }),
 
       markActComplete: (act) =>
@@ -186,6 +211,9 @@ export const useTeachingStore = create<TeachingStore>()(
               actState.completedAt = new Date().toISOString();
               actState.progress = 100;
             }
+          }
+          if (act === 'summary') {
+            state.sessionState = 'completed';
           }
         }),
 
@@ -327,6 +355,7 @@ export const useTeachingStore = create<TeachingStore>()(
         set((state) => {
           state.summaryData.caseLearningReport = report;
           state.summaryData.isGenerating = false;
+          state.sessionState = 'completed';
         }),
 
       setGeneratingReport: (generating) =>
@@ -343,6 +372,28 @@ export const useTeachingStore = create<TeachingStore>()(
       setError: (error) =>
         set((state) => {
           state.error = error;
+        }),
+      setSessionId: (sessionId) =>
+        set((state) => {
+          state.sessionId = sessionId;
+          if (!sessionId) {
+            state.sessionState = 'act1';
+          }
+        }),
+
+      setSessionState: (sessionState) =>
+        set((state) => {
+          state.sessionState = sessionState;
+        }),
+
+      setSessionMetadata: ({ sessionId, sessionState }) =>
+        set((state) => {
+          if (typeof sessionId !== 'undefined') {
+            state.sessionId = sessionId;
+          }
+          if (typeof sessionState !== 'undefined') {
+            state.sessionState = sessionState;
+          }
         }),
 
       reset: () => {
@@ -392,6 +443,8 @@ export const useTeachingStore = create<TeachingStore>()(
           caseLearningReport: state.summaryData.caseLearningReport,
           isGenerating: false, // 不持久化loading状态
         },
+        sessionId: state.sessionId,
+        sessionState: state.sessionState,
       }),
       // 恢复时处理Set类型
       onRehydrateStorage: () => (state) => {
@@ -402,6 +455,9 @@ export const useTeachingStore = create<TeachingStore>()(
         }
         if (!state?.editingFields) {
           state.editingFields = new Set();
+        }
+        if (!state?.sessionState) {
+          state.sessionState = 'act1';
         }
       },
     }
@@ -414,6 +470,8 @@ export const useTeachingProgress = () => useTeachingStore((state) => state.progr
 export const useCurrentSession = () => useTeachingStore((state) => state.currentSession);
 export const useStoryMode = () => useTeachingStore((state) => state.storyMode);
 export const useSocraticLevel = () => useTeachingStore((state) => state.socraticData.level);
+export const useTeachingSessionId = () => useTeachingStore((state) => state.sessionId);
+export const useTeachingSessionState = () => useTeachingStore((state) => state.sessionState);
 
 // ========== 操作 Hooks ==========
 export const useTeachingActions = () => {
@@ -427,6 +485,9 @@ export const useTeachingActions = () => {
     toggleStoryMode: store.toggleStoryMode,
     progressSocraticLevel: store.progressSocraticLevel,
     toggleTeachingMode: store.toggleTeachingMode,
+    setSessionId: store.setSessionId,
+    setSessionState: store.setSessionState,
+    setSessionMetadata: store.setSessionMetadata,
     reset: store.reset,
   };
 };

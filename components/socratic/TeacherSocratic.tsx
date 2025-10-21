@@ -627,7 +627,7 @@ export default function TeacherSocratic({ caseData, initialClassroomCode }: Teac
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div id="teacherSocraticId" className="max-w-7xl mx-auto p-6">
       {/* 头部控制栏 - 优化设计 */}
       <div className="mb-8 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-100 rounded-xl p-6 shadow-sm">
         <div className="flex items-center justify-between">

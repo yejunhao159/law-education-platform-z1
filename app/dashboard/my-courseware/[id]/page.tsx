@@ -13,7 +13,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { useTeachingStore } from '@/src/domains/teaching-acts/stores/useTeachingStore'
 import { useCaseManagementStore } from '@/src/domains/stores'
-import { SnapshotConverter } from '@/src/domains/teaching-acts/utils/SnapshotConverter'
+import { SnapshotConverter } from '@/src/domains/teaching-acts/utils/SnapshotConverterV2'
 import type { LegalCase } from '@/src/types'
 
 interface Props {
@@ -140,6 +140,11 @@ export default function SessionDetailPage({ params }: Props) {
       useTeachingStore.getState().reset()
       useCaseManagementStore.getState().reset()
 
+      useTeachingStore.getState().setSessionMetadata({
+        sessionId: storeData.sessionId || session.id,
+        sessionState: storeData.sessionState || session.sessionState || 'act1',
+      })
+
       // 恢复各幕数据
       if (storeData.uploadData?.extractedElements) {
         setExtractedElements(
@@ -198,7 +203,7 @@ export default function SessionDetailPage({ params }: Props) {
   // 加载状态
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-8">
+      <div id="MyCoursewareDetailPageId" className="min-h-screen flex items-center justify-center p-8">
         <Card className="w-full max-w-md">
           <CardContent className="pt-6 text-center">
             <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin text-primary" />
@@ -229,7 +234,7 @@ export default function SessionDetailPage({ params }: Props) {
   // 错误状态
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-8">
+      <div id="MyCoursewareDetailPageId" className="min-h-screen flex items-center justify-center p-8">
         <Card className="w-full max-w-md">
           <CardContent className="pt-6">
             <Alert variant="destructive" className="mb-6">

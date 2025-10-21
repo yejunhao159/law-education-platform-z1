@@ -78,7 +78,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
       // 默认错误界面
       return (
-        <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+        <div id="ErrorBoundaryId" className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
           <Card className="max-w-md w-full p-8 text-center">
             <AlertCircle className="w-16 h-16 mx-auto mb-4 text-red-500" />
             <h2 className="text-2xl font-bold text-gray-800 mb-2">

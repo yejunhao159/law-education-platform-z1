@@ -1,8 +1,10 @@
-# 📚 项目文档索引
+# 📚 法学教育平台 - 文档中心
 
-本目录包含法学教育平台的所有技术文档和架构说明。
+本目录包含法学教育平台的所有技术文档，已按模块分类整理。
 
-## 📖 核心文档
+---
+
+## 🎯 核心文档（必读）
 
 ### [CLAUDE.md](./CLAUDE.md) - 项目架构指南
 **用途**：给 Claude Code 和开发者提供的完整架构说明
@@ -20,60 +22,97 @@
 
 ---
 
-### [DEPLOYMENT.md](./DEPLOYMENT.md) - 部署文档
-**用途**：生产环境部署的完整指南
+## 🧩 代码导航
 
-**包含内容**：
-- 🐳 Docker部署流程
-- 🔧 环境变量配置
-- 🚀 GitHub Actions CI/CD
-- 📊 监控和日志配置
-- 🔒 安全最佳实践
+### 核心代码目录
+- [`src/`](../src/README.md) - **领域驱动设计(DDD)核心** - 业务逻辑和领域模型
+- [`components/`](../components/README.md) - **React组件库** - UI组件和教学组件
+- [`app/`](../app/README.md) - **Next.js路由** - 页面和API路由
+- [`lib/`](../lib/) - 工具函数和辅助服务
+- [`scripts/`](../scripts/) - 自动化脚本（部署、测试、环境检查）
+- [`server/`](../server/) - Socket.IO实时通信服务器
 
-**适合人群**：运维人员、部署管理员
-
----
-
-## 🔧 技术文档
-
-### [implementation-overview.md](./implementation-overview.md)
-项目实现概览和技术栈说明
-
-### [socratic-enhancements-20251004.md](./socratic-enhancements-20251004.md)
-苏格拉底对话增强功能的设计文档
-
-### [judgment-extraction-data-flow.md](./judgment-extraction-data-flow.md)
-判决书提取的数据流程说明
-
-### [context-architecture-comparison.md](./context-architecture-comparison.md)
-上下文架构对比分析
+### 快速定位
+| 我想... | 查看目录 |
+|--------|---------|
+| 修改苏格拉底对话逻辑 | `src/domains/socratic-dialogue/` |
+| 修改法律分析功能 | `src/domains/legal-analysis/` |
+| 修改四幕教学流程 | `src/domains/teaching-acts/` |
+| 修改UI组件 | `components/` |
+| 添加新页面 | `app/` |
+| 添加新API | `app/api/` |
+| 部署到生产环境 | [部署文档](./部署文档/DEPLOYMENT-V2-GUIDE.md) |
 
 ---
 
-## 🏛️ 专项部署文档
+## 📂 文档分类
 
-### [DEPLOY_JD_CLOUD.md](./DEPLOY_JD_CLOUD.md)
-京东云部署指南
+### 🏛️ [架构文档](./架构文档/)
+系统整体架构设计和数据流转说明
 
-### [TIKTOKEN_FIX_DEPLOYMENT.md](./TIKTOKEN_FIX_DEPLOYMENT.md)
-Tiktoken依赖修复部署方案
+- [architecture-and-dataflow.md](./架构文档/architecture-and-dataflow.md) - 完整的架构和数据流图
+- [implementation-overview.md](./架构文档/implementation-overview.md) - 技术实现概览
+
+### 🚀 [部署文档](./部署文档/)
+生产环境部署和运维指南
+
+- [DEPLOYMENT-V2-GUIDE.md](./部署文档/DEPLOYMENT-V2-GUIDE.md) - Docker部署完全指南（v2.0治本方案）
+
+### ⚙️ [功能文档](./功能文档/)
+各功能模块的详细技术文档
+
+#### 📄 [合同分析](./功能文档/合同分析/)
+- [contract-analysis-architecture.md](./功能文档/合同分析/contract-analysis-architecture.md) - 合同分析模块架构
+- [contract-agent-discussion.md](./功能文档/合同分析/contract-agent-discussion.md) - Agent设计讨论
+- [contract-editor-setup.md](./功能文档/合同分析/contract-editor-setup.md) - 编辑器配置指南
+- [contract-test-sample.md](./功能文档/合同分析/contract-test-sample.md) - 测试样例
+
+#### 🎭 [四幕教学](./功能文档/四幕教学/)
+- [FOURTH_ACT_DATA_FLOW_ANALYSIS.md](./功能文档/四幕教学/FOURTH_ACT_DATA_FLOW_ANALYSIS.md) - 第四幕数据流分析
+- [FOURTH_ACT_DATA_PERSISTENCE_ANALYSIS.md](./功能文档/四幕教学/FOURTH_ACT_DATA_PERSISTENCE_ANALYSIS.md) - 数据持久化分析
+- [snapshot-system-optimization-guide.md](./功能文档/四幕教学/snapshot-system-optimization-guide.md) - 快照系统优化指南
+
+#### 💬 [苏格拉底对话](./功能文档/苏格拉底对话/)
+- [SOCRATIC_CASE_DATA_LOSS_ANALYSIS.md](./功能文档/苏格拉底对话/SOCRATIC_CASE_DATA_LOSS_ANALYSIS.md) - 案例数据丢失分析
+- [SOCRATIC_CONTEXT_IMPROVEMENT.md](./功能文档/苏格拉底对话/SOCRATIC_CONTEXT_IMPROVEMENT.md) - 上下文改进方案
+
+#### 📊 [PPT生成](./功能文档/PPT生成/)
+- [PPT_GENERATION_FLOW.md](./功能文档/PPT生成/PPT_GENERATION_FLOW.md) - PPT生成流程说明
+- [PPT_GENERATOR_QUICK_START.md](./功能文档/PPT生成/PPT_GENERATOR_QUICK_START.md) - 快速开始指南
+- [PPT_GENERATOR_TEST_GUIDE.md](./功能文档/PPT生成/PPT_GENERATOR_TEST_GUIDE.md) - 测试指南
 
 ---
 
-## 📂 架构设计
+## 🚦 如何使用这些文档
 
-### [architecture/](./architecture/)
-详细的架构设计文档和图表
+### 新手入门路径
+1. **了解项目** → 阅读 [CLAUDE.md](./CLAUDE.md) 的"快速开始路径"
+2. **理解架构** → 浏览 [架构文档](./架构文档/) 目录
+3. **选择功能** → 根据需求查看 [功能文档](./功能文档/) 对应模块
+4. **部署上线** → 参考 [部署文档](./部署文档/)
+
+### AI协作者路径
+1. **优先阅读** → [CLAUDE.md](./CLAUDE.md) 的"架构决策记录(ADR)"和"AI协作边界"
+2. **理解语境** → 这是教育产品，重点是启发而非给答案
+3. **遵循规范** → 代码清晰 > 技巧炫耀，测试必写，类型必全
+
+### 运维人员路径
+1. **部署指南** → [DEPLOYMENT-V2-GUIDE.md](./部署文档/DEPLOYMENT-V2-GUIDE.md)
+2. **架构理解** → [architecture-and-dataflow.md](./架构文档/architecture-and-dataflow.md)
+3. **问题排查** → 查看对应功能模块的文档
 
 ---
 
-## 🤝 如何使用这些文档
+## 📊 文档统计
 
-1. **新手入门**：先读 [CLAUDE.md](./CLAUDE.md) 的"快速开始路径"部分
-2. **理解架构**：阅读 [CLAUDE.md](./CLAUDE.md) 的"架构决策记录"
-3. **开发功能**：参考 [CLAUDE.md](./CLAUDE.md) 的"常见开发任务"
-4. **部署项目**：按照 [DEPLOYMENT.md](./DEPLOYMENT.md) 执行
-5. **深入细节**：查看对应的技术文档
+- **核心文档**: 2个（CLAUDE.md, README.md）
+- **架构文档**: 2个
+- **部署文档**: 1个
+- **功能文档**: 12个
+  - 合同分析: 4个
+  - 四幕教学: 3个
+  - 苏格拉底对话: 2个
+  - PPT生成: 3个
 
 ---
 
@@ -83,8 +122,23 @@ Tiktoken依赖修复部署方案
 - **用例驱动**：文档应该包含实际使用例子
 - **架构优先**：先写架构决策（ADR），再写实现
 - **奥卡姆剃刀**：删除过时文档，避免信息冗余
+- **中文优先**：文件夹使用中文命名，便于快速定位
 
 ---
 
-**最后更新**：2025-10-08
+## 🗑️ 已清理的文档
+
+以下文档已删除（过时/已修复）：
+- ❌ DEPLOYMENT.md（已被V2版本替代）
+- ❌ DATA_FLOW_ARCHITECTURE.md（内容已合并到architecture-and-dataflow.md）
+- ❌ FOURTH_ACT_PERSISTENCE_FIX.md（Bug已修复）
+- ❌ PPT_STREAMING_FIX.md（Bug已修复）
+- ❌ RESET_BUG_TEST_GUIDE.md（已过时）
+- ❌ code-cleanup-explanation.md（临时文档）
+- ❌ SOCRATIC_IMPROVEMENT_SUMMARY.md（内容已合并）
+
+---
+
+**最后更新**：2025-10-21
 **维护者**：项目团队
+**文档版本**：v2.0（已清理整理）

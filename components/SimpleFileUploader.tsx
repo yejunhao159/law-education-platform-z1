@@ -103,7 +103,7 @@ export function SimpleFileUploader({ onFileSelect }: FileUploaderProps) {
   }, [handleFiles]);
 
   return (
-    <div className="space-y-4">
+    <div id="SimpleFileUploaderId" className="space-y-4">
       <Card 
         className={`p-8 transition-all border-2 border-dashed ${
           dragActive 

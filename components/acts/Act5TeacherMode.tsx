@@ -126,7 +126,7 @@ export default function Act5TeacherMode() {
 
   if (!activeCaseData) {
     return (
-      <Card className="p-6">
+      <Card id="act5TeacherModeId" className="p-6">
         <div className="text-center text-gray-500">
           正在加载案例数据...
         </div>
@@ -135,7 +135,7 @@ export default function Act5TeacherMode() {
   }
 
   return (
-    <div className="space-y-4">
+    <div id="act5TeacherModeId" className="space-y-4">
       {/* 提示信息 */}
       <Alert>
         <Info className="h-4 w-4" />

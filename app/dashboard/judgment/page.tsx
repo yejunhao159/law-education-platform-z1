@@ -7,5 +7,9 @@
 import { MainPageContainer } from '@/src/domains/shared/containers/MainPageContainer'
 
 export default function JudgmentLearningPage() {
-  return <MainPageContainer />
+  return (
+    <div id="JudgmentPageId">
+      <MainPageContainer />
+    </div>
+  )
 }

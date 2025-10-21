@@ -4,68 +4,48 @@
  * DeepPractice Standards Compliant
  */
 
-import type { DeepAnalysisResult, CaseLearningReport } from '@/src/types';
+import type {
+  TeachingSessionSnapshotV1,
+  SessionState,
+  Act1Snapshot,
+  Act2Snapshot,
+  Act3Snapshot,
+  Act4Snapshot,
+} from '@/src/domains/teaching-acts/schemas/SnapshotSchemas';
 
 /**
- * 教学会话快照数据结构
+ * 教学会话快照数据结构（V2）
  */
-export interface TeachingSessionSnapshot {
-  // 案例基本信息（从第1幕提取）
-  caseTitle: string;
-  caseNumber?: string;
-  courtName?: string;
-
-  // 四幕数据
-  act1_upload: {
-    extractedElements: Record<string, unknown>;
-    confidence: number;
-    originalFileName?: string;
-    uploadedAt: string;
-  };
-
-  act2_analysis: {
-    result: DeepAnalysisResult | Record<string, unknown>;
-    completedAt: string;
-  };
-
-  act3_socratic: {
-    level: 1 | 2 | 3;
-    completedNodes: string[];
-    totalRounds?: number;
-    completedAt: string;
-  };
-
-  act4_summary: {
-    learningReport: CaseLearningReport | Record<string, unknown>;
-    pptUrl?: string;
-    pptMetadata?: {
-      coverUrl?: string;
-      slides?: number;
-      generatedAt?: string;
-    };
-    completedAt: string;
-  };
-}
+export type TeachingSessionSnapshot = TeachingSessionSnapshotV1;
 
 /**
- * 教学会话实体
+ * 教学会话实体（对应teaching_sessions_v2）
  */
 export interface TeachingSession {
   id: string;
   userId: number;
+  schemaVersion: number;
+  dataVersion: string;
+  sessionState: SessionState;
   caseTitle: string;
-  caseNumber?: string;
-  courtName?: string;
-  act1_upload: any;
-  act2_analysis: any;
-  act3_socratic: any;
-  act4_summary: any;
-  status: 'completed' | 'archived';
-  currentAct: 'upload' | 'analysis' | 'socratic' | 'summary';
+  caseNumber?: string | null;
+  courtName?: string | null;
+  act1?: Act1Snapshot;
+  act2?: Act2Snapshot;
+  act3?: Act3Snapshot;
+  act4?: Act4Snapshot;
+  act1Confidence?: number | null;
+  act1CompletedAt?: string | null;
+  act2CompletedAt?: string | null;
+  act3CompletedAt?: string | null;
+  act4CompletedAt?: string | null;
+  act4PptUrl?: string | null;
   createdAt: string;
   updatedAt: string;
-  completedAt?: string;
-  lastViewedAt?: string;
+  completedAt?: string | null;
+  lastSavedAt?: string | null;
+  lastViewedAt?: string | null;
+  saveType: 'manual' | 'auto';
 }
 
 /**
@@ -74,13 +54,17 @@ export interface TeachingSession {
 export interface TeachingSessionListItem {
   id: string;
   caseTitle: string;
-  caseNumber?: string;
-  courtName?: string;
-  originalFileName?: string;
-  pptUrl?: string;
-  status: string;
+  caseNumber?: string | null;
+  courtName?: string | null;
+  sessionState: SessionState;
+  originalFileName?: string | null;
+  pptUrl?: string | null;
+  act1Confidence?: number | null;
   createdAt: string;
-  lastViewedAt?: string;
+  updatedAt: string;
+  completedAt?: string | null;
+  lastViewedAt?: string | null;
+  saveType: 'manual' | 'auto';
 }
 
 /**
@@ -89,7 +73,7 @@ export interface TeachingSessionListItem {
 export interface PaginationOptions {
   page?: number;
   limit?: number;
-  sortBy?: 'created_at' | 'updated_at' | 'last_viewed_at';
+  sortBy?: 'created_at' | 'updated_at' | 'last_viewed_at' | 'completed_at';
   sortOrder?: 'asc' | 'desc';
 }
 
@@ -101,8 +85,13 @@ export interface ITeachingSessionRepository {
    * 保存教学会话快照
    * @param userId 用户ID（老师）
    * @param snapshot 四幕数据快照（从Zustand Store序列化）
+   * @param sessionId 可选，会话ID；存在时执行更新，否则创建
    */
-  saveSnapshot(userId: number, snapshot: TeachingSessionSnapshot): Promise<TeachingSession>;
+  saveSnapshot(
+    userId: number,
+    snapshot: TeachingSessionSnapshot,
+    sessionId?: string
+  ): Promise<TeachingSession>;
 
   /**
    * 获取用户的所有教学会话（我的教案列表）
@@ -138,14 +127,14 @@ export interface ITeachingSessionRepository {
   updateLastViewed(sessionId: string): Promise<void>;
 
   /**
-   * 删除教学会话
+   * 删除教学会话（软删除）
    * @param sessionId 会话ID
    * @param userId 用户ID（权限校验）
    */
   delete(sessionId: string, userId: number): Promise<void>;
 
   /**
-   * 归档教学会话
+   * 归档教学会话（软删除，用于兼容旧逻辑）
    * @param sessionId 会话ID
    */
   archive(sessionId: string): Promise<void>;
