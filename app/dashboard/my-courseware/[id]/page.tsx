@@ -12,12 +12,56 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { useTeachingStore } from '@/src/domains/teaching-acts/stores/useTeachingStore'
+import { useCaseManagementStore } from '@/src/domains/stores'
 import { SnapshotConverter } from '@/src/domains/teaching-acts/utils/SnapshotConverter'
+import type { LegalCase } from '@/src/types'
 
 interface Props {
   params: Promise<{
     id: string
   }>
+}
+
+// 辅助函数：将extractedElements转换为LegalCase格式
+function convertExtractedToLegalCase(
+  extractedElements: any,
+  caseTitle: string,
+  sessionId: string
+): LegalCase {
+  // extractedElements可能有不同的结构
+  const data = extractedElements.data || extractedElements
+
+  return {
+    id: sessionId,
+    basicInfo: data.basicInfo || {
+      caseNumber: data.caseNumber || caseTitle,
+      court: data.court || '',
+      date: data.date || '',
+      parties: data.parties || {}
+    },
+    threeElements: data.threeElements || {
+      facts: {
+        summary: data.事实 || data.facts?.summary || '',
+        timeline: data.timeline || []
+      },
+      evidence: {
+        summary: data.证据 || data.evidence?.summary || '',
+        items: data.evidence?.items || []
+      },
+      reasoning: {
+        summary: data.理由 || data.reasoning?.summary || '',
+        legalBasis: data.reasoning?.legalBasis || [],
+        logicChain: data.reasoning?.logicChain || []
+      }
+    },
+    metadata: {
+      extractedAt: new Date().toISOString(),
+      confidence: extractedElements.confidence || 0,
+      processingTime: 0,
+      aiModel: 'restored-from-database',
+      extractionMethod: 'manual' as const
+    }
+  }
 }
 
 export default function SessionDetailPage({ params }: Props) {
@@ -35,6 +79,9 @@ export default function SessionDetailPage({ params }: Props) {
     setCaseLearningReport,
     setCurrentAct,
   } = useTeachingStore()
+
+  // 获取案例管理store的setCurrentCase方法
+  const { setCurrentCase } = useCaseManagementStore()
 
   useEffect(() => {
     loadSessionAndRestore()
@@ -77,6 +124,7 @@ export default function SessionDetailPage({ params }: Props) {
       // 3. 恢复到Zustand Store
       // 先清空当前状态
       useTeachingStore.getState().reset()
+      useCaseManagementStore.getState().reset()
 
       // 恢复各幕数据
       if (storeData.uploadData?.extractedElements) {
@@ -84,6 +132,20 @@ export default function SessionDetailPage({ params }: Props) {
           storeData.uploadData.extractedElements,
           storeData.uploadData.confidence || 0
         )
+
+        // 🔑 关键：同时恢复到CaseManagementStore
+        // 将extractedElements转换为LegalCase格式
+        const legalCase: LegalCase = convertExtractedToLegalCase(
+          storeData.uploadData.extractedElements,
+          session.caseTitle,
+          session.id
+        )
+        setCurrentCase(legalCase)
+
+        console.log('✅ [SessionDetail] currentCase已恢复:', {
+          id: legalCase.id,
+          title: legalCase.basicInfo?.caseNumber || session.caseTitle
+        })
       }
 
       if (storeData.analysisData?.result) {

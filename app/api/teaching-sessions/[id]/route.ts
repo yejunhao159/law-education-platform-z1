@@ -10,9 +10,12 @@ import { teachingSessionRepository } from '@/src/domains/teaching-acts/repositor
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Next.js 15: await params
+    const resolvedParams = await params;
+
     // 1. 验证JWT Token
     const payload = await jwtUtils.getCurrentUser();
     if (!payload) {
@@ -23,7 +26,7 @@ export async function GET(
     }
 
     // 2. 查询会话
-    const session = await teachingSessionRepository.findById(params.id, payload.userId);
+    const session = await teachingSessionRepository.findById(resolvedParams.id, payload.userId);
 
     if (!session) {
       return NextResponse.json(
@@ -33,7 +36,7 @@ export async function GET(
     }
 
     // 3. 更新最后查看时间
-    await teachingSessionRepository.updateLastViewed(params.id);
+    await teachingSessionRepository.updateLastViewed(resolvedParams.id);
 
     // 4. 返回完整数据
     return NextResponse.json({
@@ -54,9 +57,12 @@ export async function GET(
 
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Next.js 15: await params
+    const resolvedParams = await params;
+
     // 1. 验证JWT Token
     const payload = await jwtUtils.getCurrentUser();
     if (!payload) {
@@ -67,7 +73,7 @@ export async function DELETE(
     }
 
     // 2. 删除会话
-    await teachingSessionRepository.delete(params.id, payload.userId);
+    await teachingSessionRepository.delete(resolvedParams.id, payload.userId);
 
     // 3. 返回成功
     return NextResponse.json({
