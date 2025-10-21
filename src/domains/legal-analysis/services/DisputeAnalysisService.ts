@@ -5,8 +5,8 @@
  * 已迁移至统一AI调用代理模式 - Issue #21
  */
 
-// 导入统一AI调用代理
-import { callUnifiedAI } from '../../../infrastructure/ai/AICallProxy';
+// 导入统一AI调用工具
+import { invokeAi, parseAiJson, isDegradedContent } from '../../../infrastructure/ai/AiInvocation';
 // 导入数据验证器和类型
 import {
   validateDisputeResponse,
@@ -125,10 +125,10 @@ export class DisputeAnalysisService {
       const prompt = this.buildAnalysisPrompt(request);
 
       // 调用AI分析
-      const apiResponse = await this.callDeepSeekAPI(prompt);
+      const aiContent = await this.callDeepSeekAPI(prompt);
 
       const analysisTime = Date.now() - startTime;
-      const result = this.parseAPIResponse(apiResponse, analysisTime);
+      const result = this.parseAPIResponse(aiContent, analysisTime);
 
       // 更新统计信息
       if (result.success) {
@@ -265,26 +265,24 @@ ${structuredEvents.map(e => `${e.id}${e.date ? ` (${e.date})` : ''}: ${e.content
    * 调用统一AI服务（通过代理模式）
    * 迁移说明：从直连DeepSeek API改为使用AICallProxy统一调用
    */
-  private async callDeepSeekAPI(prompt: string): Promise<any> {
+  private async callDeepSeekAPI(prompt: string): Promise<string> {
     try {
-      // 使用统一AI代理调用
-      const result = await callUnifiedAI(
-        '你是一个专业的法律文书分析助手，擅长识别和分析案件中的争议焦点。',
-        prompt,
-        {
-          temperature: 0.7,
-          maxTokens: 5000  // 增加到 5000 以支持更详细的争议分析
-        }
-      );
+      const result = await invokeAi({
+        systemPrompt: '你是一个专业的法律文书分析助手，擅长识别和分析案件中的争议焦点。',
+        userPrompt: prompt,
+        temperature: 0.7,
+        maxTokens: 5000
+      });
 
-      // 构造兼容原有响应格式
-      return {
-        choices: [{
-          message: {
-            content: result.content
-          }
-        }]
-      };
+      if (!result.content) {
+        throw new Error('AI响应内容为空');
+      }
+
+      if (isDegradedContent(result.content)) {
+        throw new Error('AI服务返回降级内容');
+      }
+
+      return result.content;
     } catch (error) {
       throw new Error(`AI服务调用错误: ${error instanceof Error ? error.message : '未知错误'}`);
     }
@@ -293,22 +291,8 @@ ${structuredEvents.map(e => `${e.id}${e.date ? ` (${e.date})` : ''}: ${e.content
   /**
    * 解析API响应
    */
-  private parseAPIResponse(apiResponse: any, analysisTime: number): DisputeAnalysisResponse {
-    const content = apiResponse.choices?.[0]?.message?.content;
-    if (!content) {
-      throw new Error('API响应为空');
-    }
-
-    // 处理markdown包装的JSON响应
-    let jsonContent = content;
-    if (content.includes('```json')) {
-      const match = content.match(/```json\n([\s\S]*?)\n```/);
-      if (match && match[1]) {
-        jsonContent = match[1];
-      }
-    }
-
-    const parsed = JSON.parse(jsonContent);
+  private parseAPIResponse(aiContent: string, analysisTime: number): DisputeAnalysisResponse {
+    const parsed = parseAiJson<any>(aiContent);
 
     // 使用验证器规范化响应数据
     const validatedResponse = validateDisputeResponse({

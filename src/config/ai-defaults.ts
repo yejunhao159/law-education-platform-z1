@@ -5,12 +5,6 @@
 
 // 获取环境变量，带默认值
 const getEnv = (key: string, defaultValue: any) => {
-  // 优先使用已有的硬编码值（如果存在）
-  if (key === 'DEEPSEEK_API_KEY' && !process.env[key]) {
-    // 使用已知的有效API Key作为fallback
-    return 'sk-6b081a93258346379182141661293345';
-  }
-
   if (typeof process !== 'undefined' && process.env[key] !== undefined && process.env[key] !== '') {
     const value = process.env[key];
     // 自动类型转换
@@ -36,7 +30,7 @@ export const AI_DEFAULTS = {
   maxTokens: getEnv('AI_MAX_TOKENS', 2000),
 
   // API配置
-  apiKey: getEnv('DEEPSEEK_API_KEY', 'sk-6b081a93258346379182141661293345'),
+  apiKey: getEnv('DEEPSEEK_API_KEY', ''),
   apiUrl: getEnv('DEEPSEEK_API_URL', 'https://api.deepseek.com/v1'),
 
   // 性能配置

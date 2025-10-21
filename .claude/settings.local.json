@@ -1,19 +1,20 @@
 {
   "permissions": {
     "allow": [
-      "Bash(docker exec -it law-edu-postgres psql -U postgres -d law_education -c \"\\dt\")",
-      "Bash(docker exec law-edu-postgres psql -U postgres -d law_education -c \"\\dt\")",
-      "Bash(docker exec law-edu-postgres psql -U postgres -d law_education -c \"SELECT id, username, display_name, role FROM users ORDER BY id;\")",
-      "Bash(find /home/yejh0725/law-education-platform-z1 -maxdepth 1 -type f ( -name \"*.yml\" -o -name \"*.yaml\" -o -name \"Dockerfile*\" ) -exec ls -lh {} ;)",
-      "Bash(find /home/yejh0725/law-education-platform-z1/scripts -type f -name \"*.sh\" -exec ls -lh {} ;)",
-      "Bash(cat /home/yejh0725/law-education-platform-z1/ecosystem.config.js)",
-      "Bash(awk '{print $9}')",
-      "Bash(./scripts/check-deployment-readiness.sh)",
-      "Bash(timeout 10 ./scripts/check-deployment-readiness.sh)",
-      "Bash(echo \"退出码: $?\")",
-      "Bash(bash -x ./scripts/check-deployment-readiness.sh)",
-      "Read(//tmp/**)",
-      "Bash(git add .)"
+      "Bash(npm run dev:all)",
+      "mcp__promptx__discover",
+      "mcp__promptx__action",
+      "Bash(npx ts-prune --project tsconfig.json)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(git add src/types/index.ts src/types/unused-exports.md app/dashboard/my-courseware/[id]/page.tsx)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nrefactor(types): 清理未使用的类型导出并修复类型冲突\n\n**主要改动**:\n- 精简 src/types/index.ts：从114行减少到36行\n- 移除30+未使用的类型导出（详见unused-exports.md）\n- 修复 LegalCase 类型冲突：明确导出旧版本（包含threeElements字段）\n- 修复 SessionDetailPage 类型错误：完善LegalCase对象构造\n\n**代码质量提升**:\n- 运行ts-prune分析：发现921个未使用导出\n- 创建 unused-exports.md 文档记录清理过程\n- 解决新旧LegalCase定义冲突（src/types vs types/）\n- 确保向后兼容：保留所有实际使用的类型\n\n**类型检查**:\n- 修复前：多个threeElements相关类型错误\n- 修复后：本次修改文件无类型错误\n- 剩余错误：249个（项目原有问题，非本次引入）\n\n📝 详见: src/types/unused-exports.md\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(npx ts-prune)",
+      "Bash(git add src/domains/legal-analysis/services/CaseNarrativeService.ts src/domains/legal-analysis/services/JudgmentExtractionService.ts src/domains/socratic-dialogue/services/SocraticDialogueService.ts docs/code-cleanup-explanation.md)",
+      "Bash(git rm lib/logging/factory.ts)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfix(types): 修复多个服务文件的类型错误\n\n**修复的文件**:\n1. lib/logging/factory.ts - 删除未使用的文件（找不到依赖模块）\n2. CaseNarrativeService.ts - 修复TimelineEvent类型导入和BasicInfo.parties字段\n3. JudgmentExtractionService.ts - 修复judgeDate类型断言\n4. SocraticDialogueService.ts - 修复caseContext.length错误和metadata字段\n\n**错误类型**:\n- TS2307: 找不到模块\n- TS2339: 属性不存在\n- TS2322: 类型不可赋值\n- TS2353: 对象字面量包含未知属性\n\n**剩余问题**:\n- LegalAnalysisFacade.ts还有9个类型错误（需要更深入的重构）\n\n**文档**:\n- 新增 docs/code-cleanup-explanation.md 解释代码清理原因和策略\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git add lib/types/socratic/index.ts src/types/unused-exports.md)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nrefactor(types): 清理lib/types/socratic/index.ts未使用导出\n\n**清理成果**:\n- 代码从101行减少到45行（-55%）\n- 导出从49个减少到1个（-98%）\n- 类型错误从249个减少到242个（-7个）\n- 使用率从2%提升到100%\n\n**保留的导出**:\n- ClassroomSession（被2个组件使用）\n\n**移除的未使用导出** (48个):\n- 对话类型：MessageRole, DialogueLevel, ControlMode, Difficulty等12个\n- 课堂管理：SessionMode, StudentInfo, VoteChoice等6个\n- AI服务：SocraticRequest, SocraticResponse等16个\n- 案例管理：CaseInfo, AgentSettings等8个\n- 日志类型：LogLevel, LogEntry, LogContext等3个\n\n**重要发现**:\n- 项目已迁移到新类型系统（src/domains/socratic-dialogue/types/）\n- lib/types/socratic/ 主要用于向后兼容\n- 索引文件过度导出，实际只用了1个类型\n\n**验证**:\n- ✅ 无新增类型错误\n- ✅ 反而修复了7个类型错误\n- ✅ 无破坏性变更\n\n📝 详见: src/types/unused-exports.md\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(gh:*)"
     ],
     "deny": [],
     "ask": []

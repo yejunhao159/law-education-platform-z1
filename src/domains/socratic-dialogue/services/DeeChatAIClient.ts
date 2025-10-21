@@ -305,13 +305,13 @@ export class DeeChatAIClient {
 
 // 默认配置工厂函数
 export function createDeeChatConfig(overrides: Partial<DeeChatConfig> = {}): DeeChatConfig {
-  // 导入AI_DEFAULTS确保有硬编码的fallback
+  // 导入AI_DEFAULTS作为集中默认配置来源
   const AI_DEFAULTS = require('@/src/config/ai-defaults').AI_DEFAULTS;
 
   const config = {
     provider: overrides.provider || 'deepseek' as const,
-    // ✅ 修复：使用三级fallback - overrides → AI_DEFAULTS → 硬编码
-    apiKey: overrides.apiKey || AI_DEFAULTS.apiKey || 'sk-6b081a93258346379182141661293345',
+    // 使用 overrides → AI_DEFAULTS → 空值 的顺序，避免硬编码密钥
+    apiKey: overrides.apiKey ?? AI_DEFAULTS.apiKey ?? '',
     apiUrl: overrides.apiUrl || AI_DEFAULTS.apiUrl || 'https://api.deepseek.com/v1',
     model: overrides.model || AI_DEFAULTS.model || 'deepseek-chat',
     maxContextTokens: overrides.maxContextTokens || 8000,
@@ -327,7 +327,7 @@ export function createDeeChatConfig(overrides: Partial<DeeChatConfig> = {}): Dee
     apiUrl: config.apiUrl,
     model: config.model,
     hasApiKey: !!config.apiKey,
-    keySource: overrides.apiKey ? 'override' : (AI_DEFAULTS.apiKey ? 'AI_DEFAULTS' : 'hardcoded')
+    keySource: overrides.apiKey ? 'override' : (AI_DEFAULTS.apiKey ? 'env' : 'missing')
   });
 
   return config;

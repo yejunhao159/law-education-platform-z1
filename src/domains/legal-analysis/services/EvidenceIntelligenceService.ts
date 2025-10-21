@@ -8,7 +8,7 @@
 import { createLogger } from '@/lib/logging';
 import type { Evidence } from '@/types/evidence';
 import { normalizeEvidenceList } from '@/lib/adapters/evidence-adapter';
-import { callUnifiedAI } from '../../../infrastructure/ai/AICallProxy';
+import { invokeAi, isDegradedContent, parseAiJson } from '../../../infrastructure/ai/AiInvocation';
 import type {
   ClaimElement
 } from '@/types/dispute-evidence';
@@ -330,16 +330,7 @@ export class EvidenceIntelligenceService {
     try {
       const response = await this.callAIService(prompt);
 
-      // 处理markdown包装的JSON响应
-      let jsonContent = response;
-      if (response.includes('```json')) {
-        const match = response.match(/```json\n([\s\S]*?)\n```/);
-        if (match && match[1]) {
-          jsonContent = match[1];
-        }
-      }
-
-      return JSON.parse(jsonContent);
+      return parseAiJson(response);
     } catch (error) {
       logger.warn('AI证据评估解析失败，使用默认值', error);
       return {
@@ -417,16 +408,7 @@ ${claimElements.map((e, i) => `${i+1}. ${e.name}：${e.description}`).join('\n')
    */
   private parseLearningQuestions(aiResponse: string, evidence: Evidence[], config: EvidenceLearningConfig): EvidenceLearningQuestion[] {
     try {
-      // 处理markdown包装的JSON响应
-      let jsonContent = aiResponse;
-      if (aiResponse.includes('```json')) {
-        const match = aiResponse.match(/```json\n([\s\S]*?)\n```/);
-        if (match && match[1]) {
-          jsonContent = match[1];
-        }
-      }
-
-      const parsed = JSON.parse(jsonContent);
+      const parsed = parseAiJson<any>(aiResponse);
 
       if (parsed.questions && Array.isArray(parsed.questions)) {
         return parsed.questions.map((q: any, index: number) => ({
@@ -471,18 +453,21 @@ ${claimElements.map((e, i) => `${i+1}. ${e.name}：${e.description}`).join('\n')
         model: this.aiConfig.model
       });
 
-      const result = await callUnifiedAI(
+      const result = await invokeAi({
         systemPrompt,
-        prompt,
-        {
-          temperature: this.aiConfig.temperature,
-          maxTokens: this.aiConfig.maxTokens,
-          responseFormat: 'text'
-        }
-      );
+        userPrompt: prompt,
+        temperature: this.aiConfig.temperature,
+        maxTokens: this.aiConfig.maxTokens,
+        responseFormat: 'text'
+      });
 
       if (!result.content) {
         throw new Error('AI API返回空内容');
+      }
+
+      if (isDegradedContent(result.content)) {
+        logger.warn('AI返回降级内容', { contentPreview: result.content.slice(0, 200) });
+        throw new Error('AI服务返回降级内容');
       }
 
       logger.info('AI服务调用成功', {
