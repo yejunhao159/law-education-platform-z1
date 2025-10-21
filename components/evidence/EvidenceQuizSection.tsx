@@ -82,7 +82,7 @@ export function EvidenceQuizSection({
               title: '已保存证据',
               description: '从历史记录恢复',
               content: '',
-              type: 'document' as const,
+              type: 'documentary' as const,
               relatedEvents: [],
             },
             questionType: q.questionType,

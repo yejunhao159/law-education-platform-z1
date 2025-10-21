@@ -152,6 +152,14 @@ export default function SessionDetailPage({ params }: Props) {
         setAnalysisResult(storeData.analysisData.result)
       }
 
+      // 🆕 恢复AI故事章节到store
+      if (storeData.storyChapters && storeData.storyChapters.length > 0) {
+        useTeachingStore.getState().setStoryChapters(storeData.storyChapters)
+        console.log('✅ [SessionDetail] storyChapters已恢复:', {
+          章节数量: storeData.storyChapters.length,
+        })
+      }
+
       if (storeData.summaryData?.caseLearningReport) {
         setCaseLearningReport(storeData.summaryData.caseLearningReport)
       }
