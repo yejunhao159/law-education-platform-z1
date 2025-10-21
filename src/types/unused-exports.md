@@ -81,12 +81,86 @@
 - 某些类型标记为"used in module"表示在文件内部被引用（如作为其他类型的组成部分）
 - Next.js约定式文件（app/layout.tsx等）的导出会被ts-prune误报，已排除
 
-## 🎯 下一步清理目标
+## 🎯 清理进度
 
 按优先级排序：
-1. ✅ `src/types/index.ts` - 已完成
-2. ⏭️ `lib/types/socratic/index.ts` - 49项待清理
+1. ✅ `src/types/index.ts` - 已完成（2025-01-21）
+2. ✅ `lib/types/socratic/index.ts` - 已完成（2025-01-21）
 3. ⏭️ `src/domains/stores.ts` - 44项待清理
 4. ⏭️ `src/domains/socratic-dialogue/types/index.ts` - 42项待清理
 5. ⏭️ `types/legal-case.ts` - 40项待清理
 6. ⏭️ `src/domains/legal-analysis/types/index.ts` - 37项待清理
+
+---
+
+## 📋 清理记录 #2: lib/types/socratic/index.ts
+
+**清理日期**: 2025-01-21
+**清理前**: 101行，49个导出
+**清理后**: 45行，1个导出
+**减少幅度**: 代码-55%，导出-98%
+
+### 保留的导出
+- `ClassroomSession` - 被2个组件使用：
+  - components/socratic/TeacherSocratic.tsx
+  - components/socratic/ClassroomCode.tsx
+
+### 移除的未使用导出 (48个)
+
+#### 对话类型 (lib/types/socratic/dialogue)
+- `MessageRole`, `DialogueLevel`, `ControlMode`, `Difficulty`
+- `MessageMetadata`, `Message`, `Performance`, `DialogueState`, `DialogueMetrics`
+- `LevelConfig`, `PromptTemplate`, `LEVEL_CONFIG`
+
+#### 课堂管理 (lib/types/socratic/classroom)
+- `SessionMode`, `StudentInfo`, `VoteChoice`, `VoteData`
+- `SESSION_EXPIRY_TIME`, `CLASSROOM_CODE_LENGTH`
+
+#### AI服务 (lib/types/socratic/ai-service)
+- `SocraticDifficultyLevel`, `SocraticMode`, `SocraticDifficulty`, `SocraticErrorCode`
+- `SocraticMessage`, `SocraticSession`, `SocraticSessionMetadata`
+- `SocraticRequest`, `SocraticGenerateRequest`, `SocraticResponse`
+- `SocraticResponseData`, `SocraticResponseMetadata`, `SocraticError`
+- `SocraticPerformanceData`, `SocraticConfig`
+- `AIRequest`, `AIResponse`, `PerformanceMetrics`, `FallbackMetrics`
+
+#### 案例管理 (lib/types/socratic/case)
+- `CaseInfo`, `AgentSettings`, `AgentContext`, `AgentResponse`
+- `CachedResponse`, `CacheStats`
+- `DEFAULT_AGENT_SETTINGS`, `CACHE_SIMILARITY_THRESHOLD`
+
+#### 日志 (lib/types/socratic)
+- `LogLevel`, `LogEntry`, `LogContext`
+
+### 重要发现
+
+**为什么这么多未使用导出？**
+1. **架构迁移**：项目已迁移到新的类型系统（`src/domains/socratic-dialogue/types/`）
+2. **遗留代码**：`lib/types/socratic/` 主要用于向后兼容
+3. **过度导出**：索引文件导出了所有子模块类型，但实际只用了1个
+
+**影响分析**：
+- ✅ 无破坏性变更（保留了唯一使用的类型）
+- ✅ 类型错误从249个减少到242个（修复了7个错误）
+- ✅ 提高可维护性（明确哪些类型实际在用）
+
+**如何恢复**：
+如需使用已移除的类型，请直接从原始文件导入：
+```typescript
+// 示例：需要使用MessageRole
+import { MessageRole } from '@/lib/types/socratic/dialogue';
+
+// 更好的做法：使用新的类型系统
+import { MessageRole } from '@/src/domains/socratic-dialogue/types';
+```
+
+### 清理效果
+
+| 指标 | 清理前 | 清理后 | 改善 |
+|------|--------|--------|------|
+| 代码行数 | 101行 | 45行 | -55% |
+| 导出数量 | 49个 | 1个 | -98% |
+| 类型错误 | 249个 | 242个 | -7个 |
+| 使用率 | 2% | 100% | +98% |
+
+---

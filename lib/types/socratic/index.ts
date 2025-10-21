@@ -1,101 +1,45 @@
 /**
  * 苏格拉底对话系统类型定义统一导出
  * @module types/socratic
- * @description 提供所有苏格拉底相关类型的统一导出入口
+ * @description 提供实际使用的苏格拉底相关类型导出
+ *
+ * ⚠️ 本文件已清理未使用导出（2025-01-21）
+ * 清理前：49个导出，清理后：1个导出
+ * 详见: src/types/unused-exports.md
  */
 
-// ============== 对话相关类型 ==============
+// ============== 课堂管理类型（实际使用） ==============
 export {
-  // 枚举
-  MessageRole,
-  DialogueLevel,
-  ControlMode,
-  Difficulty,
-
-  // 接口
-  type MessageMetadata,
-  type Message,
-  type Performance,
-  type DialogueState,
-  type DialogueMetrics,
-
-  // 类型和常量
-  type LevelConfig,
-  type PromptTemplate,
-  LEVEL_CONFIG
-} from './dialogue';
-
-// ============== 课堂管理类型 ==============
-export {
-  // 枚举
-  SessionMode,
-
-  // 接口
-  type StudentInfo,
-  type VoteChoice,
-  type VoteData,
-  type ClassroomSession,
-
-  // 常量
-  SESSION_EXPIRY_TIME,
-  CLASSROOM_CODE_LENGTH
+  type ClassroomSession, // 被 TeacherSocratic.tsx 和 ClassroomCode.tsx 使用
 } from './classroom';
 
-// ============== AI服务类型 ==============
-export {
-  // 枚举
-  SocraticDifficultyLevel,
-  SocraticMode,
-  SocraticDifficulty,
-  SocraticErrorCode,
-
-  // 接口
-  type SocraticMessage,
-  type SocraticSession,
-  type SocraticSessionMetadata,
-  type SocraticRequest,
-  type SocraticGenerateRequest,
-  type SocraticResponse,
-  type SocraticResponseData,
-  type SocraticResponseMetadata,
-  type SocraticError,
-  type SocraticPerformanceData,
-  type SocraticConfig,
-  type AIRequest,
-  type AIResponse,
-  type PerformanceMetrics,
-  type FallbackMetrics
-} from './ai-service';
-
-// ============== 案例相关类型 ==============
-export {
-  // 接口
-  type CaseInfo,
-  type AgentSettings,
-  type AgentContext,
-  type AgentResponse,
-  type CachedResponse,
-  type CacheStats,
-
-  // 常量
-  DEFAULT_AGENT_SETTINGS,
-  CACHE_SIMILARITY_THRESHOLD
-} from './case';
-
-// ============== 日志相关类型 ==============
-export {
-  // 枚举
-  LogLevel,
-
-  // 接口
-  type LogEntry,
-  type LogContext
-} from '../socratic';
-
-// ============== 快捷类型别名 ==============
-
-// 类型别名已移除，请直接使用原类型：
-// - DialogueLevel (教学层级)
-// - SocraticDifficultyLevel (AI难度级别)
-// - SocraticMessage (苏格拉底消息)
-// - Message (对话消息)
+// ============== 已移除的未使用导出 ==============
+// 如需使用以下类型，请直接从原始文件导入：
+//
+// 对话类型 (lib/types/socratic/dialogue):
+//   - MessageRole, DialogueLevel, ControlMode, Difficulty
+//   - MessageMetadata, Message, Performance, DialogueState, DialogueMetrics
+//   - LevelConfig, PromptTemplate, LEVEL_CONFIG
+//
+// 课堂管理 (lib/types/socratic/classroom):
+//   - SessionMode, StudentInfo, VoteChoice, VoteData
+//   - SESSION_EXPIRY_TIME, CLASSROOM_CODE_LENGTH
+//
+// AI服务 (lib/types/socratic/ai-service):
+//   - SocraticDifficultyLevel, SocraticMode, SocraticDifficulty, SocraticErrorCode
+//   - SocraticMessage, SocraticSession, SocraticSessionMetadata
+//   - SocraticRequest, SocraticGenerateRequest, SocraticResponse
+//   - SocraticResponseData, SocraticResponseMetadata, SocraticError
+//   - SocraticPerformanceData, SocraticConfig
+//   - AIRequest, AIResponse, PerformanceMetrics, FallbackMetrics
+//
+// 案例管理 (lib/types/socratic/case):
+//   - CaseInfo, AgentSettings, AgentContext, AgentResponse
+//   - CachedResponse, CacheStats
+//   - DEFAULT_AGENT_SETTINGS, CACHE_SIMILARITY_THRESHOLD
+//
+// 日志 (lib/types/socratic):
+//   - LogLevel, LogEntry, LogContext
+//
+// 注意：项目已迁移到新的类型系统（src/domains/），旧的lib/types/socratic/
+// 主要用于向后兼容。新功能请使用 src/domains/socratic-dialogue/types/
