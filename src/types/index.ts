@@ -1,114 +1,36 @@
 /**
  * 统一类型定义导出
  * DeepPractice Standards Compliant
+ *
+ * ⚠️ 本文件仅导出实际被使用的类型
+ * 未使用的导出已被清理，详见 unused-exports.md
  */
 
 // ========== 共享基础类型 ==========
 export * from './shared/base';
-import type { ApiResponse, ViewPerspective } from './shared/base';
 
-// ========== 域类型 ==========
-export * from './domains/case-management';
+// ========== 主要法律案件类型（使用旧版本以保持兼容） ==========
+// 注意：优先导出旧版LegalCase，因为整个代码库都在使用threeElements字段
+export type {
+  LegalCase,
+  ThreeElements,
+  Facts,
+  Evidence,
+  Reasoning,
+  TimelineEvent,
+  EvidenceItem,
+  Party,
+  BasicInfo,
+  LawReference,
+  TimelineAnalysis
+} from '../../types/legal-case';
+
+// ========== 域类型（排除LegalCase以避免冲突） ==========
+// case-management导出的LegalCase会被旧版本覆盖
 export * from './domains/legal-analysis';
 export * from './domains/socratic-dialogue';
 export * from './domains/teaching-acts';
 
-// ========== 根目录类型导入 ==========
-export type { LegalCase, LawReference, Party as LegalParty } from '../../types/legal-case';
-export type { ExtractedData, DateElement, Amount, LegalClause, FactElement, DocumentMetadata } from '../../types/legal-intelligence';
-
-// ========== 工厂函数导出 ==========
-// export { createDefaultLegalCase } from './domains/case-management';
-
-// ========== 向后兼容的类型别名 ==========
-// 保持与现有代码的兼容性，逐步迁移
-
-export type {
-  ThreeElements,
-  Facts,
-  Evidence,
-  EvidenceItem,
-  Reasoning,
-  TimelineAnalysis,
-  LegalAnalysis,
-} from './domains/legal-analysis';
-
-export type {
-  DialogueSession,
-  Message,
-  SocraticRequest,
-  SocraticResponse,
-} from './domains/socratic-dialogue';
-
-export type {
-  TeachingSession,
-  ActState,
-  ActType,
-  TeachingProgress,
-} from './domains/teaching-acts';
-
-// ========== 内部使用的类型导入 ==========
-// 用于本文件后续定义中使用的类型
-import type { LegalCase } from '../../types/legal-case';
-import type {
-  ThreeElements,
-  TimelineAnalysis,
-} from './domains/legal-analysis';
-import type {
-  DialogueSession,
-  SocraticRequest,
-  SocraticResponse,
-} from './domains/socratic-dialogue';
-import type {
-  TeachingSession,
-  TeachingProgress,
-} from './domains/teaching-acts';
-
-// ========== 常用类型组合 ==========
-export interface CaseWithAnalysis {
-  case: LegalCase;
-  threeElements: ThreeElements;
-  analyses: TimelineAnalysis[];
-}
-
-export interface TeachingContext {
-  session: TeachingSession;
-  case: LegalCase;
-  progress: TeachingProgress;
-  dialogues?: DialogueSession[];
-}
-
-// ========== 应用层类型 ==========
-export interface AppState {
-  currentCase: LegalCase | null;
-  currentSession: TeachingSession | null;
-  currentDialogue: DialogueSession | null;
-  ui: {
-    loading: boolean;
-    error: string | null;
-    theme: 'light' | 'dark' | 'system';
-  };
-}
-
-// ========== API类型 ==========
-export interface ApiEndpoints {
-  cases: {
-    list: () => Promise<ApiResponse<LegalCase[]>>;
-    get: (id: string) => Promise<ApiResponse<LegalCase>>;
-    create: (data: Partial<LegalCase>) => Promise<ApiResponse<LegalCase>>;
-    update: (id: string, data: Partial<LegalCase>) => Promise<ApiResponse<LegalCase>>;
-    delete: (id: string) => Promise<ApiResponse<void>>;
-  };
-  analysis: {
-    timeline: (eventId: string, perspective: ViewPerspective) => Promise<ApiResponse<TimelineAnalysis>>;
-    threeElements: (caseId: string) => Promise<ApiResponse<ThreeElements>>;
-  };
-  socratic: {
-    generate: (request: SocraticRequest) => Promise<ApiResponse<SocraticResponse>>;
-    sessions: () => Promise<ApiResponse<DialogueSession[]>>;
-  };
-  teaching: {
-    sessions: () => Promise<ApiResponse<TeachingSession[]>>;
-    progress: (sessionId: string) => Promise<ApiResponse<TeachingProgress>>;
-  };
-}
+// ========== 向后兼容说明 ==========
+// 当前使用types/legal-case.ts中的LegalCase定义（包含threeElements）
+// 未来迁移到domains/case-management.ts的新版本时需要全局重构

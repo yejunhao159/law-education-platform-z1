@@ -30,37 +30,51 @@ function convertExtractedToLegalCase(
 ): LegalCase {
   // extractedElements可能有不同的结构
   const data = extractedElements.data || extractedElements
+  const now = new Date().toISOString()
 
   return {
     id: sessionId,
     basicInfo: data.basicInfo || {
       caseNumber: data.caseNumber || caseTitle,
-      court: data.court || '',
-      date: data.date || '',
-      parties: data.parties || {}
+      court: data.court || '未知法院',
+      judgeDate: data.date || data.judgeDate || now.split('T')[0],
+      parties: data.parties || {
+        plaintiff: [],
+        defendant: []
+      }
     },
     threeElements: data.threeElements || {
       facts: {
         summary: data.事实 || data.facts?.summary || '',
-        timeline: data.timeline || []
+        timeline: data.timeline || [],
+        keyFacts: [],
+        disputedFacts: [],
       },
       evidence: {
         summary: data.证据 || data.evidence?.summary || '',
-        items: data.evidence?.items || []
+        items: data.evidence?.items || [],
+        chainAnalysis: {
+          complete: false,
+          missingLinks: [],
+          strength: 'weak' as const
+        }
       },
       reasoning: {
         summary: data.理由 || data.reasoning?.summary || '',
         legalBasis: data.reasoning?.legalBasis || [],
-        logicChain: data.reasoning?.logicChain || []
+        logicChain: [],
+        strength: 'moderate' as const
       }
     },
+    timeline: data.timeline || [],
     metadata: {
-      extractedAt: new Date().toISOString(),
+      extractedAt: now,
       confidence: extractedElements.confidence || 0,
       processingTime: 0,
       aiModel: 'restored-from-database',
       extractionMethod: 'manual' as const
-    }
+    },
+    originalText: data.originalText
   }
 }
 
