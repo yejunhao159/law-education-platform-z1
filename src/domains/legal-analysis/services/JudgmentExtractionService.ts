@@ -264,7 +264,7 @@ ${context}`;
     const merged: BasicInfo = {
       caseNumber: aiInfo.caseNumber || ruleInfo.caseNumber || '',
       court: aiInfo.court || ruleInfo.court || '',
-      judgeDate: aiInfo.judgeDate || ruleInfo.judgeDate || new Date().toISOString().split('T')[0],
+      judgeDate: (aiInfo.judgeDate || ruleInfo.judgeDate || new Date().toISOString().split('T')[0]) as string,
       caseType: aiInfo.caseType,
       judge: aiInfo.judge && aiInfo.judge.length > 0 ? aiInfo.judge : (ruleInfo.judges ?? []),
       clerk: aiInfo.clerk || ruleInfo.clerk,

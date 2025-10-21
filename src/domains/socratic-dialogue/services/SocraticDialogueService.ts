@@ -289,7 +289,8 @@ export class SocraticDialogueService {
         }
       ];
 
-      console.log(`[Socratic Initial] 生成初始问题 - 案例长度:${request.caseContext.length}chars, Topic:${request.currentTopic || '未指定'}`);
+      const contextLength = typeof request.caseContext === 'string' ? request.caseContext.length : JSON.stringify(request.caseContext).length;
+      console.log(`[Socratic Initial] 生成初始问题 - 案例长度:${contextLength}chars, Topic:${request.currentTopic || '未指定'}`);
 
       // 第4步：调用 AI 生成初始问题
       const aiResponse = await this.callAIWithMessages(messages);
@@ -307,8 +308,7 @@ export class SocraticDialogueService {
             tokensUsed: (aiResponse as any).tokensUsed,
             cost: (aiResponse as any).cost,
             model: (aiResponse as any).model || 'deepseek-chat',
-            processingTime: (aiResponse as any).duration,
-            isInitialQuestion: true  // 标记为初始问题
+            processingTime: (aiResponse as any).duration
           }
         }
       };

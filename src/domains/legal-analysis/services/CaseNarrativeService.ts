@@ -6,10 +6,8 @@
  */
 
 import { createLogger } from '@/lib/logging';
-import { interceptDeepSeekCall } from '../../../infrastructure/ai/AICallProxy';
-import type {
-  TimelineEvent,
-} from '@/types/timeline-claim-analysis';
+import { invokeAi, isDegradedContent, stripCodeFences } from '../../../infrastructure/ai/AiInvocation';
+import type { TimelineEvent } from '@/src/types';
 
 const logger = createLogger('CaseNarrativeService');
 
@@ -33,6 +31,7 @@ export interface NarrativeGenerationRequest {
       caseType?: string;
       level?: string;
       nature?: string;
+      parties?: any; // 当事人信息
     };
     threeElements: any; // 第一幕动态生成的数据，结构复杂，使用any简化类型检查
   };
@@ -60,18 +59,10 @@ export interface NarrativeGenerationResponse {
  * 案情智能叙事服务
  */
 export class CaseNarrativeService {
-  private readonly apiKey: string;
-  private readonly apiUrl: string;
-
   constructor() {
-    // 使用与AICallProxy一致的环境变量获取方式，包含fallback
-    this.apiKey = process.env.DEEPSEEK_API_KEY || 'sk-6b081a93258346379182141661293345';
-    this.apiUrl = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1';
-
     console.log('📖 CaseNarrativeService初始化:', {
-      hasApiKey: !!this.apiKey,
-      apiUrl: this.apiUrl,
-      keyPrefix: this.apiKey.substring(0, 8) + '...'
+      hasApiKey: !!process.env.DEEPSEEK_API_KEY,
+      apiUrl: process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1'
     });
   }
 
@@ -316,106 +307,43 @@ ${focusSection}
   /**
    * 调用AI服务（带重试）
    */
-  private async callAIService(prompt: string, retryCount = 0): Promise<any> {
-    if (!this.apiKey) {
-      throw new Error('AI API密钥未配置');
-    }
-
+  private async callAIService(prompt: string, retryCount = 0): Promise<string> {
     const maxRetries = 2;
     const maxTokens = 4000; // 修复: 从8000降到4000避免JSON截断
 
     try {
-      // 使用代理模式调用AI服务
-      const response = await interceptDeepSeekCall(this.apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'deepseek-chat',
-          messages: [
-            {
-              role: 'system',
-              content: '你是一位专业的法律叙事专家，擅长将复杂的法律案件转化为引人入胜的故事。请严格按照JSON格式返回响应。'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: maxTokens, // 修复: 降低到4000避免截断和网络失败
-          top_p: 0.9
-        })
+      const result = await invokeAi({
+        systemPrompt: '你是一位专业的法律叙事专家，擅长将复杂的法律案件转化为引人入胜的故事。请严格按照JSON格式返回响应。',
+        userPrompt: prompt,
+        temperature: 0.7,
+        maxTokens
       });
 
-      if (!response.ok) {
-        logger.error('AI API调用失败', {
-          status: response.status,
-          statusText: response.statusText,
-          retryCount
-        });
-
-        // 重试逻辑
-        if (retryCount < maxRetries && (response.status === 503 || response.status === 500)) {
-          logger.info(`重试 AI 调用 (${retryCount + 1}/${maxRetries})...`);
-          await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))); // 指数退避
-          return this.callAIService(prompt, retryCount + 1);
-        }
-
-        throw new Error(`AI API调用失败: ${response.status} ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      const content = result.choices?.[0]?.message?.content;
-      const finishReason = result.choices?.[0]?.finish_reason;
-      const proxyHeader = response.headers.get('X-AI-Proxy');
-      const isProxyFallback = response.headers.get('X-Error') === 'true' || proxyHeader === 'DeeChatAI-Fallback';
-
-      // 检测token限制导致的截断
-      if (finishReason === 'length') {
-        logger.warn('智能故事生成被max_tokens截断', {
-          finishReason,
-          maxTokens,
-          contentLength: content?.length
-        });
-        // 不抛出错误,允许使用截断的内容,但记录警告
-      }
-
-      // 检测降级响应
-      if (isProxyFallback || finishReason === 'error') {
-        logger.warn('检测到AI服务降级', {
-          finishReason,
-          proxyHeader,
-          contentPreview: content?.slice(0, 100)
-        });
-        throw new Error('AI服务降级，使用规则生成');
-      }
+      const content = result.content?.trim();
 
       if (!content) {
         throw new Error('AI响应内容为空');
       }
 
-      // 检查内容是否为降级提示
-      const lowerContent = content.toLowerCase();
-      if (
-        content.includes('抱歉') ||
-        content.includes('无法生成') ||
-        content.includes('错误') ||
-        lowerContent.includes('sorry') ||
-        lowerContent.includes('unable to generate') ||
-        lowerContent.includes('error')
-      ) {
+      if (isDegradedContent(content)) {
         logger.warn('AI返回降级内容', { contentPreview: content.slice(0, 200) });
         throw new Error('AI服务返回降级内容');
       }
 
+      logger.info('AI叙事调用成功', {
+        tokensUsed: result.tokensUsed,
+        model: result.model,
+        callId: result.callId
+      });
+
       return content;
     } catch (error) {
       // 网络错误重试
-      if (retryCount < maxRetries && error instanceof Error &&
-          (error.message.includes('fetch failed') || error.message.includes('network'))) {
+      if (
+        retryCount < maxRetries &&
+        error instanceof Error &&
+        /(fetch failed|network|timeout)/i.test(error.message)
+      ) {
         logger.info(`网络错误，重试 AI 调用 (${retryCount + 1}/${maxRetries})...`);
         await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
         return this.callAIService(prompt, retryCount + 1);
@@ -432,31 +360,13 @@ ${focusSection}
    */
   private parseAIResponse(aiResponse: string, _caseData: any): StoryChapter[] {
     try {
-      // 首先检查是否为降级提示或错误消息
-      const lowerResponse = aiResponse.toLowerCase();
-      if (
-        aiResponse.includes('抱歉') ||
-        aiResponse.includes('无法生成') ||
-        aiResponse.includes('错误') ||
-        lowerResponse.includes('sorry') ||
-        lowerResponse.includes('error') ||
-        lowerResponse.includes('unable')
-      ) {
+      if (isDegradedContent(aiResponse)) {
         logger.warn('检测到AI降级响应', { preview: aiResponse.slice(0, 200) });
         throw new Error('AI服务返回降级响应');
       }
 
-      // 处理markdown包装的JSON响应
-      let jsonContent = aiResponse;
-      if (aiResponse.includes('```json')) {
-        const match = aiResponse.match(/```json\n([\s\S]*?)\n```/);
-        if (match && match[1]) {
-          jsonContent = match[1];
-        }
-      }
-
       // 尝试解析JSON响应
-      const parsed = JSON.parse(jsonContent);
+      const parsed = JSON.parse(stripCodeFences(aiResponse));
 
       if (parsed.chapters && Array.isArray(parsed.chapters)) {
         const chapters = parsed.chapters.map((chapter: any, index: number) => ({
