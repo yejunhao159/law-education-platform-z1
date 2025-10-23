@@ -16,7 +16,11 @@ import { SnapshotConverter } from '@/src/domains/teaching-acts/utils/SnapshotCon
 import type { CaseLearningReport } from '@/src/types';
 import { toast } from 'sonner';
 
-export function ActFour() {
+interface ActFourProps {
+  mode?: 'edit' | 'review'  // 模式：编辑模式 | 只读模式
+}
+
+export function ActFour({ mode = 'edit' }: ActFourProps) {
   const router = useRouter();
   const {
     summaryData,
@@ -30,11 +34,16 @@ export function ActFour() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
+    // 只读模式：不自动生成报告
+    if (mode === 'review') {
+      return;
+    }
+
     // 进入第四幕时自动生成报告
     if (!summaryData.caseLearningReport && !summaryData.isGenerating) {
       generateReport();
     }
-  }, []);
+  }, [mode]);
 
   const generateReport = async () => {
     try {
@@ -182,9 +191,12 @@ export function ActFour() {
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
-        <Button onClick={generateReport} className="mt-4">
-          重新生成
-        </Button>
+        {/* 只读模式：不显示重新生成按钮 */}
+        {mode === 'edit' && (
+          <Button onClick={generateReport} className="mt-4">
+            重新生成
+          </Button>
+        )}
       </div>
     );
   }
@@ -397,20 +409,25 @@ export function ActFour() {
           生成教学PPT
         </Button>
 
-        {/* 完成学习按钮 - 保存快照并清空Store */}
-        <Button
-          variant="default"
-          onClick={completeAndSaveCase}
-          disabled={isSaving}
-          className="bg-green-600 hover:bg-green-700"
-        >
-          <Save className="w-4 h-4 mr-2" />
-          {isSaving ? '正在保存...' : '完成学习'}
-        </Button>
+        {/* 编辑模式：显示操作按钮 */}
+        {mode === 'edit' && (
+          <>
+            {/* 完成学习按钮 - 保存快照并清空Store */}
+            <Button
+              variant="default"
+              onClick={completeAndSaveCase}
+              disabled={isSaving}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {isSaving ? '正在保存...' : '完成学习'}
+            </Button>
 
-        <Button variant="outline" onClick={startNewCase}>
-          学习下一个案例
-        </Button>
+            <Button variant="outline" onClick={startNewCase}>
+              学习下一个案例
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );

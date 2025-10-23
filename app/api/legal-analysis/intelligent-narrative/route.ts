@@ -14,6 +14,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { caseNarrativeService } from '@/src/domains/legal-analysis/services/CaseNarrativeService';
 import type { NarrativeGenerationRequest } from '@/src/domains/legal-analysis/services/CaseNarrativeService';
+import { teachingSessionRepository } from '@/src/domains/teaching-acts/repositories/PostgreSQLTeachingSessionRepository';
+import { jwtUtils } from '@/lib/auth/jwt';
 
 /**
  * POST /api/legal-analysis/intelligent-narrative - 智能案情叙事生成处理器
@@ -61,17 +63,27 @@ import type { NarrativeGenerationRequest } from '@/src/domains/legal-analysis/se
 export async function POST(request: NextRequest) {
   try {
     console.log('🚀 [智能叙事API] 收到POST请求');
-    console.log('🚀 [智能叙事API] 请求路径:', request.url);
-    console.log('🚀 [智能叙事API] 请求头:', JSON.stringify(request.headers));
 
     // Step 1: 解析请求数据
     const body = await request.json();
     console.log('🚀 [智能叙事API] 请求体关键信息:', {
       hasCaseData: !!body.caseData,
+      hasSessionId: !!body.sessionId,
       narrativeStyle: body.narrativeStyle,
       depth: body.depth,
       caseNumber: body.caseData?.basicInfo?.caseNumber
     });
+
+    // Step 2: 获取当前用户（从JWT）
+    const currentUser = await jwtUtils.getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json(
+        { error: '未授权访问' },
+        { status: 401 }
+      );
+    }
+
+    const { sessionId, forceRegenerate } = body;
 
     // 🔍 详细调试：检查接收到的完整数据
     console.log('🔍 [智能叙事API] 接收到的完整caseData:', {
@@ -82,7 +94,8 @@ export async function POST(request: NextRequest) {
       evidenceDetail: body.caseData?.threeElements?.evidence,
       reasoningDetail: body.caseData?.threeElements?.reasoning,
       timeline: body.caseData?.timeline,
-      metadata: body.caseData?.metadata
+      metadata: body.caseData?.metadata,
+      forceRegenerate: !!forceRegenerate
     });
 
     const {
@@ -91,15 +104,35 @@ export async function POST(request: NextRequest) {
       focusAreas = ['timeline', 'parties', 'disputes']
     } = body;
 
-    // Step 2: 输入验证
+    // Step 3: 输入验证
     if (!caseData) {
       return NextResponse.json(
-        {
-          error: '缺少案例数据',
-          details: 'caseData字段是必需的'
-        },
+        { error: '缺少案例数据', details: 'caseData字段是必需的' },
         { status: 400 }
       );
+    }
+
+    // 智能缓存策略：只有在非强制重新生成时才使用缓存
+    if (sessionId && !forceRegenerate) {
+      const existingSession = await teachingSessionRepository.findById(sessionId, currentUser.userId);
+      if (existingSession?.act2?.narrative) {
+        console.log('✅ [智能叙事API] 从数据库读取已有叙事（缓存模式）');
+        return NextResponse.json({
+          success: true,
+          chapters: existingSession.act2.narrative.chapters || existingSession.act2.narrative,
+          metadata: {
+            generatedAt: existingSession.act2.narrative.generatedAt || existingSession.act2CompletedAt || new Date().toISOString(),
+            processingTime: 0,
+            confidence: 0.9,
+            model: 'cached',
+            fromCache: true
+          }
+        });
+      }
+    }
+
+    if (forceRegenerate) {
+      console.log('🔄 [智能叙事API] 强制重新生成模式，跳过缓存');
     }
 
     if (!caseData.threeElements?.facts?.timeline?.length) {
@@ -131,16 +164,63 @@ export async function POST(request: NextRequest) {
       depth: depth
     });
 
-    // Step 4: 调用智能叙事服务
+    // Step 5: 调用智能叙事服务生成新叙事
+    console.log('🎨 [智能叙事API] 生成新的AI叙事...');
     const result = await caseNarrativeService.generateIntelligentNarrative(narrativeRequest);
 
-    // Step 5: 返回生成结果
     console.log('✅ 智能叙事生成成功:', {
       chaptersCount: result.chapters.length,
       confidence: result.metadata.confidence,
       processingTime: result.metadata.processingTime
     });
 
+    // Step 6: 保存到数据库（如果提供了sessionId）
+    if (sessionId) {
+      try {
+        const existingSession = await teachingSessionRepository.findById(sessionId, currentUser.userId);
+        if (existingSession && existingSession.act1) {
+          console.log('💾 [智能叙事API] 保存叙事到数据库...');
+
+          // 构建完整的快照数据
+          const snapshot = {
+            schemaVersion: 1 as const,
+            version: '1.0.0' as const,
+            sessionState: existingSession.sessionState === 'act1' ? 'act2' as const : existingSession.sessionState,
+            caseTitle: existingSession.caseTitle,
+            caseNumber: existingSession.caseNumber || undefined,
+            courtName: existingSession.courtName || undefined,
+            act1: existingSession.act1,
+            act2: {
+              ...existingSession.act2,
+              narrative: {
+                chapters: result.chapters.map((ch: any, index: number) => ({
+                  ...ch,
+                  order: ch.order ?? index
+                })),
+                generatedAt: result.metadata.generatedAt,
+                fallbackUsed: result.metadata.fallbackUsed,
+                errorMessage: result.metadata.errorMessage
+              },
+              completedAt: existingSession.act2?.completedAt || new Date().toISOString()
+            },
+            act3: existingSession.act3,
+            act4: existingSession.act4,
+            createdAt: existingSession.createdAt,
+            updatedAt: new Date().toISOString(),
+            lastSavedAt: new Date().toISOString(),
+            saveType: 'auto' as const
+          };
+
+          await teachingSessionRepository.saveSnapshot(currentUser.userId, snapshot, sessionId);
+          console.log('✅ [智能叙事API] 叙事已保存到数据库');
+        }
+      } catch (saveError) {
+        console.error('⚠️ [智能叙事API] 保存到数据库失败，但叙事生成成功:', saveError);
+        // 不影响返回结果，只记录错误
+      }
+    }
+
+    // Step 7: 返回生成结果
     return NextResponse.json({
       success: true,
       chapters: result.chapters,

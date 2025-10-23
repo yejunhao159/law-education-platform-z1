@@ -331,43 +331,281 @@ export class SnapshotConverterV2 {
   private static buildAct1Snapshot(storeState: StoreState): Act1Snapshot {
     const extractedData = storeState.uploadData?.extractedElements as any;
     const data = extractedData?.data || extractedData || {};
+
+    // 🔧 修复：转换metadata，确保confidence在0-1范围，extractionMethod使用正确枚举
+    const rawMetadata = data.metadata || {};
     const metadata = {
-      extractedAt: new Date().toISOString(),
-      confidence: storeState.uploadData?.confidence ?? data.metadata?.confidence ?? 0,
-      processingTime: 0,
-      aiModel: 'unknown',
-      ...(data.metadata || {}),
+      extractedAt: rawMetadata.extractedAt || new Date().toISOString(),
+      // 确保confidence在0-1范围
+      confidence: this.normalizeConfidence(
+        storeState.uploadData?.confidence ?? rawMetadata.confidence ?? 0
+      ),
+      processingTime: rawMetadata.processingTime || 0,
+      aiModel: rawMetadata.aiModel || 'unknown',
+      // 映射extractionMethod到Schema枚举值
+      extractionMethod: this.mapExtractionMethod(rawMetadata.extractionMethod),
+      ...(rawMetadata.originalFileName && { originalFileName: rawMetadata.originalFileName }),
+      ...(rawMetadata.uploadedAt && { uploadedAt: rawMetadata.uploadedAt }),
     };
 
-    if (data.originalFileName && !metadata.originalFileName) {
-      metadata.originalFileName = data.originalFileName;
-    }
-    if (data.uploadedAt && !metadata.uploadedAt) {
-      metadata.uploadedAt = data.uploadedAt;
-    }
+    // 🔧 修复：转换basicInfo.parties从对象数组到字符串数组（Schema要求）
+    // 注意：不能直接修改只读对象，必须创建新对象
+    const convertPartyArrayToStrings = (parties: any[] | undefined, partyType: string) => {
+      console.log(`🔍 [SnapshotConverter] 转换${partyType}:`, {
+        isArray: Array.isArray(parties),
+        type: typeof parties,
+        length: Array.isArray(parties) ? parties.length : 0,
+        firstElement: Array.isArray(parties) ? parties[0] : undefined,
+        firstElementType: Array.isArray(parties) && parties[0] ? typeof parties[0] : undefined,
+        firstElementIsArray: Array.isArray(parties) && Array.isArray(parties[0])
+      });
+
+      // 🔍 详细打印第一个元素的完整结构
+      if (Array.isArray(parties) && parties[0]) {
+        console.log(`🔍 [SnapshotConverter] ${partyType}[0]完整内容:`, JSON.stringify(parties[0], null, 2));
+      }
+
+      // 处理空值
+      if (!parties) return [];
+
+      // 如果不是数组，尝试转为数组
+      if (!Array.isArray(parties)) {
+        console.warn(`⚠️ [SnapshotConverter] ${partyType}不是数组:`, parties);
+        return [];
+      }
+
+      // 简单粗暴的转换：强制展平并提取字符串
+      const result: string[] = [];
+
+      for (const p of parties) {
+        console.log(`🔧 [SnapshotConverter] 处理元素:`, {
+          type: typeof p,
+          isArray: Array.isArray(p),
+          value: p
+        });
+
+        // 情况1：元素是数组（嵌套数组）
+        if (Array.isArray(p)) {
+          console.warn(`⚠️ [SnapshotConverter] 检测到嵌套数组，展平处理`);
+          for (const item of p) {
+            if (typeof item === 'string') {
+              result.push(item);
+            } else if (item && typeof item === 'object') {
+              result.push(item.name || '未知');
+            }
+          }
+        }
+        // 情况2：元素是字符串
+        else if (typeof p === 'string') {
+          result.push(p);
+        }
+        // 情况3：元素是对象
+        else if (p && typeof p === 'object') {
+          const nameValue = p.name;
+
+          // 🔧 关键修复：name属性可能也是数组！
+          if (Array.isArray(nameValue)) {
+            console.warn(`⚠️ [SnapshotConverter] name属性是数组，递归处理:`, nameValue);
+            // 递归处理name数组
+            for (const nameItem of nameValue) {
+              if (typeof nameItem === 'string') {
+                result.push(nameItem);
+              } else if (nameItem && typeof nameItem === 'object') {
+                result.push(nameItem.name || '未知');
+              }
+            }
+          }
+          // name是字符串，直接使用
+          else if (typeof nameValue === 'string') {
+            result.push(nameValue);
+          }
+          // name不存在或其他情况
+          else {
+            result.push('未知');
+          }
+        }
+      }
+
+      console.log(`✅ [SnapshotConverter] ${partyType}转换结果:`, result);
+      console.log(`✅ [SnapshotConverter] ${partyType}转换结果类型检查:`, {
+        isArray: Array.isArray(result),
+        length: result.length,
+        firstElement: result[0],
+        firstElementType: typeof result[0]
+      });
+      return result;
+    };
+
+    const rawBasicInfo = data.basicInfo || {};
+
+    console.log('🔍 [SnapshotConverter] 原始basicInfo.parties:', rawBasicInfo.parties);
+
+    const basicInfo = {
+      ...rawBasicInfo,  // 展开所有原有属性
+      parties: rawBasicInfo.parties ? {
+        plaintiff: convertPartyArrayToStrings(rawBasicInfo.parties.plaintiff, '原告'),
+        defendant: convertPartyArrayToStrings(rawBasicInfo.parties.defendant, '被告'),
+        thirdParty: convertPartyArrayToStrings(rawBasicInfo.parties.thirdParty, '第三人'),
+      } : { plaintiff: [], defendant: [], thirdParty: [] }  // 默认空数组
+    };
+
+    console.log('✅ [SnapshotConverter] 转换后的basicInfo.parties:', basicInfo.parties);
+
+    // 🔧 修复：从threeElements中提取facts/evidence/reasoning（LegalCase结构）
+    const threeElements = data.threeElements || {};
+
+    // 🔧 证据数据转换（处理中文类型）
+    const rawEvidence = threeElements.evidence || data.evidence || { summary: '' };
+    const normalizedEvidence = this.normalizeEvidenceData(rawEvidence);
+
+    // 🔧 提取facts数据（完整保留timeline等所有字段）
+    const facts = threeElements.facts || data.facts || { summary: '' };
+    console.log('📊 [SnapshotConverter] Facts数据提取:', {
+      hasFacts: !!facts,
+      hasTimeline: !!(facts.timeline),
+      timelineLength: facts.timeline?.length || 0,
+      hasKeyFacts: !!(facts.keyFacts),
+      keyFactsCount: facts.keyFacts?.length || 0,
+    });
 
     return {
-      basicInfo: data.basicInfo || {},
-      facts: data.facts || { summary: '' },
-      evidence: data.evidence || { summary: '' },
-      reasoning: data.reasoning || { summary: '' },
+      basicInfo,
+      facts,
+      evidence: normalizedEvidence,
+      reasoning: threeElements.reasoning || data.reasoning || { summary: '' },
       metadata,
       originalFileName: data.originalFileName,
       uploadedAt: data.uploadedAt || new Date().toISOString(),
     };
   }
 
+  /**
+   * 归一化confidence到0-1范围
+   */
+  private static normalizeConfidence(confidence: number): number {
+    if (confidence > 1 && confidence <= 100) {
+      return confidence / 100;  // 0-100范围转为0-1
+    }
+    return Math.max(0, Math.min(1, confidence));  // 确保在0-1范围内
+  }
+
+  /**
+   * 规范化证据数据（处理中文类型转英文枚举）
+   */
+  private static normalizeEvidenceData(evidence: any): any {
+    if (!evidence || typeof evidence !== 'object') {
+      return { summary: '' };
+    }
+
+    // 证据类型映射：中文 → 英文枚举
+    const typeMapping: Record<string, 'documentary' | 'testimonial' | 'physical' | 'expert'> = {
+      '书证': 'documentary',
+      '物证': 'physical',
+      '证人证言': 'testimonial',
+      '当事人陈述': 'testimonial',
+      '鉴定意见': 'expert',
+      '勘验笔录': 'physical',
+      '视听资料': 'documentary',
+      '电子数据': 'documentary',
+    };
+
+    // 🔧 创建新对象副本（避免修改冻结对象）
+    const normalizedEvidence = { ...evidence };
+
+    // 处理evidence.items数组
+    if (normalizedEvidence.items && Array.isArray(normalizedEvidence.items)) {
+      normalizedEvidence.items = normalizedEvidence.items.map((item: any) => {
+        const normalizedItem = { ...item };
+
+        // 转换中文类型到英文
+        if (typeof item.type === 'string') {
+          normalizedItem.type = typeMapping[item.type] || 'documentary';
+        }
+
+        // 确保description字段存在
+        if (!normalizedItem.description) {
+          normalizedItem.description = normalizedItem.source || '证据描述';
+        }
+
+        return normalizedItem;
+      });
+    }
+
+    return normalizedEvidence;
+  }
+
+  /**
+   * 映射extractionMethod到Schema枚举值
+   */
+  private static mapExtractionMethod(method: string | undefined): 'ai' | 'rule' | 'hybrid' | 'manual' {
+    const methodStr = (method || '').toLowerCase();
+    if (methodStr.includes('pure-ai') || methodStr === 'ai') return 'ai';
+    if (methodStr.includes('rule-enhanced') || methodStr.includes('rule')) return 'rule';
+    if (methodStr.includes('hybrid')) return 'hybrid';
+    if (methodStr.includes('manual')) return 'manual';
+    return 'ai';  // 默认值
+  }
+
   private static buildAct2Snapshot(storeState: StoreState): Act2Snapshot | undefined {
     const result = storeState.analysisData?.result;
     if (!result) return undefined;
 
+    // 🔧 修复：转换narrative.chapters，添加order字段
+    const narrative = result.narrative ? {
+      ...result.narrative,
+      chapters: result.narrative.chapters?.map((chapter: any, index: number) => ({
+        ...chapter,
+        order: chapter.order ?? index + 1,  // 如果没有order，用索引+1
+      })) || []
+    } : undefined;
+
+    // 🔧 修复：转换timelineAnalysis，保留所有字段
+    const timelineAnalysis = result.timelineAnalysis ? {
+      // ✅ 保留所有AI生成的字段（legalRisks, summary, confidence等）
+      ...result.timelineAnalysis,
+
+      // 🔧 只转换turningPoints数组的格式，保持其他字段不变
+      turningPoints: result.timelineAnalysis.turningPoints?.map((tp: any, index: number) => ({
+        id: tp.id || `tp-${index + 1}`,  // 添加id
+        date: tp.date || tp.timestamp || '',  // 添加date
+        event: tp.event || tp.description || tp.title || '',  // 添加event
+        description: tp.description || tp.event || tp.detail,
+        impact: this.mapImpactLevel(tp.impact || tp.significance || tp.importance),  // 映射impact枚举
+        perspective: tp.perspective,
+      })) || [],
+
+      // 🔧 兼容旧版本字段名
+      keyTurningPoints: result.timelineAnalysis.keyTurningPoints?.map((tp: any, index: number) => ({
+        id: tp.id || `tp-${index + 1}`,
+        date: tp.date || tp.timestamp || '',
+        event: tp.event || tp.description || tp.title || '',
+        description: tp.description || tp.event || tp.detail,
+        impact: this.mapImpactLevel(tp.impact || tp.significance || tp.importance),
+        perspective: tp.perspective,
+      })) || undefined
+    } : undefined;
+
     return {
-      narrative: result.narrative || undefined,
-      timelineAnalysis: result.timelineAnalysis || undefined,
+      narrative,
+      timelineAnalysis,
       evidenceQuestions: result.evidenceQuestions || undefined,
       claimAnalysis: result.claimAnalysis || undefined,
       completedAt: new Date().toISOString(),
     };
+  }
+
+  /**
+   * 映射impact等级到Schema枚举值
+   */
+  private static mapImpactLevel(impact: string): 'major' | 'moderate' | 'minor' {
+    const lowerImpact = (impact || '').toLowerCase();
+    if (lowerImpact.includes('high') || lowerImpact.includes('critical') || lowerImpact === 'major') {
+      return 'major';
+    } else if (lowerImpact.includes('medium') || lowerImpact === 'moderate') {
+      return 'moderate';
+    } else {
+      return 'minor';
+    }
   }
 
   private static buildAct3Snapshot(storeState: StoreState): Act3Snapshot | undefined {
@@ -392,16 +630,39 @@ export class SnapshotConverterV2 {
     const report = storeState.summaryData?.caseLearningReport;
     if (!report) return undefined;
 
-    return {
-      learningReport: report as any,
-      pptUrl,
-      pptMetadata: pptUrl
-        ? {
-            generatedAt: new Date().toISOString(),
-          }
-        : undefined,
-      completedAt: new Date().toISOString(),
-    };
+    // 🔧 将CaseLearningReport转换为LearningReportSnapshot格式
+    try {
+      const learningReport = {
+        summary: report.caseOverview?.oneLineSummary || report.caseOverview?.title || '',
+        keyLearnings: [
+          ...(report.learningPoints?.factualInsights || []),
+          ...(report.learningPoints?.legalPrinciples || []),
+          ...(report.learningPoints?.evidenceHandling || [])
+        ],
+        skillsAssessed: (report.socraticHighlights?.keyQuestions || []).map((question: string, index: number) => ({
+          skill: question,
+          level: 'intermediate' as const,
+          evidence: [report.socraticHighlights?.studentInsights?.[index] || '完成苏格拉底对话']
+        })),
+        recommendations: report.practicalTakeaways?.cautionPoints || [],
+        nextSteps: report.practicalTakeaways?.checkList || [],
+        generatedAt: new Date().toISOString(),
+      };
+
+      return {
+        learningReport,
+        pptUrl,
+        pptMetadata: pptUrl
+          ? {
+              generatedAt: new Date().toISOString(),
+            }
+          : undefined,
+        completedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      console.error('❌ [SnapshotConverter] buildAct4Snapshot转换失败:', error);
+      return undefined; // 转换失败时返回undefined，让act4保持为空
+    }
   }
 
   // ========== 私有辅助方法：toStore ==========

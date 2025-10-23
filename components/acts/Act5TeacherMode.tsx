@@ -12,7 +12,11 @@ import { Info } from 'lucide-react'
 import TeacherSocratic from '@/components/socratic/TeacherSocratic'
 import { useCurrentCase } from '@/src/domains/stores'
 
-export default function Act5TeacherMode() {
+interface Act5TeacherModeProps {
+  mode?: 'edit' | 'review'  // 模式：编辑模式 | 只读模式
+}
+
+export default function Act5TeacherMode({ mode = 'edit' }: Act5TeacherModeProps) {
   const caseData = useCurrentCase()
 
   // 提供示例数据作为fallback
@@ -147,7 +151,7 @@ export default function Act5TeacherMode() {
       </Alert>
 
       {/* 主界面 - 传递完整的案件数据 */}
-      <TeacherSocratic caseData={activeCaseData} />
+      <TeacherSocratic caseData={activeCaseData} mode={mode} />
     </div>
   )
 }

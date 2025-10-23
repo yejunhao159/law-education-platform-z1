@@ -235,12 +235,16 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
   }
 }
 
-export function ThreeElementsExtractor() {
+interface ThreeElementsExtractorProps {
+  mode?: 'edit' | 'review'  // 模式：编辑模式（可上传）| 只读模式（仅查看）
+}
+
+export function ThreeElementsExtractor({ mode: pageMode = 'edit' }: ThreeElementsExtractorProps) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [progress, setProgress] = useState(0)
   const [extractedData, setExtractedData] = useState<ExtractedElements | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [mode, setMode] = useState<'preview' | 'edit'>('preview')
+  const [mode, setMode] = useState<'preview' | 'edit'>('preview')  // 内容预览/编辑模式
   const [parseProgress, setParseProgress] = useState<ParseProgress | null>(null)
   const [isTimelineExpanded, setIsTimelineExpanded] = useState(false)
   const [isEvidenceExpanded, setIsEvidenceExpanded] = useState(false)
@@ -309,9 +313,72 @@ export function ThreeElementsExtractor() {
 
       if (result.success) {
         setExtractedData(result.data)
-        // 转换并保存到全局store
-        const legalCase = convertToLegalCase(result.data)
-        setCaseData(legalCase)
+
+        // 🆕 DB-First: 立即保存到PostgreSQL
+        console.log('💾 [DB-First] 提取成功，立即保存到数据库...');
+        setProgress(75);
+
+        try {
+          // 转换为LegalCase格式
+          const legalCase = convertToLegalCase(result.data);
+
+          // 转换为数据库快照格式
+          const snapshot = {
+            version: '1.0.0',
+            schemaVersion: 1,
+            sessionState: 'act1' as const,
+            caseTitle: legalCase.basicInfo.caseNumber || '未命名案例',
+            caseNumber: legalCase.basicInfo.caseNumber,
+            courtName: legalCase.basicInfo.court,
+            act1: {
+              basicInfo: legalCase.basicInfo,
+              facts: legalCase.threeElements.facts,
+              evidence: legalCase.threeElements.evidence,
+              reasoning: legalCase.threeElements.reasoning,
+              metadata: legalCase.metadata,
+              uploadedAt: new Date().toISOString(),
+            },
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            lastSavedAt: new Date().toISOString(),
+            saveType: 'auto' as const,
+          };
+
+          // 保存到数据库
+          const saveResponse = await fetch('/api/teaching-sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ snapshot }),
+          });
+
+          if (!saveResponse.ok) {
+            console.warn('⚠️ [DB-First] 数据库保存失败，降级到Store模式');
+            // 降级：直接保存到Store（兜底）
+            setCaseData(legalCase);
+          } else {
+            const saveResult = await saveResponse.json();
+            console.log('✅ [DB-First] 数据库保存成功:', {
+              sessionId: saveResult.data.sessionId,
+              caseTitle: saveResult.data.caseTitle
+            });
+
+            // 从DB返回的数据设置到Store（Store只是UI缓存）
+            setCaseData(legalCase);
+
+            // 保存sessionId到teachingStore
+            useTeachingStore.getState().setSessionMetadata({
+              sessionId: saveResult.data.sessionId,
+              sessionState: 'act1',
+            });
+
+            setProgress(95);
+          }
+        } catch (saveError) {
+          console.error('❌ [DB-First] 保存失败:', saveError);
+          // 降级：至少保存到Store
+          const legalCase = convertToLegalCase(result.data);
+          setCaseData(legalCase);
+        }
       } else {
         throw new Error(result.error || '提取失败')
       }
@@ -485,26 +552,41 @@ export function ThreeElementsExtractor() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <SimpleFileUploader onFileSelect={handleFileSelect} />
-          
-          {/* 演示数据按钮 */}
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <div className="flex items-center justify-center gap-4">
-              <div className="text-center">
-                <p className="text-sm text-gray-600 mb-2">或者直接体验演示数据</p>
-                <Button 
-                  variant="outline" 
-                  onClick={handleLoadDemoData}
-                  className="gap-2"
-                  disabled={isProcessing}
-                >
-                  <FileText className="w-4 h-4" />
-                  加载演示案例
-                </Button>
-                <p className="text-xs text-gray-500 mt-1">买卖合同纠纷案例</p>
+          {/* 只读模式提示 */}
+          {pageMode === 'review' && (
+            <Alert className="mb-4 bg-blue-50 border-blue-200">
+              <Eye className="w-4 h-4 text-blue-600" />
+              <AlertDescription className="text-blue-800">
+                当前为复习模式，仅可查看已上传的案例数据，无法上传新文件
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* 编辑模式：显示文件上传器 */}
+          {pageMode === 'edit' && (
+            <>
+              <SimpleFileUploader onFileSelect={handleFileSelect} />
+
+              {/* 演示数据按钮 */}
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="flex items-center justify-center gap-4">
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600 mb-2">或者直接体验演示数据</p>
+                    <Button
+                      variant="outline"
+                      onClick={handleLoadDemoData}
+                      className="gap-2"
+                      disabled={isProcessing}
+                    >
+                      <FileText className="w-4 h-4" />
+                      加载演示案例
+                    </Button>
+                    <p className="text-xs text-gray-500 mt-1">买卖合同纠纷案例</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          )}
           
           {isProcessing && (
             <div className="mt-4 space-y-2">

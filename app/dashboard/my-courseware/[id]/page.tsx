@@ -106,7 +106,7 @@ export default function SessionDetailPage({ params }: Props) {
       setLoading(true)
       setError(null)
 
-      console.log('🔄 [SessionDetail] 开始加载教学会话:', sessionId)
+      console.log('📚 [复习模式] 加载历史案例:', sessionId)
 
       // 1. 从API获取快照数据
       const response = await fetch(`/api/teaching-sessions/${sessionId}`)
@@ -118,22 +118,8 @@ export default function SessionDetailPage({ params }: Props) {
 
       const session = result.data
 
-      console.log('✅ [SessionDetail] 快照数据获取成功:', {
-        id: session.id,
-        caseTitle: session.caseTitle,
-        hasAct1: !!session.act1_upload,
-        hasAct2: !!session.act2_analysis,
-        hasAct4: !!session.act4_summary,
-      })
-
       // 2. 使用SnapshotConverter转换数据
       const storeData = SnapshotConverter.toStore(session)
-
-      console.log('🔄 [SessionDetail] 转换Store数据完成:', {
-        uploadData存在: !!storeData.uploadData?.extractedElements,
-        analysisData存在: !!storeData.analysisData?.result,
-        caseLearningReport存在: !!storeData.summaryData?.caseLearningReport,
-      })
 
       // 3. 恢复到Zustand Store
       // 先清空当前状态
@@ -160,23 +146,15 @@ export default function SessionDetailPage({ params }: Props) {
           session.id
         )
         setCurrentCase(legalCase)
-
-        console.log('✅ [SessionDetail] currentCase已恢复:', {
-          id: legalCase.id,
-          title: legalCase.basicInfo?.caseNumber || session.caseTitle
-        })
       }
 
       if (storeData.analysisData?.result) {
         setAnalysisResult(storeData.analysisData.result)
       }
 
-      // 🆕 恢复AI故事章节到store
+      // 恢复AI故事章节到store
       if (storeData.storyChapters && storeData.storyChapters.length > 0) {
         useTeachingStore.getState().setStoryChapters(storeData.storyChapters)
-        console.log('✅ [SessionDetail] storyChapters已恢复:', {
-          章节数量: storeData.storyChapters.length,
-        })
       }
 
       if (storeData.summaryData?.caseLearningReport) {
@@ -186,15 +164,15 @@ export default function SessionDetailPage({ params }: Props) {
       // 4. 设置当前幕为第一幕（从头开始查看）
       setCurrentAct('upload')
 
-      console.log('✅ [SessionDetail] Store恢复完成，准备跳转到四幕界面')
+      console.log('✅ [复习模式] 数据恢复完成，跳转到只读界面')
 
-      // 5. 跳转到四幕教学界面
+      // 5. 跳转到四幕教学界面（只读模式）
       setTimeout(() => {
-        router.push('/dashboard/judgment')
+        router.push(`/dashboard/judgment?mode=review&sessionId=${sessionId}`)
       }, 500)
 
     } catch (err) {
-      console.error('❌ [SessionDetail] 加载教学会话失败:', err)
+      console.error('❌ [复习模式] 加载失败:', err)
       setError(err instanceof Error ? err.message : '加载失败')
       setLoading(false)
     }

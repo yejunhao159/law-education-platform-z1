@@ -63,6 +63,9 @@ const ActErrorFallback = ({ actName, onRetry }: { actName: string; onRetry: () =
 
 // ========== 接口定义 ==========
 export interface MainPagePresentationProps {
+  // 模式参数
+  mode?: 'edit' | 'review';
+
   // 基础数据
   fourActs: Array<{
     id: ActType;
@@ -76,11 +79,9 @@ export interface MainPagePresentationProps {
     name: string;
     description: string;
     progress: number;
-  };
+  } | undefined;
   currentCase: LegalCase | null;
-  extractedElements: any;
   overallProgress: number;
-  analysisComplete: boolean;
 
   // 状态检查
   isActCompleted: (actIndex: number) => boolean;
@@ -95,13 +96,12 @@ export interface MainPagePresentationProps {
 
 // ========== 主页面展示组件 ==========
 export const MainPagePresentation: React.FC<MainPagePresentationProps> = ({
+  mode = 'edit',  // 默认编辑模式
   fourActs,
   currentActIndex,
   currentActData,
   currentCase,
-  extractedElements,
   overallProgress,
-  analysisComplete,
   isActCompleted,
   canNavigateToNextAct,
   onActComplete,
@@ -112,6 +112,14 @@ export const MainPagePresentation: React.FC<MainPagePresentationProps> = ({
   // ========== 渲染当前幕内容 ==========
   const renderActContent = () => {
     const act = currentActData;
+
+    if (!act) {
+      return (
+        <div className="text-center p-8">
+          <p className="text-gray-500">未找到当前教学阶段</p>
+        </div>
+      );
+    }
 
     return (
       <ErrorBoundary
@@ -128,7 +136,7 @@ export const MainPagePresentation: React.FC<MainPagePresentationProps> = ({
                       <p className="text-gray-600 text-lg">上传判决书文件，AI将自动提取核心要素并开启教学流程</p>
                     </div>
                     <div className="max-w-5xl mx-auto">
-                      <ThreeElementsExtractor />
+                      <ThreeElementsExtractor mode={mode} />
                     </div>
                     {currentCase && (
                       <div className="text-center mt-6">
@@ -142,12 +150,12 @@ export const MainPagePresentation: React.FC<MainPagePresentationProps> = ({
                 );
 
               case 'analysis':
-                return <DeepAnalysis onComplete={onActComplete} />;
+                return <DeepAnalysis onComplete={onActComplete} mode={mode} />;
 
               case 'socratic':
                 return (
                   <div className="space-y-6">
-                    <Act5TeacherMode />
+                    <Act5TeacherMode mode={mode} />
                     <div className="text-center">
                       <Button size="lg" onClick={onActComplete}>
                         进入总结阶段
@@ -158,7 +166,7 @@ export const MainPagePresentation: React.FC<MainPagePresentationProps> = ({
                 );
 
               case 'summary':
-                return <ActFour />;
+                return <ActFour mode={mode} />;
 
               default:
                 return (
@@ -269,6 +277,23 @@ export const MainPagePresentation: React.FC<MainPagePresentationProps> = ({
         title="法学AI教学系统"
         subtitle="四步深度学习法 · 基于苏力教授教学理念"
       />
+
+      {/* 模式提示 Banner */}
+      {mode === 'review' && (
+        <div className="bg-blue-50 border-b border-blue-200">
+          <div className="max-w-7xl mx-auto px-8 py-3 flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">📚</span>
+              <span className="font-semibold text-blue-700">复习模式</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm text-blue-600">
+                这是历史案例，只读展示，AI分析功能已禁用，数据不会保存到数据库
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {renderNavigationBar()}
 

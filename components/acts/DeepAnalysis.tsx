@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useCurrentCase } from '@/src/domains/stores'
+import { useCurrentCase, useTeachingStore } from '@/src/domains/stores'
 import {
   CheckCircle,
   ChevronRight,
@@ -71,9 +71,10 @@ import { adaptCaseData, validateCaseData } from '@/src/utils/case-data-adapter'
 
 interface DeepAnalysisProps {
   onComplete?: () => void
+  mode?: 'edit' | 'review'  // 模式：编辑模式 | 只读模式
 }
 
-export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
+export default function DeepAnalysis({ onComplete, mode = 'edit' }: DeepAnalysisProps) {
   const caseData = useCurrentCase()
   const adaptedCaseData = useMemo(() => {
     if (!caseData) {
@@ -93,6 +94,9 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
   const [validTimelineEvents, setValidTimelineEvents] = useState<EnhancedTimelineEvent[]>([])
   const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [selectedEventForAnalysis, setSelectedEventForAnalysis] = useState<EnhancedTimelineEvent | null>(null)
+
+  // 🆕 获取sessionId
+  const sessionId = useTeachingStore((state) => state.sessionId)
 
   // 类型安全的证据计数函数 - 兼容多种数据结构
   const getEvidenceCount = (event: EnhancedTimelineEvent): number => {
@@ -254,6 +258,24 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
   // 批量请求权和证据分析已移除，改为按需加载
   const [analysisProgress, setAnalysisProgress] = useState<string>('准备开始分析...')
 
+  // 🆕 重新分析处理函数
+  const handleRegenerateAnalysis = useCallback(() => {
+    if (isAnalyzing) return; // 防止重复点击
+
+    console.log('🔄 [DeepAnalysis] 用户触发强制重新分析');
+
+    // 清空当前分析结果
+    setAnalysisResult(null);
+    setDisputeAnalysis(null);
+    setAnalysisComplete(false);
+
+    // 触发强制重新生成
+    const currentCaseData = latestCaseDataRef.current;
+    if (currentCaseData) {
+      void performTimelineAnalysis(currentCaseData, true); // forceRegenerate=true
+    }
+  }, [isAnalyzing])
+
 
   // 自动开始AI分析
   const latestCaseDataRef = useRef<typeof effectiveCaseData>(effectiveCaseData)
@@ -273,6 +295,11 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
   }, [effectiveCaseData])
 
   useEffect(() => {
+    // 只读模式：不执行自动AI分析
+    if (mode === 'review') {
+      return
+    }
+
     if (!timelineSignature) {
       return
     }
@@ -283,26 +310,20 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
     if (!analysisResult && !isAnalyzing) {
       void performTimelineAnalysis(currentCaseData)
     }
-  }, [timelineSignature, analysisResult, isAnalyzing])
+  }, [timelineSignature, analysisResult, isAnalyzing, mode])
 
-  const performTimelineAnalysis = async (sourceCaseData: typeof effectiveCaseData) => {
+  const performTimelineAnalysis = async (sourceCaseData: typeof effectiveCaseData, forceRegenerate: boolean = false) => {
     if (!sourceCaseData?.threeElements?.facts?.timeline) return
 
-    // 🆕 Step 3: 优先使用已保存的分析结果
+    // 🔧 修复：区分复习模式和编辑模式的缓存策略
     const { useTeachingStore } = await import('@/src/domains/teaching-acts/stores/useTeachingStore');
     const savedAnalysis = useTeachingStore.getState().analysisData.result;
 
-    if (savedAnalysis?.timelineAnalysis) {
-      console.log('📂 [DeepAnalysis] 检测到已保存的分析结果，直接恢复:', {
-        有时间线分析: !!savedAnalysis.timelineAnalysis,
-        有故事章节: !!savedAnalysis.narrative,
-        章节数量: savedAnalysis.narrative?.chapters?.length || 0,
-      });
-
-      // 恢复到本地状态
+    // 📖 复习模式：直接使用store中的数据，不调用API
+    if (mode === 'review' && savedAnalysis?.timelineAnalysis) {
+      console.log('📂 [复习模式] 使用已保存的分析结果，不调用API');
       setAnalysisResult(savedAnalysis.timelineAnalysis as any);
 
-      // 恢复故事章节到store（如果有）
       if (savedAnalysis.narrative?.chapters) {
         useTeachingStore.getState().setStoryChapters(savedAnalysis.narrative.chapters);
       }
@@ -310,10 +331,11 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
       setIsAnalyzing(false);
       setAnalysisComplete(true);
       setAnalysisProgress('✅ 已从历史记录恢复分析结果');
-
-      console.log('✅ [DeepAnalysis] 分析结果恢复完成，跳过API调用');
       return;
     }
+
+    // ✏️ 编辑模式：总是调用API，让API决定是否使用数据库缓存
+    // 删除了旧的store强制缓存逻辑，解决用户无法重新生成的问题
 
     setIsAnalyzing(true)
     setAnalysisError(null)
@@ -370,6 +392,8 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            sessionId, // 🆕 传入sessionId
+            forceRegenerate, // 🆕 强制重新生成标志
             events: validEvents,
             analysisType: 'comprehensive',
             includeAI: true,
@@ -691,10 +715,25 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
               <span>{analysisProgress}</span>
             </div>
           )}
-          {analysisResult && (
-            <div className="ml-auto flex items-center gap-2 text-sm text-green-600">
-              <Brain className="w-4 h-4" />
-              <span>AI增强分析已完成</span>
+          {analysisResult && !isAnalyzing && (
+            <div className="ml-auto flex items-center gap-2">
+              <div className="flex items-center gap-2 text-sm text-green-600">
+                <Brain className="w-4 h-4" />
+                <span>AI增强分析已完成</span>
+              </div>
+              {/* 编辑模式：显示重新分析按钮 */}
+              {mode === 'edit' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRegenerateAnalysis}
+                  className="ml-2"
+                  disabled={isAnalyzing}
+                >
+                  <Brain className="w-3 h-3 mr-1" />
+                  重新分析
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -1011,9 +1050,15 @@ export default function DeepAnalysis({ onComplete }: DeepAnalysisProps) {
 
       {/* 完成按钮 */}
       <div className="text-center pt-4">
-        {!analysisComplete ? (
-          <Button 
-            size="lg" 
+        {mode === 'review' ? (
+          // 只读模式：不显示任何操作按钮，只显示提示
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg">
+            <CheckCircle className="w-5 h-5" />
+            <span className="font-medium">当前为复习模式，仅可查看分析结果</span>
+          </div>
+        ) : !analysisComplete ? (
+          <Button
+            size="lg"
             onClick={() => setAnalysisComplete(true)}
             className="gap-2"
           >
