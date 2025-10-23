@@ -84,8 +84,17 @@ export const ReasoningSnapshotSchema = z.object({
     law: z.string(),
     article: z.string(),
     content: z.string().optional(),
+    application: z.string().optional(),  // 添加application字段（与LegalCase一致）
   })).optional(),
-  logicChain: z.array(z.string()).optional(),
+  // 🔧 修复：logicChain应该是对象数组，不是字符串数组
+  logicChain: z.array(z.object({
+    premise: z.string(),
+    inference: z.string(),
+    conclusion: z.string(),
+    supportingEvidence: z.array(z.string()).optional(),
+  })).optional(),
+  keyArguments: z.array(z.string()).optional(),  // 添加keyArguments字段
+  judgment: z.string().optional(),  // 添加judgment字段
   strength: z.enum(['strong', 'moderate', 'weak']).optional(),
 });
 

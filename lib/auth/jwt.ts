@@ -55,8 +55,18 @@ export const jwtUtils = {
 
   /**
    * 从 Cookie 中获取并验证当前用户
+   * 游客模式下返回默认游客用户
    */
   async getCurrentUser(): Promise<JwtPayload | null> {
+    // 游客模式：返回默认游客用户
+    if (process.env.GUEST_MODE === 'true') {
+      return {
+        userId: 1, // 使用第一个用户作为游客默认用户
+        username: 'guest',
+        role: 'teacher',
+      };
+    }
+
     const token = await this.getTokenFromCookies();
     if (!token) return null;
     return this.verify(token);

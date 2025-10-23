@@ -35,6 +35,15 @@ export async function POST(request: NextRequest) {
       const message = validation.error
         ? getValidationErrorMessage(validation.error)
         : '教学会话数据不完整';
+
+      // 🔍 添加详细的验证错误日志
+      console.error('❌ [API] Snapshot验证失败:', {
+        message,
+        errorDetails: validation.error?.issues,
+        snapshotKeys: snapshot ? Object.keys(snapshot) : 'undefined',
+        snapshotVersion: (snapshot as any)?.version,
+      });
+
       return NextResponse.json(
         { error: 'Invalid Data', message },
         { status: 400 }

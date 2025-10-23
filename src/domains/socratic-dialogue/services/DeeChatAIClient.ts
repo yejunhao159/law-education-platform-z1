@@ -62,7 +62,7 @@ export class DeeChatAIClient {
       apiKey: config.apiKey,
       temperature: config.temperature,
       maxTokens: config.maxContextTokens,
-      timeout: 90000  // 90秒超时，适合流式长响应
+      timeout: 180000  // 🔧 修复：增加到180秒（3分钟），支持判决书长文本提取
     });
 
     console.log('✅ DeeChatAIClient初始化完成:', {

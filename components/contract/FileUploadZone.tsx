@@ -7,10 +7,11 @@
 
 import { useState, useRef } from 'react';
 import { Upload, File, X, Loader2 } from 'lucide-react';
+import mammoth from 'mammoth';
 
 interface FileUploadZoneProps {
   onFileSelect: (file: File) => void;
-  onExtractComplete?: (text: string) => void;
+  onExtractComplete?: (text: string, file: File) => void;  // ✅ 传递file对象
   accept?: string;
   maxSize?: number; // MB
 }
@@ -60,10 +61,11 @@ export function FileUploadZone({
     setIsExtracting(true);
     try {
       const text = await extractTextFromFile(file);
-      onExtractComplete?.(text);
+      console.log('✅ 文本提取成功，长度:', text.length);
+      onExtractComplete?.(text, file);  // ✅ 传递file对象
     } catch (err) {
       setError('文本提取失败，请重试');
-      console.error('Text extraction error:', err);
+      console.error('❌ Text extraction error:', err);
     } finally {
       setIsExtracting(false);
     }
@@ -95,16 +97,20 @@ export function FileUploadZone({
   };
 
   const extractFromWord = async (file: File): Promise<string> => {
-    // TODO: 使用 mammoth 提取Word文本
-    // 这里是示例实现
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        // 实际实现需要使用 mammoth
-        resolve('Word文本提取功能待实现，这是示例文本');
-      };
-      reader.readAsArrayBuffer(file);
-    });
+    console.log('📄 开始提取Word文档:', file.name);
+
+    const arrayBuffer = await file.arrayBuffer();
+
+    // 使用 convertToHtml 保留格式（段落、标题、列表等）
+    const result = await mammoth.convertToHtml({ arrayBuffer });
+
+    // 打印警告信息（如果有）
+    if (result.messages.length > 0) {
+      console.warn('⚠️ Mammoth提取警告:', result.messages);
+    }
+
+    console.log('✅ Word文本提取成功（HTML格式），长度:', result.value.length);
+    return result.value;
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -122,14 +128,14 @@ export function FileUploadZone({
     setIsDragging(false);
 
     const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
+    if (files.length > 0 && files[0]) {
       handleFile(files[0]);
     }
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (files && files.length > 0) {
+    if (files && files.length > 0 && files[0]) {
       handleFile(files[0]);
     }
   };

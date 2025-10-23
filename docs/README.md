@@ -50,8 +50,17 @@
 ### 🏛️ [架构文档](./架构文档/)
 系统整体架构设计和数据流转说明
 
-- [architecture-and-dataflow.md](./架构文档/architecture-and-dataflow.md) - 完整的架构和数据流图
+- [数据流架构总览-2025.md](./架构文档/数据流架构总览-2025.md) - **📌 最新**：2025版完整架构和数据流（推荐阅读）
+- [architecture-and-dataflow.md](./架构文档/architecture-and-dataflow.md) - 2025年1月版架构和数据流图（历史参考）
 - [implementation-overview.md](./架构文档/implementation-overview.md) - 技术实现概览
+- [DATABASE-QUERIES.md](./架构文档/DATABASE-QUERIES.md) - 数据库查询和架构说明
+
+### 🔍 [调研](./调研/)
+技术调研和方案设计文档
+
+- [合同知识库技术调研.md](./调研/合同知识库技术调研.md) - **📌 最新**：合同识别知识库技术方案（2025-10-23）
+- [合同知识库微服务架构设计.md](./调研/合同知识库微服务架构设计.md) - **📌 最新**：微服务架构完整设计方案（2025-10-23）
+- [合同知识库Schema设计.md](./调研/合同知识库Schema设计.md) - 四层知识库数据结构设计（2025-10-23）
 
 ### 🚀 [部署文档](./部署文档/)
 生产环境部署和运维指南
@@ -68,6 +77,7 @@
 - [contract-test-sample.md](./功能文档/合同分析/contract-test-sample.md) - 测试样例
 
 #### 🎭 [四幕教学](./功能文档/四幕教学/)
+- [SNAPSHOT-ARCHITECTURE.md](./功能文档/四幕教学/SNAPSHOT-ARCHITECTURE.md) - 快照系统架构设计
 - [FOURTH_ACT_DATA_FLOW_ANALYSIS.md](./功能文档/四幕教学/FOURTH_ACT_DATA_FLOW_ANALYSIS.md) - 第四幕数据流分析
 - [FOURTH_ACT_DATA_PERSISTENCE_ANALYSIS.md](./功能文档/四幕教学/FOURTH_ACT_DATA_PERSISTENCE_ANALYSIS.md) - 数据持久化分析
 - [snapshot-system-optimization-guide.md](./功能文档/四幕教学/snapshot-system-optimization-guide.md) - 快照系统优化指南
@@ -106,11 +116,12 @@
 ## 📊 文档统计
 
 - **核心文档**: 2个（CLAUDE.md, README.md）
-- **架构文档**: 2个
+- **架构文档**: 4个
+- **调研文档**: 3个（合同知识库完整方案）
 - **部署文档**: 1个
-- **功能文档**: 12个
+- **功能文档**: 13个
   - 合同分析: 4个
-  - 四幕教学: 3个
+  - 四幕教学: 4个（新增快照架构）
   - 苏格拉底对话: 2个
   - PPT生成: 3个
 
@@ -136,9 +147,22 @@
 - ❌ RESET_BUG_TEST_GUIDE.md（已过时）
 - ❌ code-cleanup-explanation.md（临时文档）
 - ❌ SOCRATIC_IMPROVEMENT_SUMMARY.md（内容已合并）
+- ❌ SNAPSHOT-VALIDATION-FIX.md（Bug已修复，功能稳定）
 
 ---
 
-**最后更新**：2025-10-21
-**维护者**：项目团队
-**文档版本**：v2.0（已清理整理）
+## 📈 最近更新
+
+- **2025-10-23**: 完成合同知识库微服务架构设计，确定技术栈和实施路线图
+- **2025-10-23**: 完成四层知识库Schema设计（合同/条款/术语/案例）
+- **2025-10-23**: 完成docs目录重构，新增调研目录，整理文档分类
+- **2025-10-23**: 新增《合同知识库技术调研.md》，完成RAG+向量数据库技术方案调研
+- **2025-10-21**: 新增《数据流架构总览-2025.md》，基于当前生产环境完整梳理数据流
+- **2025-10-06**: 完成废弃功能清理，架构进入稳定期
+- **2025-09-23**: 引入ISSUE协作范式，优化苏格拉底对话
+
+---
+
+**最后更新**：2025-10-23
+**维护者**：项目团队 + Sean（PromptX调研）
+**文档版本**：v2.3（合同知识库微服务架构）

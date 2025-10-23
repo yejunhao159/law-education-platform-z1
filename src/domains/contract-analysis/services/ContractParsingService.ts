@@ -108,7 +108,7 @@ ${contractText}
           signDate: parsedData.metadata?.signDate,
           effectiveDate: parsedData.metadata?.effectiveDate,
         },
-        clauses: this.validateClauses(parsedData.clauses || []),
+        clauses: this.validateClauses(parsedData.clauses || [], contractText),
         rawText: contractText,
         extractionConfidence: parsedData.extractionConfidence || 0.7,
       };
@@ -125,16 +125,46 @@ ${contractText}
   /**
    * 验证和规范化条款数据
    */
-  private validateClauses(clauses: any[]): Clause[] {
+  private validateClauses(clauses: any[], rawText?: string): Clause[] {
     return clauses
       .filter((clause) => clause && clause.title && clause.content)
-      .map((clause, index) => ({
-        id: clause.id || `clause-${index + 1}`,
-        title: clause.title || `条款${index + 1}`,
-        content: clause.content || '',
-        category: this.validateCategory(clause.category),
-        position: clause.position || { start: 0, end: 0 },
-      }));
+      .map((clause, index) => {
+        // 如果AI没有返回position或position无效，尝试在原文中搜索
+        let position = clause.position;
+        if (rawText && (!position || (position.start === 0 && position.end === 0))) {
+          position = this.findClausePosition(clause.content, rawText);
+        }
+
+        return {
+          id: clause.id || `clause-${index + 1}`,
+          title: clause.title || `条款${index + 1}`,
+          content: clause.content || '',
+          category: this.validateCategory(clause.category),
+          position: position || { start: 0, end: 0 },
+        };
+      });
+  }
+
+  /**
+   * 在原文中查找条款的位置
+   */
+  private findClausePosition(
+    clauseContent: string,
+    rawText: string
+  ): { start: number; end: number } {
+    // 取条款内容的前50个字符作为搜索关键词
+    const searchKeyword = clauseContent.substring(0, 50).trim();
+    const startIndex = rawText.indexOf(searchKeyword);
+
+    if (startIndex !== -1) {
+      return {
+        start: startIndex,
+        end: startIndex + clauseContent.length,
+      };
+    }
+
+    // 如果找不到，返回默认值
+    return { start: 0, end: 0 };
   }
 
   /**

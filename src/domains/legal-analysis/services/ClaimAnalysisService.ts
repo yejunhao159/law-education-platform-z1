@@ -509,12 +509,12 @@ ${events.map((e, i) => `${i + 1}. ${e.date}: ${e.title || e.description}`).join(
   private calculateAnalysisConfidence(claims: any, timeline: any): number {
     let confidence = 0;
 
-    if (claims.primary.length > 0) confidence += 30;
-    if (claims.defense.length > 0) confidence += 20;
-    if (timeline.keyPoints.length > 0) confidence += 25;
-    if (timeline.limitations.length > 0) confidence += 25;
+    if (claims.primary.length > 0) confidence += 0.30;
+    if (claims.defense.length > 0) confidence += 0.20;
+    if (timeline.keyPoints.length > 0) confidence += 0.25;
+    if (timeline.limitations.length > 0) confidence += 0.25;
 
-    return Math.min(confidence, 100);
+    return Math.min(confidence, 1.0);  // 🔧 修复：返回0-1范围（与Schema一致）
   }
 
 }

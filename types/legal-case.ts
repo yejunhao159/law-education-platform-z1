@@ -223,10 +223,10 @@ export const ThreeElementsSchema = z.object({
 // ========== 元数据 ==========
 export const MetadataSchema = z.object({
   extractedAt: z.string().datetime(),
-  confidence: z.number().min(0).max(100),
+  confidence: z.number().min(0).max(1),  // 🔧 修复：改为0-1范围（与SnapshotSchemas一致）
   aiModel: z.string(),
   processingTime: z.number(),
-  extractionMethod: z.enum(['pure-ai', 'hybrid', 'rule-enhanced', 'manual']),
+  extractionMethod: z.enum(['ai', 'rule', 'hybrid', 'manual']),  // 🔧 修复：统一枚举值（与SnapshotSchemas一致）
   version: z.string().optional(),
   confidenceReport: z.object({
     overall: z.number().min(0).max(100),
@@ -342,10 +342,10 @@ export function createDefaultCase(): Partial<LegalCase> {
     },
     metadata: {
       extractedAt: new Date().toISOString(),
-      confidence: 0,
+      confidence: 0,  // 0-1范围
       aiModel: 'DeepSeek',
       processingTime: 0,
-      extractionMethod: 'pure-ai',
+      extractionMethod: 'ai',  // 使用Schema枚举值
     }
   }
 }

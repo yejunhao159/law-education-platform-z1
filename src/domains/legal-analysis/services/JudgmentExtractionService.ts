@@ -142,10 +142,10 @@ export class JudgmentExtractionService {
         reasoning,
         metadata: {
           extractedAt: new Date().toISOString(),
-          confidence: confidenceReport.overall,
+          confidence: confidenceReport.overall / 100,  // 🔧 修复：转换为0-1范围（Schema要求）
           processingTime,
           aiModel: `DeepSeek-${this.model}`,
-          extractionMethod: 'rule-enhanced',
+          extractionMethod: 'ai',  // 🔧 修复：使用Schema枚举值（'ai'|'rule'|'hybrid'|'manual'）
           version: '2.1.0',
           confidenceReport
         }

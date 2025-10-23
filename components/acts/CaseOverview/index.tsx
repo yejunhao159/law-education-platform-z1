@@ -39,6 +39,7 @@ export function CaseOverview() {
   const storyChapters = useTeachingStore((state) => state.storyChapters)
   const toggleStoryMode = useTeachingStore((state) => state.toggleStoryMode)
   const setCurrentAct = useTeachingStore((state) => state.setCurrentAct)
+  const sessionId = useTeachingStore((state) => state.sessionId) // 🆕 获取sessionId
 
   // 本地状态控制，完全避免 store 方法的循环依赖
   const [hasInitializedStory, setHasInitializedStory] = useState(false)
@@ -121,6 +122,7 @@ export function CaseOverview() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          sessionId, // 🆕 传入sessionId
           caseData,
           narrativeStyle: 'story',
           depth: 'detailed',

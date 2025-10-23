@@ -10,8 +10,13 @@ import type {
   AIMessage,
   EditorState,
 } from '../types/editor';
+import type { ParsedContract } from '../types/analysis';
 
 interface ContractEditorStore extends EditorState {
+  // 新增：解析结果和状态
+  parsedContract: ParsedContract | null;
+  analysisStatus: 'idle' | 'analyzing' | 'completed' | 'failed';
+
   // Actions
   setDocument: (document: ContractDocument) => void;
   updateEditedText: (text: string) => void;
@@ -23,6 +28,11 @@ interface ContractEditorStore extends EditorState {
   clearMessages: () => void;
   setIsAnalyzing: (isAnalyzing: boolean) => void;
   setAnalysisProgress: (progress: number) => void;
+
+  // 新增：解析相关 actions
+  setParsedContract: (parsed: ParsedContract) => void;
+  setAnalysisStatus: (status: 'idle' | 'analyzing' | 'completed' | 'failed') => void;
+
   reset: () => void;
 }
 
@@ -35,8 +45,15 @@ const initialState: EditorState = {
   analysisProgress: 0,
 };
 
-export const useContractEditorStore = create<ContractEditorStore>((set) => ({
+// 扩展初始状态（包含新增字段）
+const extendedInitialState = {
   ...initialState,
+  parsedContract: null as ParsedContract | null,
+  analysisStatus: 'idle' as 'idle' | 'analyzing' | 'completed' | 'failed',
+};
+
+export const useContractEditorStore = create<ContractEditorStore>((set) => ({
+  ...extendedInitialState,
 
   setDocument: (document) => set({ document }),
 
@@ -79,5 +96,10 @@ export const useContractEditorStore = create<ContractEditorStore>((set) => ({
 
   setAnalysisProgress: (progress) => set({ analysisProgress: progress }),
 
-  reset: () => set(initialState),
+  // 新增：解析相关 actions
+  setParsedContract: (parsed) => set({ parsedContract: parsed }),
+
+  setAnalysisStatus: (status) => set({ analysisStatus: status }),
+
+  reset: () => set(extendedInitialState),
 }));
