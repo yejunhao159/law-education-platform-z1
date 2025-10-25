@@ -32,7 +32,7 @@ export interface TeachingSession {
   courtName?: string | null;
   act1?: Act1Snapshot;
   act2?: Act2Snapshot;
-  act3?: Act3Snapshot;
+  act3?: Act3Snapshot | null; // Act3不持久化，总是null
   act4?: Act4Snapshot;
   act1Confidence?: number | null;
   act1CompletedAt?: string | null;
@@ -43,9 +43,6 @@ export interface TeachingSession {
   createdAt: string;
   updatedAt: string;
   completedAt?: string | null;
-  lastSavedAt?: string | null;
-  lastViewedAt?: string | null;
-  saveType: 'manual' | 'auto';
 }
 
 /**
@@ -63,8 +60,6 @@ export interface TeachingSessionListItem {
   createdAt: string;
   updatedAt: string;
   completedAt?: string | null;
-  lastViewedAt?: string | null;
-  saveType: 'manual' | 'auto';
 }
 
 /**

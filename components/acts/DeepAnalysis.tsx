@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -294,8 +294,86 @@ export default function DeepAnalysis({ onComplete, mode = 'edit' }: DeepAnalysis
       .join('|')
   }, [effectiveCaseData])
 
+  // 🆕 复习模式专用：加载已保存的分析结果
   useEffect(() => {
-    // 只读模式：不执行自动AI分析
+    if (mode !== 'review') return;
+    if (!effectiveCaseData) return;
+
+    const loadReviewModeAnalysis = async () => {
+      console.log('📂 [复习模式 useEffect] 开始加载分析结果...');
+
+      const { useTeachingStore } = await import('@/src/domains/teaching-acts/stores/useTeachingStore');
+      const savedAnalysis = useTeachingStore.getState().analysisData.result;
+
+      if (!savedAnalysis) {
+        console.warn('⚠️ [复习模式] 没有保存的分析结果');
+        return;
+      }
+
+      console.log('📊 [复习模式] 加载保存的分析结果:', {
+        hasTimelineAnalysis: !!savedAnalysis.timelineAnalysis,
+        turningPointsCount: savedAnalysis.timelineAnalysis?.turningPoints?.length || 0,
+        hasNarrative: !!savedAnalysis.narrative,
+      });
+
+      // 设置timelineAnalysis到analysisResult
+      if (savedAnalysis.timelineAnalysis) {
+        setAnalysisResult(savedAnalysis.timelineAnalysis as any);
+      }
+
+      // 加载timeline事件
+      if (effectiveCaseData?.threeElements?.facts?.timeline) {
+        const timelineEvents = effectiveCaseData.threeElements.facts.timeline as EnhancedTimelineEvent[];
+        const validEvents = timelineEvents.filter(e => e && e.date).map(e => ({
+          ...e,
+          title: getEventTitle(e),
+          event: e.event || getEventTitle(e),
+          date: e.date
+        }));
+
+        setValidTimelineEvents(validEvents);
+        console.log('✅ [复习模式] Timeline事件已设置:', validEvents.length);
+
+        // 🔍 生成争议焦点分析（复习模式下动态生成）
+        try {
+          console.log('🔍 [复习模式] 生成争议焦点分析...');
+
+          // 将timeline events转换为documentText
+          const documentText = validEvents
+            .map((e, idx) => `${idx + 1}. ${e.date} - ${e.event}`)
+            .join('\n');
+
+          const disputeResponse = await fetch('/api/dispute-analysis', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              documentText,  // ✅ 使用documentText
+              caseType: 'civil',
+            }),
+          });
+
+          if (disputeResponse.ok) {
+            const disputeData = await disputeResponse.json();
+            if (disputeData.success) {
+              setDisputeAnalysis(disputeData);
+              console.log('✅ [复习模式] 争议焦点分析已生成');
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️ [复习模式] 争议分析生成失败（非关键）:', error);
+        }
+      }
+
+      setAnalysisComplete(true);
+      setAnalysisProgress('✅ 已从历史记录恢复');
+    };
+
+    loadReviewModeAnalysis();
+  }, [mode, effectiveCaseData]);
+
+  // 编辑模式：自动执行AI分析
+  useEffect(() => {
+    // 只在编辑模式执行
     if (mode === 'review') {
       return
     }
@@ -319,13 +397,66 @@ export default function DeepAnalysis({ onComplete, mode = 'edit' }: DeepAnalysis
     const { useTeachingStore } = await import('@/src/domains/teaching-acts/stores/useTeachingStore');
     const savedAnalysis = useTeachingStore.getState().analysisData.result;
 
-    // 📖 复习模式：直接使用store中的数据，不调用API
-    if (mode === 'review' && savedAnalysis?.timelineAnalysis) {
-      console.log('📂 [复习模式] 使用已保存的分析结果，不调用API');
-      setAnalysisResult(savedAnalysis.timelineAnalysis as any);
+    // 📖 复习模式：直接使用store中的数据，不调用AI生成API
+    if (mode === 'review' && savedAnalysis) {
+      console.log('📂 [复习模式] 使用已保存的分析结果', {
+        hasTimelineAnalysis: !!savedAnalysis.timelineAnalysis,
+        turningPointsCount: savedAnalysis.timelineAnalysis?.turningPoints?.length || 0,
+        hasNarrative: !!savedAnalysis.narrative,
+        narrativeChaptersCount: savedAnalysis.narrative?.chapters?.length || 0,
+      });
 
+      // 🔑 关键：setAnalysisResult需要直接包含turningPoints等字段
+      // 所以我们传入timelineAnalysis对象而不是整个savedAnalysis
+      if (savedAnalysis.timelineAnalysis) {
+        setAnalysisResult(savedAnalysis.timelineAnalysis as any);
+      }
+
+      // 加载叙事章节
       if (savedAnalysis.narrative?.chapters) {
         useTeachingStore.getState().setStoryChapters(savedAnalysis.narrative.chapters);
+      }
+
+      // 🆕 复习模式下处理timeline事件和争议分析
+      if (sourceCaseData?.threeElements?.facts?.timeline) {
+        const timelineEvents = sourceCaseData.threeElements.facts.timeline as EnhancedTimelineEvent[];
+
+        // 🔑 关键修复：设置validTimelineEvents，这样"案件发展脉络"才能显示
+        const validEvents = timelineEvents.filter(e => e && e.date).map(e => ({
+          ...e,
+          title: getEventTitle(e),
+          event: e.event || getEventTitle(e),
+          date: e.date
+        }));
+
+        setValidTimelineEvents(validEvents);
+        console.log('✅ [复习模式] Timeline事件已设置:', {
+          事件数量: validEvents.length,
+          第一个事件: validEvents[0]?.title
+        });
+
+        // 调用争议分析API
+        try {
+          console.log('🔍 [复习模式] 重新生成争议焦点分析...');
+          const disputeResponse = await fetch('/api/dispute-analysis', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              events: validEvents,
+              caseType: 'civil',
+            }),
+          });
+
+          if (disputeResponse.ok) {
+            const disputeData = await disputeResponse.json();
+            if (disputeData.success) {
+              setDisputeAnalysis(disputeData);
+              console.log('✅ [复习模式] 争议焦点分析已重新生成');
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️ [复习模式] 争议分析生成失败（非关键）:', error);
+        }
       }
 
       setIsAnalyzing(false);
@@ -384,9 +515,9 @@ export default function DeepAnalysis({ onComplete, mode = 'edit' }: DeepAnalysis
         return
       }
 
-      // 优化后的并行调用：只保留2个核心API
+      // 优化后的并行调用：3个核心API并行执行
       setAnalysisProgress('🔄 执行核心智能分析...')
-      const [timelineResult, disputeResult] = await Promise.allSettled([
+      const [timelineResult, disputeResult, claimResult] = await Promise.allSettled([
         // 1. 时间轴分析（关键转折点和风险）
         fetch('/api/timeline-analysis', {
           method: 'POST',
@@ -458,11 +589,24 @@ export default function DeepAnalysis({ onComplete, mode = 'edit' }: DeepAnalysis
           }
 
           throw lastError || new Error('Dispute analysis failed after retries');
-        })()
+        })(),
+
+        // 3. 请求权分析（完整的案件分析）- 新增自动生成
+        fetch('/api/legal-analysis/claim-analysis', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            events: validEvents,
+            depth: 'detailed',
+            caseType: 'civil'
+          })
+        }).then(res => res.ok ? res.json() : Promise.reject(new Error(`Claim analysis failed: ${res.status}`))).catch(error => {
+          console.warn('⚠️ 请求权分析失败（非关键），继续其他分析:', error);
+          return { success: false, error: error.message };
+        })
       ])
 
       // 证据质量评估改为按需加载（当用户需要时才触发）
-      // 请求权分析保留为单个事件点击时调用（EventClaimAnalysisDialog）
 
       setAnalysisProgress('📊 处理分析结果...')
 
@@ -507,6 +651,21 @@ export default function DeepAnalysis({ onComplete, mode = 'edit' }: DeepAnalysis
 
         // 🆕 Step 2: 扩展分析结果，添加所有AI生成内容
         const currentStore = useTeachingStore.getState();
+
+        // 处理请求权分析结果
+        let claimAnalysisData = null;
+        if (claimResult.status === 'fulfilled' && claimResult.value?.success && claimResult.value?.data) {
+          claimAnalysisData = claimResult.value.data;
+          console.log('✅ [DeepAnalysis] 请求权分析成功:', {
+            id: claimAnalysisData.id,
+            primaryClaims: claimAnalysisData.claims?.primary?.length || 0,
+            alternativeClaims: claimAnalysisData.claims?.alternative?.length || 0,
+            defenses: claimAnalysisData.claims?.defense?.length || 0
+          });
+        } else {
+          console.warn('⚠️ [DeepAnalysis] 请求权分析未生成（非关键功能）');
+        }
+
         const enhancedAnalysisResult = {
           ...deepAnalysisResult,
 
@@ -522,8 +681,8 @@ export default function DeepAnalysis({ onComplete, mode = 'edit' }: DeepAnalysis
           // 3. 证据问题（从store读取，EvidenceQuizSection生成后会更新）
           evidenceQuestions: currentStore.analysisData.result?.evidenceQuestions || undefined,
 
-          // 4. 请求权分析（从store读取，EventClaimAnalysisDialog生成后会更新）
-          claimAnalysis: currentStore.analysisData.result?.claimAnalysis || undefined,
+          // 4. 请求权分析（⭐ 新增：使用AI自动生成的结果）
+          claimAnalysis: claimAnalysisData || currentStore.analysisData.result?.claimAnalysis || undefined,
         };
 
         console.log('🔗 [DeepAnalysis] 准备保存扩展的分析结果:', {
@@ -764,8 +923,19 @@ export default function DeepAnalysis({ onComplete, mode = 'edit' }: DeepAnalysis
               <Calendar className="w-5 h-5 text-blue-600" />
               案件发展脉络
             </h4>
-            <div className="space-y-4">
-              {validTimelineEvents.map((event, index) => (
+            {validTimelineEvents.length === 0 ? (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+                <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-600 font-medium mb-1">暂无时间轴数据</p>
+                <p className="text-sm text-gray-500">
+                  {mode === 'review'
+                    ? '该会话的案件时间轴数据未能正确提取，请尝试查看其他会话或重新上传判决书'
+                    : '案件时间轴事件提取中，请稍候...'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {validTimelineEvents.map((event, index) => (
                 <div key={event.id || `event-${index}`} className="relative">
                   {/* 时间轴线 */}
                   <div className="absolute left-6 top-8 bottom-0 w-0.5 bg-gray-200 -z-10" />
@@ -885,7 +1055,8 @@ export default function DeepAnalysis({ onComplete, mode = 'edit' }: DeepAnalysis
                   </div>
                 </div>
               ))}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* 综合AI分析结果 - 精简布局 */}

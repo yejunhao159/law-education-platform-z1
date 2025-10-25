@@ -70,7 +70,7 @@ export class JudgmentExtractionService {
     this.apiUrl = config?.apiUrl || process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1';
     this.model = config?.model || 'deepseek-chat';
     this.temperature = config?.temperature || 0.3;
-    this.maxTokens = config?.maxTokens || 4000; // 增加到4000，支持更详细的输出
+    this.maxTokens = config?.maxTokens || 8000; // 🔧 修复：增加到8000，确保证据和说理完整输出
 
     // 初始化AI客户端（使用已修复的DeeChatAIClient）
     const aiConfig = createDeeChatConfig({
@@ -411,7 +411,38 @@ ${factsSection}`;
 
     try {
       const response = await this.callDeepSeekAPI(prompt);
-      return this.parseFactsResponse(response);
+
+      // 🔍 增强日志：记录AI原始返回
+      console.log('🔍 [extractFacts] AI原始返回:', {
+        hasResponse: !!response,
+        responseType: typeof response,
+        hasTimeline: Array.isArray(response?.timeline),
+        timelineLength: response?.timeline?.length || 0,
+        hasKeyFacts: Array.isArray(response?.keyFacts),
+        keyFactsLength: response?.keyFacts?.length || 0,
+        hasSummary: !!response?.summary,
+        summaryLength: response?.summary?.length || 0,
+      });
+
+      const facts = this.parseFactsResponse(response);
+
+      // 🔍 数据完整性检查
+      const isComplete = facts.timeline.length > 0 && facts.keyFacts.length > 0;
+      if (!isComplete) {
+        console.warn('⚠️ [extractFacts] AI返回数据不完整！', {
+          timelineCount: facts.timeline.length,
+          keyFactsCount: facts.keyFacts.length,
+          hasSummary: facts.summary.length > 0,
+        });
+        console.warn('⚠️ 建议检查：1) AI服务是否正常 2) 文档质量 3) Prompt是否过于复杂');
+      } else {
+        console.log('✅ [extractFacts] AI返回数据完整', {
+          timelineCount: facts.timeline.length,
+          keyFactsCount: facts.keyFacts.length,
+        });
+      }
+
+      return facts;
     } catch (error) {
       logger.error('提取事实失败', error);
       return this.createFailedFacts('调用 AI 服务提取事实失败');
@@ -476,10 +507,18 @@ ${factsSection}`;
 # 核心任务
 从判决书的事实认定部分，提取**所有**提到的证据，包括每一项证据的具体细节。
 
+# ⚠️ 特别注意：二审判决书处理
+如果判决书是二审判决且简单写"经审理查明，一审认定事实无误"或类似表述：
+- 说明二审维持一审证据认定，但原文未列举具体证据
+- 在这种情况下：
+  - summary中说明"本案为二审判决，维持一审认定事实，原判决书未详细列举证据"
+  - items数组可以为空（因为原文确实未列举）
+  - 或者根据原文简略提及的证据类型（如"工商信息"、"专利文件"）创建简化条目
+
 # 铁律要求（绝对不能违反）
 🚨 **必须列举判决书中明确提到的每一项证据，哪怕只是一句话提及，也绝不能遗漏**
 🚨 **必须提取证据的具体内容**（如合同约定的内容、发票的金额、证人的具体陈述等）
-🚨 **必须记录证据的形成时间**（如有）、提交方、法院是否采纳
+🚨 **如果判决书详细列举证据，必须记录证据的形成时间**（如有）、提交方、法院是否采纳
 🚨 **即使法院未采纳或一笔带过的证据，也必须列出**
 🚨 **如果判决书完全未提及任何证据，才返回空数组 items: []**
 
@@ -518,10 +557,10 @@ ${factsSection}`;
       "id": "evidence-1",
       "name": "证据的完整规范名称（如：2023年1月15日《房屋买卖合同》）",
       "type": "书证|物证|证人证言|鉴定意见|勘验笔录|视听资料|电子数据|当事人陈述",
-      "submittedBy": "原告|被告|法院调取",
-      "description": "证据的完整具体内容（不少于50字），必须包括：1.证据形成时间 2.证据具体内容（如合同条款、金额、证人陈述的具体话语） 3.证据的关键信息 4.证据与案件的关联",
+      "submittedBy": "plaintiff|defendant|third-party|court （英文枚举值！原告用plaintiff，被告用defendant，第三人用third-party，法院调取用court。⚠️ 如果判决书未明确说明证据提交方，请省略此字段，不要填写任何值）",
+      "description": "证据的具体内容描述（尽量详细，如果判决书有详细描述则不少于50字；如果判决书只简略提及则写明可获取的信息即可）。必须包括：1.证据形成时间（如有） 2.证据具体内容（如合同条款、金额、证人陈述等，如判决书提供） 3.证据的关键信息 4.证据与案件的关联。如果判决书仅提及证据名称未详述内容，则如实说明'判决书仅提及该证据名称，未详述具体内容'",
       "accepted": true,
-      "courtOpinion": "法院对该证据的完整评价意见（不少于30字，如判决书明确说明；如未说明写'未明确说明'）",
+      "courtOpinion": "法院对该证据的完整评价意见（不少于30字，如判决书明确说明；如未明确说明则省略此字段）",
       "relatedFacts": ["该证据具体证明的事实1（必须具体明确）", "该证据具体证明的事实2"]
     }
   ],
@@ -544,7 +583,7 @@ ${factsSection}`;
       "id": "evidence-1",
       "name": "2023年1月15日《房屋买卖合同》",
       "type": "书证",
-      "submittedBy": "原告",
+      "submittedBy": "plaintiff",
       "description": "原告张某与被告李某于2023年1月15日签订的《房屋买卖合同》，约定涉案房屋总价200万元，被告应在收到首付款后配合办理过户手续。被告对合同真实性无异议，仅对是否构成违约存在争议。该合同系双方真实意思表示，内容合法有效。",
       "accepted": true,
       "courtOpinion": "被告对合同真实性无异议，本院确认该合同系双方真实意思表示，内容不违反法律法规强制性规定，应认定有效",
@@ -733,7 +772,38 @@ ${reasoningSection}`;
 
     try {
       const response = await this.callDeepSeekAPI(prompt);
-      return this.parseReasoningResponse(response);
+
+      // 🔍 增强日志：记录AI原始返回
+      console.log('🔍 [extractReasoning] AI原始返回:', {
+        hasResponse: !!response,
+        responseType: typeof response,
+        hasLogicChain: Array.isArray(response?.logicChain),
+        logicChainLength: response?.logicChain?.length || 0,
+        hasKeyArguments: Array.isArray(response?.keyArguments),
+        keyArgumentsLength: response?.keyArguments?.length || 0,
+        hasLegalBasis: Array.isArray(response?.legalBasis),
+        legalBasisLength: response?.legalBasis?.length || 0,
+      });
+
+      const reasoning = this.parseReasoningResponse(response);
+
+      // 🔍 数据完整性检查
+      const isComplete = reasoning.logicChain.length > 0 && reasoning.keyArguments.length > 0;
+      if (!isComplete) {
+        console.warn('⚠️ [extractReasoning] AI返回数据不完整！', {
+          logicChainCount: reasoning.logicChain.length,
+          keyArgumentsCount: reasoning.keyArguments.length,
+          legalBasisCount: reasoning.legalBasis.length,
+        });
+        console.warn('⚠️ 建议检查：1) AI服务是否正常 2) 文档质量 3) Prompt是否过于复杂');
+      } else {
+        console.log('✅ [extractReasoning] AI返回数据完整', {
+          logicChainCount: reasoning.logicChain.length,
+          keyArgumentsCount: reasoning.keyArguments.length,
+        });
+      }
+
+      return reasoning;
     } catch (error) {
       logger.error('提取裁判理由失败', error);
       return this.createFailedReasoning('调用 AI 服务提取裁判理由失败');

@@ -207,8 +207,6 @@ export async function POST(request: NextRequest) {
             act4: existingSession.act4,
             createdAt: existingSession.createdAt,
             updatedAt: new Date().toISOString(),
-            lastSavedAt: new Date().toISOString(),
-            saveType: 'auto' as const
           };
 
           await teachingSessionRepository.saveSnapshot(currentUser.userId, snapshot, sessionId);

@@ -17,7 +17,10 @@ import type {
   LearningReport,
   CaseLearningReport,
 } from '@/src/types';
-import type { SessionState } from '../schemas/SnapshotSchemas';
+import type {
+  SessionState,
+  SnapshotEnvelope,
+} from '../schemas/SnapshotSchemas';
 
 // ========== 接口定义 ==========
 interface TeachingState {
@@ -61,6 +64,11 @@ interface TeachingState {
   error: string | null;
   sessionId: string | null;
   sessionState: SessionState;
+
+  // 快照系统V2 (T042)
+  currentSnapshot: SnapshotEnvelope | null;
+  snapshotLoading: boolean;
+  snapshotError: string | null;
 }
 
 interface TeachingActions {
@@ -112,6 +120,10 @@ interface TeachingActions {
     lastSavedAt?: string;
   }) => void;
   reset: () => void;
+
+  // 快照系统V2 (T042-T044)
+  loadClassroomSnapshot: (sessionId: string) => Promise<void>;
+  isClassroomMode: () => boolean;
 }
 
 type TeachingStore = TeachingState & TeachingActions;
@@ -154,6 +166,11 @@ const initialState: TeachingState = {
   error: null,
   sessionId: null,
   sessionState: 'act1',
+
+  // 快照系统V2初始值
+  currentSnapshot: null,
+  snapshotLoading: false,
+  snapshotError: null,
 };
 
 // ========== Store创建 ==========
@@ -395,6 +412,81 @@ export const useTeachingStore = create<TeachingStore>()(
             state.sessionState = sessionState;
           }
         }),
+
+      // 快照系统V2 (T042-T044 + T050)
+      loadClassroomSnapshot: async (sessionId: string) => {
+        set((state) => {
+          state.snapshotLoading = true;
+          state.snapshotError = null;
+        });
+
+        try {
+          const response = await fetch(`/api/teaching-sessions/${sessionId}/snapshot`);
+          const data = await response.json();
+
+          if (!response.ok || !data.success) {
+            throw new Error(data.message || data.error || 'Failed to load snapshot');
+          }
+
+          // T050: Schema一致性检查
+          const { validateSnapshotIntegrity, logValidationWarnings } = await import(
+            '../utils/SnapshotValidator'
+          );
+          const validationResult = validateSnapshotIntegrity(data.snapshot);
+
+          if (!validationResult.isValid) {
+            logValidationWarnings(validationResult, '课堂快照加载');
+            throw new Error(
+              `快照数据不完整: ${validationResult.missingFields.join(', ')}`
+            );
+          }
+
+          // 记录警告但不阻止加载
+          if (validationResult.warnings.length > 0) {
+            logValidationWarnings(validationResult, '课堂快照加载');
+          }
+
+          set((state) => {
+            state.currentSnapshot = data.snapshot;
+            state.snapshotLoading = false;
+            state.snapshotError = null;
+          });
+
+          console.log('[TeachingStore] ✅ 课堂快照加载成功', {
+            sessionId,
+            versionId: data.snapshot.versionId,
+            status: data.snapshot.status,
+            classroomReady: data.snapshot.classroomReady,
+            warning: data.warning,
+            validation: validationResult,
+          });
+
+          // 如果有回退警告,记录到错误状态
+          if (data.warning) {
+            set((state) => {
+              state.snapshotError = data.warning;
+            });
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error('[TeachingStore] ❌ 加载课堂快照失败', {
+            sessionId,
+            error: errorMessage,
+          });
+
+          set((state) => {
+            state.snapshotLoading = false;
+            state.snapshotError = errorMessage;
+          });
+
+          throw error;
+        }
+      },
+
+      isClassroomMode: () => {
+        const state = get();
+        return state.currentSnapshot?.classroomReady === true;
+      },
 
       reset: () => {
         // 🔧 修复：先清除localStorage中的持久化数据

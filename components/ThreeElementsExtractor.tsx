@@ -11,6 +11,7 @@ import { InlineEditor } from '@/components/InlineEditor'
 import { Loader2, FileText, CheckCircle, AlertCircle, Edit, Eye, ArrowRight } from 'lucide-react'
 import { useCaseManagementStore, useTeachingStore } from '@/src/domains/stores'
 import type { LegalCase } from '@/types/legal-case'
+import { SnapshotConverter } from '@/src/domains/teaching-acts/utils/SnapshotConverterV2'
 
 interface ExtractedElements {
   basicInfo?: {
@@ -74,7 +75,7 @@ interface ExtractedElements {
 // 转换函数：将提取的数据转换为LegalCase格式
 function convertToLegalCase(extracted: ExtractedElements): LegalCase {
   // 构建时间轴数据（从timeline或facts中提取）
-  let timeline = extracted.threeElements?.facts?.timeline?.map((item: any, index: number) => ({
+  const timeline = extracted.threeElements?.facts?.timeline?.map((item: any, index: number) => ({
     id: index + 1,
     date: item.date || new Date().toISOString().split('T')[0],
     event: item.event || item.title || '事件',
@@ -85,60 +86,18 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
                  item.importance === 'important' ? 'important' : 'normal') as 'critical' | 'important' | 'normal'
   })) || []
 
-  // 如果没有时间轴数据，添加示例数据以便演示
-  if (timeline.length === 0) {
-    timeline = [
-      {
-        id: 1,
-        date: '2024-01-15',
-        event: '签订合同',
-        title: '签订合同',
-        description: '双方当事人签订买卖合同，约定交付时间和付款方式',
-        type: 'fact' as const,
-        importance: 'critical' as const
-      },
-      {
-        id: 2,
-        date: '2024-02-01',
-        event: '逾期交付',
-        title: '逾期交付',
-        description: '卖方未能按约定时间交付货物，构成违约',
-        type: 'fact' as const,
-        importance: 'critical' as const
-      },
-      {
-        id: 3,
-        date: '2024-02-15',
-        event: '催告履行',
-        title: '催告履行',
-        description: '买方书面催告卖方履行交付义务',
-        type: 'fact' as const,
-        importance: 'important' as const
-      },
-      {
-        id: 4,
-        date: '2024-03-01',
-        event: '提起诉讼',
-        title: '提起诉讼',
-        description: '买方向法院提起违约损害赔偿诉讼',
-        type: 'fact' as const,
-        importance: 'critical' as const
-      }
-    ]
-  }
-
   return {
     basicInfo: {
-      caseNumber: extracted.basicInfo?.caseNumber || '(2024)京0105民初12345号',
-      court: extracted.basicInfo?.court || '北京市朝阳区人民法院',
-      judgeDate: extracted.basicInfo?.date || '2024-03-15',
+      caseNumber: extracted.basicInfo?.caseNumber || '',
+      court: extracted.basicInfo?.court || '',
+      judgeDate: extracted.basicInfo?.date || new Date().toISOString().split('T')[0],
       parties: {
         plaintiff: extracted.basicInfo?.parties?.plaintiff
           ? [{ name: extracted.basicInfo.parties.plaintiff, type: '自然人' }]
-          : [{ name: '张三', type: '自然人' }],
+          : [],
         defendant: extracted.basicInfo?.parties?.defendant
           ? [{ name: extracted.basicInfo.parties.defendant, type: '自然人' }]
-          : [{ name: '李四商贸有限公司', type: '法人' }]
+          : []
       }
     },
     // 添加timeline到根级别，供时间轴组件使用
@@ -146,17 +105,17 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
     threeElements: {
       facts: {
         // 添加main字段用于时间轴AI分析
-        main: extracted.threeElements?.facts?.summary || '这是一起典型的买卖合同纠纷案件。双方就货物交付时间和质量标准存在争议。',
+        main: extracted.threeElements?.facts?.summary || '',
         // 添加disputed字段
-        disputed: extracted.threeElements?.facts?.disputedFacts || ['逾期交付是否构成根本违约', '损害赔偿范围的确定'],
+        disputed: extracted.threeElements?.facts?.disputedFacts || [],
         // 保留原有字段以保持兼容性
-        summary: extracted.threeElements?.facts?.summary || '这是一起典型的买卖合同纠纷案件。双方就货物交付时间和质量标准存在争议。',
+        summary: extracted.threeElements?.facts?.summary || '',
         timeline: timeline,
         keyFacts: extracted.threeElements?.facts?.keyFacts || [],
         disputedFacts: extracted.threeElements?.facts?.disputedFacts || []
       },
       evidence: {
-        summary: extracted.threeElements?.evidence?.summary || '本案主要证据包括买卖合同、发票、交付凭证、催告函等书面材料，以及相关证人证言。',
+        summary: extracted.threeElements?.evidence?.summary || '',
         items: extracted.threeElements?.evidence?.items?.map(item => ({
           id: item.name,
           name: item.name,
@@ -165,64 +124,19 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
           credibilityScore: item.credibilityScore,
           relevanceScore: item.credibilityScore || 80,
           accepted: item.accepted
-        })) || [
-          {
-            id: 'contract',
-            name: '买卖合同',
-            type: '书证' as const,
-            submittedBy: '原告' as const,
-            credibilityScore: 95,
-            relevanceScore: 95,
-            accepted: true
-          },
-          {
-            id: 'invoice',
-            name: '发票',
-            type: '书证' as const,
-            submittedBy: '原告' as const,
-            credibilityScore: 90,
-            relevanceScore: 85,
-            accepted: true
-          }
-        ],
+        })) || [],
         chainAnalysis: {
-          complete: true,
+          complete: false,
           missingLinks: [],
-          strength: 'strong' as const
+          strength: 'weak' as const
         }
       },
       reasoning: {
-        summary: extracted.threeElements?.reasoning?.summary || '本院认为，买卖双方成立有效的合同关系。被告未按约交付，构成违约，应承担相应责任。',
-        legalBasis: extracted.threeElements?.reasoning?.legalBasis || [
-          {
-            law: '《民法典》',
-            article: '第577条',
-            application: '违约责任的一般规定'
-          }
-        ],
-        logicChain: extracted.threeElements?.reasoning?.logicChain || [
-          {
-            premise: '双方签订买卖合同',
-            inference: '合同关系成立且有效',
-            conclusion: '双方应按约履行义务'
-          },
-          {
-            premise: '被告未按约定时间交付货物',
-            inference: '被告违反合同义务',
-            conclusion: '被告构成违约'
-          },
-          {
-            premise: '被告违约导致原告损失',
-            inference: '原告有权请求赔偿',
-            conclusion: '被告应承担违约责任'
-          }
-        ],
-        keyArguments: extracted.threeElements?.reasoning?.keyArguments || [
-          '合同成立且有效',
-          '被告构成违约',
-          '违约损害赔偿成立'
-        ],
-        judgment: extracted.threeElements?.reasoning?.judgment || '判决被告支付违约金并承担诉讼费用。'
+        summary: extracted.threeElements?.reasoning?.summary || '',
+        legalBasis: extracted.threeElements?.reasoning?.legalBasis || [],
+        logicChain: extracted.threeElements?.reasoning?.logicChain || [],
+        keyArguments: extracted.threeElements?.reasoning?.keyArguments || [],
+        judgment: extracted.threeElements?.reasoning?.judgment || ''
       }
     },
     metadata: {
@@ -230,7 +144,7 @@ function convertToLegalCase(extracted: ExtractedElements): LegalCase {
       confidence: extracted.metadata?.confidence || 0,
       processingTime: extracted.metadata?.processingTime || 0,
       aiModel: extracted.metadata?.aiModel || 'unknown',
-      extractionMethod: extracted.metadata?.aiModel === 'demo' ? 'manual' : 'pure-ai' as const
+      extractionMethod: extracted.metadata?.aiModel === 'demo' ? 'manual' : 'ai' as const
     }
   }
 }
@@ -248,29 +162,143 @@ export function ThreeElementsExtractor({ mode: pageMode = 'edit' }: ThreeElement
   const [parseProgress, setParseProgress] = useState<ParseProgress | null>(null)
   const [isTimelineExpanded, setIsTimelineExpanded] = useState(false)
   const [isEvidenceExpanded, setIsEvidenceExpanded] = useState(false)
+  const [isLoadingFromDB, setIsLoadingFromDB] = useState(false)
+
+  // 跟踪已加载的sessionId，避免重复加载
+  const loadedSessionIdRef = useRef<string | null>(null)
 
   // Zustand store hooks - 直接使用原始store避免兼容性问题
   const setCaseData = useCaseManagementStore((state) => state.setCurrentCase)
   const setCurrentAct = useTeachingStore((state) => state.setCurrentAct)
 
-  // 🆕 Step 4: 从store恢复已提取的数据（用于查看历史记录）
+  // 获取 URL 中的 sessionId（复习模式下使用）
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+  const sessionId = searchParams?.get('sessionId')
+
+  // 清理逻辑：当模式或sessionId改变时，重置状态
   useEffect(() => {
-    const uploadData = useTeachingStore.getState().uploadData;
-
-    if (uploadData?.extractedElements && !extractedData) {
-      console.log('📂 [ThreeElementsExtractor] 检测到已保存的提取数据，正在恢复:', {
-        有数据: !!uploadData.extractedElements,
-        置信度: uploadData.confidence,
-      });
-
-      // 将store中的extractedElements恢复到本地状态
-      const restoredData = uploadData.extractedElements as unknown as ExtractedElements;
-      setExtractedData(restoredData);
-      setProgress(100);
-
-      console.log('✅ [ThreeElementsExtractor] 数据恢复完成，显示提取结果');
+    if (pageMode !== 'review') {
+      loadedSessionIdRef.current = null;
     }
-  }, []); // 只在组件挂载时执行一次
+  }, [pageMode]);
+
+  // 🆕 复习模式：直接从数据库加载数据
+  useEffect(() => {
+    const loadDataFromDatabase = async () => {
+      // 检查是否需要加载
+      if (pageMode !== 'review' || !sessionId) {
+        return;
+      }
+
+      // 检查是否已经加载过这个session
+      if (loadedSessionIdRef.current === sessionId) {
+        return;
+      }
+
+      // 检查是否正在加载或已有数据
+      if (isLoadingFromDB || extractedData) {
+        return;
+      }
+
+      console.log('📥 [ThreeElementsExtractor] 复习模式：从数据库加载数据...', { sessionId });
+      setIsLoadingFromDB(true);
+
+      try {
+        // 1. 从数据库读取 session
+        const response = await fetch(`/api/teaching-sessions/${sessionId}`);
+        const result = await response.json();
+
+        if (!result.success) {
+          throw new Error(result.message || '加载失败');
+        }
+
+        const session = result.data;
+        console.log('✅ [ThreeElementsExtractor] 数据库数据已加载:', {
+          caseTitle: session.caseTitle,
+          sessionState: session.sessionState,
+          hasAct1: !!session.act1,
+          keyFactsCount: session.act1?.facts?.keyFacts?.length || 0,
+          timelineCount: session.act1?.facts?.timeline?.length || 0,
+          evidenceCount: session.act1?.evidence?.items?.length || 0,
+        });
+
+        // 🔍 详细打印数据结构
+        console.log('🔍 [ThreeElementsExtractor] act1.facts完整结构:', JSON.stringify(session.act1?.facts, null, 2));
+        console.log('🔍 [ThreeElementsExtractor] act1.evidence完整结构:', JSON.stringify(session.act1?.evidence, null, 2));
+
+        // 2. 从 act1 转换为 ExtractedElements 格式
+        if (!session.act1) {
+          console.warn('⚠️ [ThreeElementsExtractor] act1为空，无法显示数据');
+          throw new Error('该案例的第一幕数据尚未保存，请先在编辑模式下完成判决书提取');
+        }
+
+        if (session.act1) {
+          const act1 = session.act1;
+
+          const restoredData: ExtractedElements = {
+            basicInfo: {
+              caseNumber: act1.basicInfo?.caseNumber,
+              court: act1.basicInfo?.court,
+              date: act1.basicInfo?.judgeDate,
+              parties: {
+                plaintiff: act1.basicInfo?.parties?.plaintiff?.[0],
+                defendant: act1.basicInfo?.parties?.defendant?.[0],
+              },
+            },
+            threeElements: {
+              facts: {
+                summary: act1.facts?.summary || '',
+                timeline: act1.facts?.timeline || [],
+                keyFacts: act1.facts?.keyFacts || [],
+                disputedFacts: act1.facts?.disputedFacts || [],
+              },
+              evidence: {
+                summary: act1.evidence?.summary || '',
+                items: act1.evidence?.items || [],
+              },
+              reasoning: {
+                summary: act1.reasoning?.summary || '',
+                legalBasis: act1.reasoning?.legalBasis || [],
+                logicChain: act1.reasoning?.logicChain || [],
+                keyArguments: act1.reasoning?.keyArguments || [],
+                judgment: act1.reasoning?.judgment,
+              },
+            },
+            metadata: {
+              confidence: act1.metadata?.confidence || 0,
+              processingTime: act1.metadata?.processingTime || 0,
+              aiModel: act1.metadata?.aiModel || 'unknown',
+              extractionMethod: act1.metadata?.extractionMethod || 'manual',
+            },
+          };
+
+          setExtractedData(restoredData);
+          setProgress(100);
+          loadedSessionIdRef.current = sessionId; // 标记已加载
+          console.log('✅ [ThreeElementsExtractor] 数据转换完成，显示提取结果');
+          console.log('🔍 [ThreeElementsExtractor] restoredData.threeElements.facts:', {
+            summary: restoredData.threeElements.facts.summary?.substring(0, 50) + '...',
+            timelineCount: restoredData.threeElements.facts.timeline?.length,
+            keyFactsCount: restoredData.threeElements.facts.keyFacts?.length,
+            timelineFirstItem: restoredData.threeElements.facts.timeline?.[0],
+            keyFactsFirstItem: restoredData.threeElements.facts.keyFacts?.[0],
+          });
+          console.log('🔍 [ThreeElementsExtractor] restoredData.threeElements.evidence:', {
+            summary: restoredData.threeElements.evidence.summary?.substring(0, 50) + '...',
+            itemsCount: restoredData.threeElements.evidence.items?.length,
+            firstItem: restoredData.threeElements.evidence.items?.[0],
+          });
+        }
+      } catch (err) {
+        console.error('❌ [ThreeElementsExtractor] 从数据库加载失败:', err);
+        setError(err instanceof Error ? err.message : '加载失败');
+      } finally {
+        setIsLoadingFromDB(false);
+      }
+    };
+
+    loadDataFromDatabase();
+  }, [pageMode, sessionId]); // 只依赖 pageMode 和 sessionId，避免循环
 
   const handleFileSelect = useCallback(async (file: File) => {
     setError(null)
@@ -314,6 +342,15 @@ export function ThreeElementsExtractor({ mode: pageMode = 'edit' }: ThreeElement
       if (result.success) {
         setExtractedData(result.data)
 
+        // 🔍 调试：打印AI返回的原始数据
+        console.log('🔍 [ThreeElementsExtractor] AI提取的原始数据:', {
+          hasData: !!result.data,
+          hasThreeElements: !!result.data?.threeElements,
+          hasFacts: !!result.data?.threeElements?.facts,
+          factsStructure: result.data?.threeElements?.facts,
+          timelineLength: result.data?.threeElements?.facts?.timeline?.length || 0,
+        });
+
         // 🆕 DB-First: 立即保存到PostgreSQL
         console.log('💾 [DB-First] 提取成功，立即保存到数据库...');
         setProgress(75);
@@ -322,27 +359,36 @@ export function ThreeElementsExtractor({ mode: pageMode = 'edit' }: ThreeElement
           // 转换为LegalCase格式
           const legalCase = convertToLegalCase(result.data);
 
-          // 转换为数据库快照格式
-          const snapshot = {
-            version: '1.0.0',
-            schemaVersion: 1,
-            sessionState: 'act1' as const,
-            caseTitle: legalCase.basicInfo.caseNumber || '未命名案例',
-            caseNumber: legalCase.basicInfo.caseNumber,
-            courtName: legalCase.basicInfo.court,
-            act1: {
-              basicInfo: legalCase.basicInfo,
-              facts: legalCase.threeElements.facts,
-              evidence: legalCase.threeElements.evidence,
-              reasoning: legalCase.threeElements.reasoning,
-              metadata: legalCase.metadata,
-              uploadedAt: new Date().toISOString(),
-            },
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            lastSavedAt: new Date().toISOString(),
-            saveType: 'auto' as const,
-          };
+          // 🔍 调试：打印转换后的LegalCase
+          console.log('🔍 [ThreeElementsExtractor] 转换后的LegalCase:', {
+            hasThreeElements: !!legalCase.threeElements,
+            hasFacts: !!legalCase.threeElements?.facts,
+            factsKeys: legalCase.threeElements?.facts ? Object.keys(legalCase.threeElements.facts) : [],
+            summary: legalCase.threeElements?.facts?.summary,
+            timelineLength: legalCase.threeElements?.facts?.timeline?.length || 0,
+            keyFactsLength: legalCase.threeElements?.facts?.keyFacts?.length || 0,
+          });
+
+          // 🔧 保存到useTeachingStore（SnapshotConverter需要从store读取数据）
+          useTeachingStore.getState().setExtractedElements(
+            legalCase,
+            result.data.metadata?.confidence || 85
+          );
+
+          console.log('📦 [ThreeElementsExtractor] 已保存到Store，准备使用SnapshotConverter转换...');
+
+          // 🔧 使用SnapshotConverter进行数据转换（parties: object→string, evidence: 中文→英文, extractionMethod: pure-ai→ai）
+          const storeState = useTeachingStore.getState();
+          const snapshot = SnapshotConverter.toDatabase(storeState, undefined, {
+            saveType: 'auto',
+          });
+
+          console.log('✅ [ThreeElementsExtractor] SnapshotConverter转换完成:', {
+            caseTitle: snapshot.caseTitle,
+            plaintiffType: typeof snapshot.act1?.basicInfo?.parties?.plaintiff?.[0],
+            evidenceType: (snapshot.act1?.evidence as any)?.items?.[0]?.type,
+            extractionMethod: snapshot.act1?.metadata?.extractionMethod,
+          });
 
           // 保存到数据库
           const saveResponse = await fetch('/api/teaching-sessions', {
@@ -540,81 +586,98 @@ export function ThreeElementsExtractor({ mode: pageMode = 'edit' }: ThreeElement
 
   return (
     <div id="ThreeElementsExtractorId" className="space-y-6">
-      {/* 文件上传区域 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="w-5 h-5" />
-            判决书三要素智能提取
-          </CardTitle>
-          <CardDescription>
-            上传判决书文件（支持PDF、DOCX、MD、TXT格式），AI将自动提取事实认定、证据质证、法官说理三个核心要素
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {/* 只读模式提示 */}
-          {pageMode === 'review' && (
-            <Alert className="mb-4 bg-blue-50 border-blue-200">
-              <Eye className="w-4 h-4 text-blue-600" />
-              <AlertDescription className="text-blue-800">
-                当前为复习模式，仅可查看已上传的案例数据，无法上传新文件
-              </AlertDescription>
-            </Alert>
-          )}
+      {/* 复习模式：加载状态 */}
+      {pageMode === 'review' && (isLoadingFromDB || !extractedData) && !error && (
+        <Card>
+          <CardContent className="pt-6 text-center py-12">
+            <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin text-blue-600" />
+            <h3 className="text-lg font-semibold mb-2">
+              {isLoadingFromDB ? '正在从数据库加载案例数据...' : '正在加载案例数据...'}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {sessionId ? `会话ID: ${sessionId.substring(0, 8)}...` : '请稍候...'}
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
-          {/* 编辑模式：显示文件上传器 */}
-          {pageMode === 'edit' && (
-            <>
-              <SimpleFileUploader onFileSelect={handleFileSelect} />
+      {/* 文件上传区域 - 仅在编辑模式显示，或复习模式出错时显示 */}
+      {(pageMode !== 'review' || (pageMode === 'review' && error)) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              判决书三要素智能提取
+            </CardTitle>
+            <CardDescription>
+              上传判决书文件（支持PDF、DOCX、MD、TXT格式），AI将自动提取事实认定、证据质证、法官说理三个核心要素
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* 只读模式提示 */}
+            {pageMode === 'review' && (
+              <Alert className="mb-4 bg-blue-50 border-blue-200">
+                <Eye className="w-4 h-4 text-blue-600" />
+                <AlertDescription className="text-blue-800">
+                  当前为复习模式，仅可查看已上传的案例数据，无法上传新文件
+                </AlertDescription>
+              </Alert>
+            )}
 
-              {/* 演示数据按钮 */}
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <div className="flex items-center justify-center gap-4">
-                  <div className="text-center">
-                    <p className="text-sm text-gray-600 mb-2">或者直接体验演示数据</p>
-                    <Button
-                      variant="outline"
-                      onClick={handleLoadDemoData}
-                      className="gap-2"
-                      disabled={isProcessing}
-                    >
-                      <FileText className="w-4 h-4" />
-                      加载演示案例
-                    </Button>
-                    <p className="text-xs text-gray-500 mt-1">买卖合同纠纷案例</p>
+            {/* 编辑模式：显示文件上传器 */}
+            {pageMode === 'edit' && (
+              <>
+                <SimpleFileUploader onFileSelect={handleFileSelect} />
+
+                {/* 演示数据按钮 */}
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="flex items-center justify-center gap-4">
+                    <div className="text-center">
+                      <p className="text-sm text-gray-600 mb-2">或者直接体验演示数据</p>
+                      <Button
+                        variant="outline"
+                        onClick={handleLoadDemoData}
+                        className="gap-2"
+                        disabled={isProcessing}
+                      >
+                        <FileText className="w-4 h-4" />
+                        加载演示案例
+                      </Button>
+                      <p className="text-xs text-gray-500 mt-1">买卖合同纠纷案例</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </>
-          )}
-          
-          {isProcessing && (
-            <div className="mt-4 space-y-2">
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-sm text-muted-foreground">
-                  {parseProgress ? parseProgress.message : '正在处理文档...'}
-                </span>
-              </div>
-              <Progress value={progress} className="w-full" />
-              {parseProgress && (
-                <p className="text-xs text-gray-500">
-                  {parseProgress.stage === 'parsing' ? '📄' : 
-                   parseProgress.stage === 'reading' ? '📖' : 
-                   parseProgress.stage === 'loading' ? '⚡' : '🔄'} {parseProgress.message}
-                </p>
-              )}
-            </div>
-          )}
+              </>
+            )}
 
-          {error && (
-            <Alert variant="destructive" className="mt-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
+            {isProcessing && (
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm text-muted-foreground">
+                    {parseProgress ? parseProgress.message : '正在处理文档...'}
+                  </span>
+                </div>
+                <Progress value={progress} className="w-full" />
+                {parseProgress && (
+                  <p className="text-xs text-gray-500">
+                    {parseProgress.stage === 'parsing' ? '📄' :
+                     parseProgress.stage === 'reading' ? '📖' :
+                     parseProgress.stage === 'loading' ? '⚡' : '🔄'} {parseProgress.message}
+                    </p>
+                )}
+              </div>
+            )}
+
+            {error && (
+              <Alert variant="destructive" className="mt-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* 提取结果展示 */}
       {extractedData && (

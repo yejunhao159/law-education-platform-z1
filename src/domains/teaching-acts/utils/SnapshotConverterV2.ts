@@ -42,11 +42,15 @@ interface StoreState {
   };
   storyChapters?: any[];
   socraticData?: {
+    isActive?: boolean;
     level?: 1 | 2 | 3;
+    teachingModeEnabled?: boolean;
     completedNodes?: Set<string> | string[];
   };
   summaryData?: {
+    report?: any;
     caseLearningReport?: any;
+    isGenerating?: boolean;
   };
   currentAct?: string;
   sessionId?: string | null;
@@ -334,6 +338,15 @@ export class SnapshotConverterV2 {
 
     // 🔧 修复：转换metadata，确保confidence在0-1范围，extractionMethod使用正确枚举
     const rawMetadata = data.metadata || {};
+    console.log('🔍 [SnapshotConverter] 原始metadata:', {
+      extractionMethod: rawMetadata.extractionMethod,
+      confidence: rawMetadata.confidence,
+    });
+    const mappedExtractionMethod = this.mapExtractionMethod(rawMetadata.extractionMethod);
+    console.log('✅ [SnapshotConverter] 映射后extractionMethod:', {
+      original: rawMetadata.extractionMethod,
+      mapped: mappedExtractionMethod,
+    });
     const metadata = {
       extractedAt: rawMetadata.extractedAt || new Date().toISOString(),
       // 确保confidence在0-1范围
@@ -343,10 +356,11 @@ export class SnapshotConverterV2 {
       processingTime: rawMetadata.processingTime || 0,
       aiModel: rawMetadata.aiModel || 'unknown',
       // 映射extractionMethod到Schema枚举值
-      extractionMethod: this.mapExtractionMethod(rawMetadata.extractionMethod),
+      extractionMethod: mappedExtractionMethod,
       ...(rawMetadata.originalFileName && { originalFileName: rawMetadata.originalFileName }),
       ...(rawMetadata.uploadedAt && { uploadedAt: rawMetadata.uploadedAt }),
     };
+    console.log('✅ [SnapshotConverter] 最终metadata:', metadata);
 
     // 🔧 修复：转换basicInfo.parties从对象数组到字符串数组（Schema要求）
     // 注意：不能直接修改只读对象，必须创建新对象
@@ -450,13 +464,30 @@ export class SnapshotConverterV2 {
     };
 
     console.log('✅ [SnapshotConverter] 转换后的basicInfo.parties:', basicInfo.parties);
+    console.log('✅ [SnapshotConverter] 转换后parties类型检查:', {
+      isPlaintiffArray: Array.isArray(basicInfo.parties?.plaintiff),
+      plaintiffLength: basicInfo.parties?.plaintiff?.length,
+      firstPlaintiffType: typeof basicInfo.parties?.plaintiff?.[0],
+      firstPlaintiffValue: basicInfo.parties?.plaintiff?.[0],
+    });
 
     // 🔧 修复：从threeElements中提取facts/evidence/reasoning（LegalCase结构）
     const threeElements = data.threeElements || {};
 
     // 🔧 证据数据转换（处理中文类型）
     const rawEvidence = threeElements.evidence || data.evidence || { summary: '' };
+    console.log('🔍 [SnapshotConverter] 原始证据数据:', {
+      hasItems: !!(rawEvidence as any)?.items,
+      itemsCount: (rawEvidence as any)?.items?.length,
+      firstItemType: (rawEvidence as any)?.items?.[0]?.type,
+    });
     const normalizedEvidence = this.normalizeEvidenceData(rawEvidence);
+    console.log('✅ [SnapshotConverter] 转换后证据数据:', {
+      hasItems: !!(normalizedEvidence as any)?.items,
+      itemsCount: (normalizedEvidence as any)?.items?.length,
+      firstItemType: (normalizedEvidence as any)?.items?.[0]?.type,
+      firstItemDescription: (normalizedEvidence as any)?.items?.[0]?.description,
+    });
 
     // 🔧 提取facts数据（完整保留timeline等所有字段）
     const facts = threeElements.facts || data.facts || { summary: '' };
@@ -468,7 +499,7 @@ export class SnapshotConverterV2 {
       keyFactsCount: facts.keyFacts?.length || 0,
     });
 
-    return {
+    const act1Result = {
       basicInfo,
       facts,
       evidence: normalizedEvidence,
@@ -477,6 +508,16 @@ export class SnapshotConverterV2 {
       originalFileName: data.originalFileName,
       uploadedAt: data.uploadedAt || new Date().toISOString(),
     };
+
+    console.log('🎯 [SnapshotConverter] buildAct1Snapshot 最终返回值:', {
+      hasBasicInfo: !!act1Result.basicInfo,
+      plaintiffType: typeof act1Result.basicInfo?.parties?.plaintiff?.[0],
+      plaintiffValue: act1Result.basicInfo?.parties?.plaintiff?.[0],
+      evidenceItemType: (act1Result.evidence as any)?.items?.[0]?.type,
+      extractionMethod: act1Result.metadata?.extractionMethod,
+    });
+
+    return act1Result;
   }
 
   /**
@@ -493,7 +534,16 @@ export class SnapshotConverterV2 {
    * 规范化证据数据（处理中文类型转英文枚举）
    */
   private static normalizeEvidenceData(evidence: any): any {
+    console.log('🔍 [normalizeEvidenceData] 函数被调用，输入:', {
+      hasEvidence: !!evidence,
+      evidenceType: typeof evidence,
+      hasItems: !!(evidence as any)?.items,
+      itemsCount: (evidence as any)?.items?.length,
+      firstItemType: (evidence as any)?.items?.[0]?.type,
+    });
+
     if (!evidence || typeof evidence !== 'object') {
+      console.log('⚠️ [normalizeEvidenceData] 提前返回：evidence为空或不是对象');
       return { summary: '' };
     }
 
@@ -509,25 +559,76 @@ export class SnapshotConverterV2 {
       '电子数据': 'documentary',
     };
 
+    // 🔧 添加：提交方映射（中文 → 英文枚举 + 英文直接映射）
+    const submittedByMapping: Record<string, 'plaintiff' | 'defendant' | 'third-party' | 'court'> = {
+      // 中文映射
+      '原告': 'plaintiff',
+      '被告': 'defendant',
+      '第三人': 'third-party',
+      '法院调取': 'court',
+      // 英文直接映射（兼容已经是英文的情况）
+      'plaintiff': 'plaintiff',
+      'defendant': 'defendant',
+      'third-party': 'third-party',
+      'court': 'court',
+    };
+
     // 🔧 创建新对象副本（避免修改冻结对象）
     const normalizedEvidence = { ...evidence };
 
     // 处理evidence.items数组
     if (normalizedEvidence.items && Array.isArray(normalizedEvidence.items)) {
-      normalizedEvidence.items = normalizedEvidence.items.map((item: any) => {
+      console.log('✅ [normalizeEvidenceData] 开始转换items数组:', {
+        itemsLength: normalizedEvidence.items.length,
+      });
+
+      normalizedEvidence.items = normalizedEvidence.items.map((item: any, index: number) => {
+        console.log(`🔧 [normalizeEvidenceData] 转换item[${index}]:`, {
+          originalType: item.type,
+          hasDescription: !!item.description,
+          hasSource: !!item.source,
+        });
+
         const normalizedItem = { ...item };
 
         // 转换中文类型到英文
         if (typeof item.type === 'string') {
-          normalizedItem.type = typeMapping[item.type] || 'documentary';
+          const mappedType = typeMapping[item.type] || 'documentary';
+          console.log(`  映射类型: "${item.type}" → "${mappedType}"`);
+          normalizedItem.type = mappedType;
         }
 
-        // 确保description字段存在
-        if (!normalizedItem.description) {
-          normalizedItem.description = normalizedItem.source || '证据描述';
+        // 🔧 转换 submittedBy（中文 → 英文），无法映射的值设为 undefined
+        if (typeof item.submittedBy === 'string') {
+          if (item.submittedBy in submittedByMapping) {
+            const mappedSubmittedBy = submittedByMapping[item.submittedBy];
+            console.log(`  映射提交方: "${item.submittedBy}" → "${mappedSubmittedBy}"`);
+            normalizedItem.submittedBy = mappedSubmittedBy;
+          } else {
+            // 无法映射的值（如 '未明确说明'）设置为 undefined，因为 submittedBy 是可选字段
+            console.log(`  ⚠️ 提交方 "${item.submittedBy}" 无法映射到合法枚举值，设置为 undefined`);
+            normalizedItem.submittedBy = undefined;
+          }
+        }
+
+        // 🔧 修复：保持AI返回的原始数据，不使用占位符
+        // 如果AI没有返回description，说明提取失败，应该记录警告而不是用占位符掩盖
+        if (!normalizedItem.description || normalizedItem.description.trim().length === 0) {
+          console.warn(`⚠️ [normalizeEvidenceData] 证据item[${index}]缺少description，可能是AI提取不完整`);
+          normalizedItem.description = normalizedItem.name || normalizedItem.source || `证据${index + 1}（详细描述未提取）`;
         }
 
         return normalizedItem;
+      });
+
+      console.log('✅ [normalizeEvidenceData] items转换完成:', {
+        firstItemType: normalizedEvidence.items[0]?.type,
+        firstItemDescription: normalizedEvidence.items[0]?.description,
+      });
+    } else {
+      console.log('⚠️ [normalizeEvidenceData] items不存在或不是数组:', {
+        hasItems: !!(normalizedEvidence as any).items,
+        isArray: Array.isArray((normalizedEvidence as any).items),
       });
     }
 
@@ -585,13 +686,51 @@ export class SnapshotConverterV2 {
       })) || undefined
     } : undefined;
 
+    // 🔧 修复：规范化claimAnalysis数据，确保类型匹配Schema
+    const claimAnalysis = result.claimAnalysis ? this.normalizeClaimAnalysis(result.claimAnalysis) : undefined;
+
     return {
       narrative,
       timelineAnalysis,
       evidenceQuestions: result.evidenceQuestions || undefined,
-      claimAnalysis: result.claimAnalysis || undefined,
+      claimAnalysis,
       completedAt: new Date().toISOString(),
     };
+  }
+
+  /**
+   * 规范化请求权分析数据
+   * 修复API返回数据与Schema不匹配的问题
+   */
+  private static normalizeClaimAnalysis(data: any): any {
+    if (!data) return undefined;
+
+    try {
+      return {
+        ...data,
+        // 🔧 修复1: caseId必须是字符串
+        id: data.id ? String(data.id) : undefined,
+        caseId: data.caseId ? String(data.caseId) : undefined,
+
+        // 🔧 修复2: timeline.sequence必须是字符串数组
+        timeline: data.timeline ? {
+          ...data.timeline,
+          sequence: Array.isArray(data.timeline.sequence)
+            ? data.timeline.sequence.map((item: any) => {
+                // 如果是对象，提取描述字段
+                if (typeof item === 'object' && item !== null) {
+                  return item.description || item.event || item.title || JSON.stringify(item);
+                }
+                // 如果已经是字符串，直接返回
+                return String(item);
+              })
+            : data.timeline.sequence,
+        } : undefined,
+      };
+    } catch (error) {
+      console.error('❌ [SnapshotConverter] normalizeClaimAnalysis失败:', error);
+      return data; // 失败时返回原数据
+    }
   }
 
   /**
@@ -630,9 +769,11 @@ export class SnapshotConverterV2 {
     const report = storeState.summaryData?.caseLearningReport;
     if (!report) return undefined;
 
-    // 🔧 将CaseLearningReport转换为LearningReportSnapshot格式
+    // 🔧 修复：完整保存 CaseLearningReport，而不是转换成简化格式
+    // 原因：简化格式会丢失 caseOverview, learningPoints 等结构，导致读取时出错
     try {
       const learningReport = {
+        // 保存完整的 CaseLearningReport 结构
         summary: report.caseOverview?.oneLineSummary || report.caseOverview?.title || '',
         keyLearnings: [
           ...(report.learningPoints?.factualInsights || []),
@@ -647,6 +788,8 @@ export class SnapshotConverterV2 {
         recommendations: report.practicalTakeaways?.cautionPoints || [],
         nextSteps: report.practicalTakeaways?.checkList || [],
         generatedAt: new Date().toISOString(),
+        // ✨ 新增：完整保存原始 CaseLearningReport（用于恢复）
+        _fullReport: report,
       };
 
       return {
@@ -802,11 +945,8 @@ export class SnapshotConverterV2 {
   }
 
   private static restoreAct4ToStore(dbSession: DatabaseSession): StoreState['summaryData'] {
-    const act4 =
-      (dbSession as any).act4_learning_report ||
-      (dbSession as any).act4LearningReport ||
-      (dbSession as any).act4?.learningReport;
-    if (!act4) {
+    const act4 = (dbSession as any).act4;
+    if (!act4 || !act4.learningReport) {
       return {
         report: null,
         caseLearningReport: null,
@@ -814,9 +954,27 @@ export class SnapshotConverterV2 {
       };
     }
 
+    const learningReport = act4.learningReport;
+
+    // 🔧 修复：优先使用完整的 _fullReport，如果不存在则返回 null
+    // 原因：简化格式缺少 caseOverview 等结构，会导致组件报错
+    let caseLearningReport = null;
+
+    if (learningReport._fullReport) {
+      // ✅ 新格式：有完整报告
+      caseLearningReport = learningReport._fullReport;
+      console.log('✅ [SnapshotConverter] 从 _fullReport 恢复完整的 CaseLearningReport');
+    } else if (learningReport.summary) {
+      // ⚠️ 旧格式或不完整数据：只有简化格式，无法完整恢复
+      // 记录警告，返回 null，让前端重新生成报告
+      console.warn('⚠️ [SnapshotConverter] 检测到旧格式数据（缺少 _fullReport），无法完整恢复');
+      console.warn('💡 建议：前端将重新生成完整报告');
+      caseLearningReport = null;
+    }
+
     return {
       report: null,
-      caseLearningReport: act4,
+      caseLearningReport,
       isGenerating: false,
     };
   }

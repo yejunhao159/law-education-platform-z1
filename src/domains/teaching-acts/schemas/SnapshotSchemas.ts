@@ -51,11 +51,20 @@ export const FactsSnapshotSchema = z.object({
 
 /**
  * 证据项Schema
+ * 🔧 修复：与 legal-case.ts 的 EvidenceItemSchema 保持一致
  */
 export const EvidenceItemSnapshotSchema = z.object({
-  id: z.string(),
+  id: z.string().optional(),
+  name: z.string(),  // ✅ 添加：证据名称
   type: z.enum(['documentary', 'testimonial', 'physical', 'expert']),
-  description: z.string(),
+  submittedBy: z.enum(['plaintiff', 'defendant', 'third-party', 'court']).optional(),  // ✅ 添加：提交方（英文枚举）
+  description: z.string().optional(),
+  credibilityScore: z.number().min(0).max(100).optional(),  // 保留旧字段用于兼容
+  relevanceScore: z.number().min(0).max(100).optional(),    // 保留旧字段用于兼容
+  accepted: z.boolean(),  // ✅ 添加：是否采纳
+  courtOpinion: z.string().optional(),  // ✅ 添加：法院意见
+  relatedFacts: z.array(z.string()).optional(),  // ✅ 添加：相关事实
+  // 保留旧字段用于向后兼容
   source: z.string().optional(),
   relevance: z.string().optional(),
   credibility: z.enum(['high', 'medium', 'low']).optional(),
@@ -83,8 +92,11 @@ export const ReasoningSnapshotSchema = z.object({
   legalBasis: z.array(z.object({
     law: z.string(),
     article: z.string(),
-    content: z.string().optional(),
+    clause: z.string().optional(),  // ✅ 添加：条款号
+    content: z.string().optional(),  // ✅ 法条完整内容
+    source: z.enum(['判决书原文', 'AI补充', '待核实']).optional(),  // ✅ 添加：法条来源
     application: z.string().optional(),  // 添加application字段（与LegalCase一致）
+    interpretation: z.string().optional(),  // ✅ 添加：法条解释
   })).optional(),
   // 🔧 修复：logicChain应该是对象数组，不是字符串数组
   logicChain: z.array(z.object({
@@ -174,7 +186,7 @@ export const TimelineAnalysisSnapshotSchema = z.object({
 
   // 其他时间线相关数据
   additionalData: z.record(z.unknown()).optional(),
-});
+}).passthrough();  // ⭐ 添加 passthrough() 允许AI生成的额外字段（如legalRisks, summary等）不被过滤
 
 /**
  * 证据学习问题Schema
@@ -193,38 +205,48 @@ export const EvidenceQuestionSnapshotSchema = z.object({
 
 /**
  * 请求权分析Schema
+ * 匹配ClaimAnalysisResult的实际结构
  */
 export const ClaimAnalysisSnapshotSchema = z.object({
-  claims: z.array(z.object({
-    id: z.string(),
-    basis: z.string(),
-    basisText: z.string().optional(),
-    type: z.enum(['primary', 'alternative', 'subsidiary']),
-    elements: z.array(z.object({
-      name: z.string(),
-      description: z.string(),
-      satisfied: z.boolean(),
-      evidence: z.array(z.string()),
-      analysis: z.string().optional(),
-    })),
-    conclusion: z.enum(['established', 'partial', 'failed']),
-    reasoning: z.string().optional(),
-    priority: z.number().optional(),
-  })),
-  defenses: z.array(z.object({
-    id: z.string(),
-    type: z.enum(['denial', 'excuse', 'objection', 'counterclaim']),
-    basis: z.string(),
-    description: z.string(),
-    evidence: z.array(z.string()),
-    impact: z.enum(['blocks-claim', 'reduces-claim', 'no-impact']),
-  })).optional(),
-  strategy: z.object({
-    recommendations: z.array(z.string()),
-    risks: z.array(z.string()),
-    opportunities: z.array(z.string()),
+  id: z.string().optional(),
+  timestamp: z.string().optional(),
+  caseId: z.string().optional(),
+
+  // claims是对象，包含primary/alternative/defense三个数组
+  claims: z.object({
+    primary: z.array(z.any()).optional(),      // 主要请求权
+    alternative: z.array(z.any()).optional(),  // 备选请求权
+    defense: z.array(z.any()).optional(),      // 抗辩事由
   }).optional(),
-});
+
+  // 时间维度分析
+  timeline: z.object({
+    keyPoints: z.array(z.any()).optional(),
+    limitations: z.array(z.any()).optional(),
+    sequence: z.array(z.string()).optional(),
+  }).optional(),
+
+  // 法律关系图谱
+  legalRelations: z.array(z.any()).optional(),
+
+  // 举证责任分配
+  burdenOfProof: z.array(z.any()).optional(),
+
+  // 策略建议（可能是字符串数组或对象数组）
+  strategy: z.object({
+    recommendations: z.array(z.any()).optional(),  // 兼容字符串或对象
+    risks: z.array(z.any()).optional(),
+    opportunities: z.array(z.any()).optional(),
+  }).optional(),
+
+  // AI分析元数据
+  metadata: z.object({
+    model: z.string().optional(),
+    confidence: z.number().optional(),
+    processingTime: z.number().optional(),
+    tokensUsed: z.number().optional(),
+  }).optional(),
+}).passthrough();  // ⭐ 允许额外字段通过
 
 /**
  * 第二幕完整快照Schema
@@ -270,6 +292,8 @@ export const LearningReportSnapshotSchema = z.object({
   recommendations: z.array(z.string()),
   nextSteps: z.array(z.string()),
   generatedAt: z.string().datetime(),
+  // ✨ 新增：完整保存原始 CaseLearningReport（用于恢复完整数据结构）
+  _fullReport: z.any().optional(),
 });
 
 /**
@@ -324,7 +348,7 @@ export const TeachingSessionSnapshotSchemaV1 = z.object({
   // 各幕数据
   act1: Act1SnapshotSchema,
   act2: Act2SnapshotSchema.optional(),
-  act3: Act3SnapshotSchema.optional(),
+  act3: Act3SnapshotSchema.nullable().optional(), // Act3不持久化，允许null
   act4: Act4SnapshotSchema.optional(),
 
   // 时间戳
@@ -403,4 +427,166 @@ export function getValidationErrorMessage(error: z.ZodError): string {
     return `${path}: ${issue.message}`;
   });
   return issues.join('; ');
+}
+
+// =============================================================================
+// 快照系统 V2 Schema (Snapshot System V2)
+// 支持版本管理、课堂模式、对话流水分离
+// Spec: specs/001-teaching-session-storage/spec.md
+// =============================================================================
+
+/**
+ * 快照状态枚举
+ * 状态生命周期: draft → ready_for_class → classroom_ready → archived
+ */
+export const SnapshotStatusSchema = z.enum([
+  'draft',              // 草稿状态
+  'ready_for_class',    // 准备就绪,可供发布
+  'classroom_ready',    // 已发布课堂版,锁定只读
+  'archived',           // 已归档
+]);
+
+export type SnapshotStatus = z.infer<typeof SnapshotStatusSchema>;
+
+/**
+ * 快照封装 (Snapshot Envelope)
+ * 顶层对象,包含版本、锁定、审计等元数据
+ */
+export const SnapshotEnvelopeSchema = z.object({
+  // 版本标识
+  versionId: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  userId: z.string().min(1),
+  organizationId: z.string().default('default-org'),
+
+  // 版本元数据
+  versionTag: z.string().default('draft'),
+  status: SnapshotStatusSchema,
+  classroomReady: z.boolean(),
+
+  // 锁定机制
+  lockedAt: z.string().datetime().optional().nullable(),
+  lockedBy: z.string().optional().nullable(),
+
+  // 审计追踪
+  sourceService: z.string().min(1),
+  requestId: z.string().min(1),
+  traceId: z.string().optional(),
+
+  // Schema版本
+  schemaVersion: z.string().regex(/^\d+\.\d+\.\d+$/).default('1.0.0'),
+  dataVersion: z.string().regex(/^\d+\.\d+\.\d+$/).default('1.0.0'),
+
+  // 四幕快照 (JSONB字段)
+  act1CaseSnapshot: Act1SnapshotSchema.nullable().optional(),
+  act2AnalysisSnapshot: Act2SnapshotSchema.nullable().optional(),
+  act3DialogueSnapshot: z.object({
+    totalTurns: z.number().int().min(0).default(0),
+    studentParticipation: z.number().min(0).max(100).default(0),
+    startedAt: z.string().datetime().optional(),
+    endedAt: z.string().datetime().optional(),
+    latestTurnId: z.string().uuid().optional(),
+  }).nullable().optional(),
+  act4SummarySnapshot: Act4SnapshotSchema.nullable().optional(),
+
+  // 时间戳
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  deletedAt: z.string().datetime().nullable().optional(),
+});
+
+export type SnapshotEnvelope = z.infer<typeof SnapshotEnvelopeSchema>;
+
+/**
+ * Act3快照摘要 (不包含完整对话,对话在独立表中)
+ */
+export const Act3SnapshotSummarySchema = z.object({
+  totalTurns: z.number().int().min(0),
+  studentParticipation: z.number().min(0).max(100),
+  startedAt: z.string().datetime(),
+  endedAt: z.string().datetime().optional(),
+  latestTurnId: z.string().uuid().optional(),
+});
+
+export type Act3SnapshotSummary = z.infer<typeof Act3SnapshotSummarySchema>;
+
+/**
+ * 苏格拉底对话轮次 (Socratic Turn)
+ * 存储在teaching_session_dialogues表中
+ */
+export const SocraticTurnSchema = z.object({
+  // 主键
+  turnId: z.string().uuid(),
+
+  // 关联
+  sessionId: z.string().uuid(),
+  versionId: z.string().uuid(),
+
+  // 排序
+  turnIndex: z.number().int().min(0),
+  chunkIndex: z.number().int().min(0).default(0),
+
+  // 内容
+  speaker: z.enum(['teacher', 'student', 'assistant']),
+  message: z.string().min(1),
+
+  // 审计追踪
+  sourceService: z.string().min(1),
+  requestId: z.string().min(1),
+  traceId: z.string().optional(),
+
+  // 时间戳
+  streamedAt: z.string().datetime(),
+});
+
+export type SocraticTurn = z.infer<typeof SocraticTurnSchema>;
+
+// =============================================================================
+// V2 验证工具函数
+// =============================================================================
+
+/**
+ * 验证快照封装
+ */
+export function validateSnapshotEnvelope(data: unknown): {
+  success: boolean;
+  data?: SnapshotEnvelope;
+  error?: z.ZodError;
+} {
+  const result = SnapshotEnvelopeSchema.safeParse(data);
+  return {
+    success: result.success,
+    data: result.success ? result.data : undefined,
+    error: !result.success ? result.error : undefined,
+  };
+}
+
+/**
+ * 验证对话轮次
+ */
+export function validateSocraticTurn(data: unknown): {
+  success: boolean;
+  data?: SocraticTurn;
+  error?: z.ZodError;
+} {
+  const result = SocraticTurnSchema.safeParse(data);
+  return {
+    success: result.success,
+    data: result.success ? result.data : undefined,
+    error: !result.success ? result.error : undefined,
+  };
+}
+
+/**
+ * 检查快照是否锁定(课堂模式)
+ */
+export function isSnapshotLocked(snapshot: SnapshotEnvelope): boolean {
+  return snapshot.classroomReady === true && snapshot.lockedAt !== null && snapshot.lockedAt !== undefined;
+}
+
+/**
+ * 检查快照是否可编辑
+ */
+export function isSnapshotEditable(snapshot: SnapshotEnvelope): boolean {
+  return !isSnapshotLocked(snapshot) && snapshot.status !== 'archived';
 }

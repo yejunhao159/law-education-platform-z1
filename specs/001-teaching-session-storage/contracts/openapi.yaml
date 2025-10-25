@@ -1,0 +1,1316 @@
+openapi: 3.0.3
+info:
+  title: Teaching Session Storage API
+  description: |
+    教学会话存储系统API规范
+
+    本API提供完整的教学会话管理功能,包括:
+    - 保存/更新教学会话快照 (四幕教学流程)
+    - 分页查询历史会话列表
+    - 获取单个会话详情
+    - 搜索会话内容
+    - 软删除会话
+
+    **技术栈**: Next.js 15 App Router + PostgreSQL + JSONB
+  version: 1.0.0
+  contact:
+    name: Law Education Platform Team
+
+servers:
+  - url: http://localhost:3000/api
+    description: 本地开发环境
+  - url: https://staging.law-edu.com/api
+    description: 测试环境
+  - url: https://law-edu.com/api
+    description: 生产环境
+
+tags:
+  - name: teaching-sessions
+    description: 教学会话管理
+
+paths:
+  /teaching-sessions:
+    post:
+      tags:
+        - teaching-sessions
+      summary: 创建或更新教学会话
+      description: |
+        保存教学会话快照。支持两种模式:
+        - **创建新会话**: 不传`id`字段,系统自动生成UUID
+        - **更新现有会话**: 传入`id`字段,系统执行UPSERT操作
+
+        **业务规则**:
+        - 同一用户可同时保存多个会话
+        - 最后写入胜出 (并发场景)
+        - 快照大小限制: < 5MB
+      operationId: saveTeachingSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveSessionRequest'
+            examples:
+              createNew:
+                summary: 创建新会话 (仅Act1)
+                value:
+                  userId: "user123"
+                  title: "合同纠纷案例分析"
+                  status: "draft"
+                  act1Snapshot:
+                    caseId: "case001"
+                    caseTitle: "买卖合同纠纷"
+                    caseContent: "甲方与乙方于2023年1月1日签订买卖合同..."
+                    importedAt: "2025-10-24T10:00:00Z"
+              updateExisting:
+                summary: 更新现有会话 (添加Act2)
+                value:
+                  id: "550e8400-e29b-41d4-a716-446655440000"
+                  userId: "user123"
+                  title: "合同纠纷案例分析"
+                  status: "in_progress"
+                  act1Snapshot:
+                    caseId: "case001"
+                    caseTitle: "买卖合同纠纷"
+                    caseContent: "甲方与乙方于2023年1月1日签订买卖合同..."
+                    importedAt: "2025-10-24T10:00:00Z"
+                  act2Snapshot:
+                    legalIssues: ["合同效力", "违约责任"]
+                    factAnalysis: "本案争议焦点在于合同是否有效..."
+                    legalBasis: ["《民法典》第143条", "《民法典》第577条"]
+                    conclusions: "综合分析,甲方应承担违约责任"
+                    analyzedAt: "2025-10-24T10:30:00Z"
+      responses:
+        '200':
+          description: 保存成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveSessionResponse'
+              examples:
+                success:
+                  value:
+                    success: true
+                    data:
+                      id: "550e8400-e29b-41d4-a716-446655440000"
+                      createdAt: "2025-10-24T10:00:00Z"
+                      updatedAt: "2025-10-24T10:30:00Z"
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                validationError:
+                  value:
+                    success: false
+                    error:
+                      code: "VALIDATION_ERROR"
+                      message: "act1Snapshot.caseTitle is required"
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags:
+        - teaching-sessions
+      summary: 分页查询教学会话列表
+      description: |
+        查询当前用户的历史会话列表,支持:
+        - 分页 (默认20条/页,最大100条/页)
+        - 状态筛选
+        - 搜索关键词 (标题+案例内容)
+        - 排序 (创建时间/更新时间)
+
+        **性能目标**: < 2秒 (单页100条)
+      operationId: listTeachingSessions
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 用户ID
+          example: "user123"
+
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+          description: 页码 (从1开始)
+
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+          description: 每页条数
+
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [draft, in_progress, completed, archived]
+          description: 按状态筛选
+          example: "in_progress"
+
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 搜索关键词 (标题+案例内容)
+          example: "合同纠纷"
+
+        - name: sortBy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [createdAt, updatedAt]
+            default: createdAt
+          description: 排序字段
+
+        - name: sortOrder
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          description: 排序方向
+
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSessionsResponse'
+              examples:
+                success:
+                  value:
+                    success: true
+                    data:
+                      sessions:
+                        - id: "550e8400-e29b-41d4-a716-446655440000"
+                          userId: "user123"
+                          title: "合同纠纷案例分析"
+                          status: "in_progress"
+                          createdAt: "2025-10-24T10:00:00Z"
+                          updatedAt: "2025-10-24T10:30:00Z"
+                        - id: "660e8400-e29b-41d4-a716-446655440001"
+                          userId: "user123"
+                          title: "刑事案件辩护"
+                          status: "completed"
+                          createdAt: "2025-10-23T14:00:00Z"
+                          updatedAt: "2025-10-23T16:00:00Z"
+                      pagination:
+                        page: 1
+                        limit: 20
+                        total: 2
+                        totalPages: 1
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /teaching-sessions/{id}:
+    get:
+      tags:
+        - teaching-sessions
+      summary: 获取单个会话详情
+      description: |
+        根据ID获取完整的教学会话数据,包括所有四幕快照。
+
+        **性能目标**: < 5秒
+      operationId: getTeachingSessionById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: 会话ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetSessionResponse'
+              examples:
+                success:
+                  value:
+                    success: true
+                    data:
+                      id: "550e8400-e29b-41d4-a716-446655440000"
+                      userId: "user123"
+                      title: "合同纠纷案例分析"
+                      status: "in_progress"
+                      act1Snapshot:
+                        caseId: "case001"
+                        caseTitle: "买卖合同纠纷"
+                        caseContent: "甲方与乙方于2023年1月1日签订买卖合同..."
+                        importedAt: "2025-10-24T10:00:00Z"
+                      act2Snapshot:
+                        legalIssues: ["合同效力", "违约责任"]
+                        factAnalysis: "本案争议焦点在于合同是否有效..."
+                        legalBasis: ["《民法典》第143条", "《民法典》第577条"]
+                        conclusions: "综合分析,甲方应承担违约责任"
+                        analyzedAt: "2025-10-24T10:30:00Z"
+                      act3Snapshot: null
+                      act4Snapshot: null
+                      createdAt: "2025-10-24T10:00:00Z"
+                      updatedAt: "2025-10-24T10:30:00Z"
+                      schemaVersion: "1.0.0"
+                      dataVersion: "1.0.0"
+        '404':
+          description: 会话不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notFound:
+                  value:
+                    success: false
+                    error:
+                      code: "NOT_FOUND"
+                      message: "Session not found"
+
+    patch:
+      tags:
+        - teaching-sessions
+      summary: 部分更新会话
+      description: |
+        更新会话的部分字段 (如标题、状态)。
+
+        **注意**: 更新快照数据请使用POST接口。
+      operationId: updateTeachingSession
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: 会话ID
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSessionRequest'
+            examples:
+              updateTitle:
+                summary: 更新标题
+                value:
+                  title: "合同纠纷案例分析 (已修订)"
+              updateStatus:
+                summary: 更新状态
+                value:
+                  status: "archived"
+
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateSessionResponse'
+        '404':
+          description: 会话不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - teaching-sessions
+      summary: 软删除会话
+      description: |
+        软删除会话 (标记`deleted_at`字段)。
+
+        **行为**:
+        - 列表查询将不再返回该会话
+        - 数据保留30天 (可恢复)
+        - 30天后自动物理删除
+
+        **性能目标**: < 1秒
+      operationId: deleteTeachingSession
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: 会话ID
+
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteSessionResponse'
+              examples:
+                success:
+                  value:
+                    success: true
+                    data:
+                      id: "550e8400-e29b-41d4-a716-446655440000"
+                      deletedAt: "2025-10-24T12:00:00Z"
+        '404':
+          description: 会话不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /teaching-sessions/ingest:
+    post:
+      tags:
+        - teaching-sessions
+      summary: AI输出入库 (快照写入器)
+      description: |
+        将AI服务输出写入快照数据库。数据库优先原则。
+
+        **使用场景**:
+        - Act1: 案例导入完成后
+        - Act2: 法律分析生成后
+        - Act3: 苏格拉底对话完成后
+        - Act4: 课堂文档生成后
+
+        **性能目标**: 写入延迟 ≤ 2秒
+      operationId: ingestAIOutput
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestRequest'
+      responses:
+        '200':
+          description: 入库成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestResponse'
+        '400':
+          description: 验证失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 写入失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /teaching-sessions/{id}/snapshot:
+    get:
+      tags:
+        - teaching-sessions
+      summary: 获取课堂快照
+      description: |
+        获取最新的classroom_ready快照用于课堂展示。
+
+        **回退逻辑**:
+        1. classroom_ready
+        2. ready_for_class
+        3. draft
+      operationId: getClassroomSnapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: 会话ID
+      responses:
+        '200':
+          description: 快照加载成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SnapshotResponse'
+        '404':
+          description: 快照不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /teaching-sessions/{id}/dialogues:
+    get:
+      tags:
+        - teaching-sessions
+      summary: 获取对话历史
+      description: |
+        获取苏格拉底对话的完整历史记录。
+
+        **查询参数**:
+        - versionId: 可选,过滤特定版本的对话
+      operationId: getDialogueHistory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: 会话ID
+        - name: versionId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: 版本ID (可选)
+      responses:
+        '200':
+          description: 对话历史加载成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DialogueHistoryResponse'
+
+  /teaching-sessions/{id}/publish:
+    post:
+      tags:
+        - teaching-sessions
+      summary: 发布快照为课堂版
+      description: |
+        将快照晋升为classroom_ready状态并锁定。
+
+        **状态转换规则**:
+        - draft → ready_for_class
+        - ready_for_class → classroom_ready
+        - classroom_ready → archived
+      operationId: publishSnapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: 会话ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishRequest'
+      responses:
+        '200':
+          description: 发布成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishResponse'
+        '400':
+          description: 状态转换无效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /teaching-sessions/{id}/versions:
+    get:
+      tags:
+        - teaching-sessions
+      summary: 列出所有版本
+      description: |
+        列出会话的所有快照版本,按更新时间倒序。
+      operationId: listVersions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: 会话ID
+      responses:
+        '200':
+          description: 版本列表加载成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionListResponse'
+
+  /teaching-sessions/{id}/versions/{versionId}:
+    get:
+      tags:
+        - teaching-sessions
+      summary: 获取特定版本
+      description: |
+        获取指定版本的完整快照数据。
+      operationId: getSpecificVersion
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: 会话ID
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: 版本ID
+      responses:
+        '200':
+          description: 版本加载成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SnapshotResponse'
+        '404':
+          description: 版本不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    # ---------- Request Schemas ----------
+
+    SaveSessionRequest:
+      type: object
+      required:
+        - userId
+        - title
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 会话ID (可选,不传则创建新会话)
+        userId:
+          type: string
+          description: 用户ID
+        title:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: 会话标题
+        status:
+          $ref: '#/components/schemas/SessionStatus'
+        act1Snapshot:
+          $ref: '#/components/schemas/Act1Snapshot'
+        act2Snapshot:
+          $ref: '#/components/schemas/Act2Snapshot'
+        act3Snapshot:
+          $ref: '#/components/schemas/Act3Snapshot'
+        act4Snapshot:
+          $ref: '#/components/schemas/Act4Snapshot'
+
+    UpdateSessionRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 500
+        status:
+          $ref: '#/components/schemas/SessionStatus'
+
+    # ---------- Response Schemas ----------
+
+    SaveSessionResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          required:
+            - id
+            - createdAt
+            - updatedAt
+          properties:
+            id:
+              type: string
+              format: uuid
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+
+    ListSessionsResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          required:
+            - sessions
+            - pagination
+          properties:
+            sessions:
+              type: array
+              items:
+                $ref: '#/components/schemas/SessionSummary'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+
+    GetSessionResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/TeachingSession'
+
+    UpdateSessionResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          required:
+            - id
+            - updatedAt
+          properties:
+            id:
+              type: string
+              format: uuid
+            updatedAt:
+              type: string
+              format: date-time
+
+    DeleteSessionResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          required:
+            - id
+            - deletedAt
+          properties:
+            id:
+              type: string
+              format: uuid
+            deletedAt:
+              type: string
+              format: date-time
+
+    ErrorResponse:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - NOT_FOUND
+                - INTERNAL_ERROR
+                - UNAUTHORIZED
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              example: "Invalid request parameters"
+
+    # ---------- Entity Schemas ----------
+
+    TeachingSession:
+      type: object
+      required:
+        - id
+        - userId
+        - title
+        - status
+        - createdAt
+        - updatedAt
+        - schemaVersion
+        - dataVersion
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+        title:
+          type: string
+        status:
+          $ref: '#/components/schemas/SessionStatus'
+        act1Snapshot:
+          $ref: '#/components/schemas/Act1Snapshot'
+        act2Snapshot:
+          $ref: '#/components/schemas/Act2Snapshot'
+        act3Snapshot:
+          $ref: '#/components/schemas/Act3Snapshot'
+        act4Snapshot:
+          $ref: '#/components/schemas/Act4Snapshot'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+        schemaVersion:
+          type: string
+          pattern: '^\d+\.\d+\.\d+$'
+          example: "1.0.0"
+        dataVersion:
+          type: string
+          pattern: '^\d+\.\d+\.\d+$'
+          example: "1.0.0"
+
+    SessionSummary:
+      type: object
+      required:
+        - id
+        - userId
+        - title
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+        title:
+          type: string
+        status:
+          $ref: '#/components/schemas/SessionStatus'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SessionStatus:
+      type: string
+      enum:
+        - draft
+        - in_progress
+        - completed
+        - archived
+      description: |
+        - `draft`: 草稿 (初始状态)
+        - `in_progress`: 进行中 (至少完成一幕)
+        - `completed`: 已完成 (完成四幕)
+        - `archived`: 已归档 (教师手动归档)
+
+    # ---------- Snapshot Schemas ----------
+
+    Act1Snapshot:
+      type: object
+      required:
+        - caseId
+        - caseTitle
+        - caseContent
+        - importedAt
+      properties:
+        caseId:
+          type: string
+          format: uuid
+        caseTitle:
+          type: string
+          minLength: 1
+          maxLength: 500
+        caseContent:
+          type: string
+          minLength: 10
+          maxLength: 50000
+        caseSource:
+          type: string
+        teachingGoals:
+          type: array
+          items:
+            type: string
+        keyPoints:
+          type: array
+          items:
+            type: string
+        importedAt:
+          type: string
+          format: date-time
+
+    Act2Snapshot:
+      type: object
+      required:
+        - legalIssues
+        - factAnalysis
+        - legalBasis
+        - conclusions
+        - analyzedAt
+      properties:
+        legalIssues:
+          type: array
+          items:
+            type: string
+          minItems: 1
+        factAnalysis:
+          type: string
+          minLength: 10
+        legalBasis:
+          type: array
+          items:
+            type: string
+        conclusions:
+          type: string
+          minLength: 10
+        aiSuggestions:
+          type: array
+          items:
+            type: string
+        analyzedAt:
+          type: string
+          format: date-time
+
+    Act3Snapshot:
+      type: object
+      required:
+        - dialogues
+        - totalTurns
+        - studentParticipation
+        - startedAt
+      properties:
+        dialogues:
+          type: array
+          items:
+            $ref: '#/components/schemas/Dialogue'
+          minItems: 1
+        totalTurns:
+          type: integer
+          minimum: 1
+        studentParticipation:
+          type: number
+          minimum: 0
+          maximum: 100
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+
+    Act4Snapshot:
+      type: object
+      required:
+        - summary
+        - keyTakeaways
+        - summarizedAt
+      properties:
+        summary:
+          type: string
+          minLength: 10
+        keyTakeaways:
+          type: array
+          items:
+            type: string
+          minItems: 1
+        relatedConcepts:
+          type: array
+          items:
+            type: string
+        furtherReading:
+          type: array
+          items:
+            type: string
+        summarizedAt:
+          type: string
+          format: date-time
+
+    Dialogue:
+      type: object
+      required:
+        - speaker
+        - message
+        - timestamp
+      properties:
+        speaker:
+          type: string
+          enum: [teacher, student]
+        message:
+          type: string
+          minLength: 1
+        timestamp:
+          type: string
+          format: date-time
+
+    # ---------- Utility Schemas ----------
+
+    Pagination:
+      type: object
+      required:
+        - page
+        - limit
+        - total
+        - totalPages
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          description: 当前页码
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: 每页条数
+        total:
+          type: integer
+          minimum: 0
+          description: 总记录数
+        totalPages:
+          type: integer
+          minimum: 0
+          description: 总页数
+
+    # ---------- New Snapshot System Schemas ----------
+
+    IngestRequest:
+      type: object
+      required:
+        - sessionId
+        - userId
+        - actType
+        - payload
+        - sourceService
+        - requestId
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+        actType:
+          type: string
+          enum: [act1, act2, act3, act4]
+        payload:
+          oneOf:
+            - $ref: '#/components/schemas/Act1Snapshot'
+            - $ref: '#/components/schemas/Act2Snapshot'
+            - $ref: '#/components/schemas/Act3Snapshot'
+            - $ref: '#/components/schemas/Act4Snapshot'
+        sourceService:
+          type: string
+          description: 来源服务标识
+        requestId:
+          type: string
+          description: 请求ID
+        traceId:
+          type: string
+          description: 追踪ID (可选)
+        versionTag:
+          type: string
+          description: 版本标签 (可选)
+
+    IngestResponse:
+      type: object
+      required:
+        - success
+        - versionId
+        - latencyMs
+      properties:
+        success:
+          type: boolean
+        versionId:
+          type: string
+          format: uuid
+        latencyMs:
+          type: number
+
+    SnapshotResponse:
+      type: object
+      required:
+        - success
+        - snapshot
+      properties:
+        success:
+          type: boolean
+        snapshot:
+          $ref: '#/components/schemas/SnapshotEnvelope'
+        metadata:
+          type: object
+          properties:
+            sessionId:
+              type: string
+              format: uuid
+            versionId:
+              type: string
+              format: uuid
+            status:
+              type: string
+            classroomReady:
+              type: boolean
+            locked:
+              type: boolean
+            latencyMs:
+              type: number
+
+    SnapshotEnvelope:
+      type: object
+      required:
+        - versionId
+        - sessionId
+        - userId
+        - status
+        - classroomReady
+        - schemaVersion
+        - dataVersion
+        - createdAt
+        - updatedAt
+      properties:
+        versionId:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+        organizationId:
+          type: string
+        status:
+          type: string
+          enum: [draft, ready_for_class, classroom_ready, archived]
+        classroomReady:
+          type: boolean
+        versionTag:
+          type: string
+        lockedAt:
+          type: string
+          format: date-time
+        lockedBy:
+          type: string
+        act1CaseSnapshot:
+          $ref: '#/components/schemas/Act1Snapshot'
+        act2AnalysisSnapshot:
+          $ref: '#/components/schemas/Act2Snapshot'
+        act3DialogueSnapshot:
+          type: object
+        act4SummarySnapshot:
+          $ref: '#/components/schemas/Act4Snapshot'
+        sourceService:
+          type: string
+        requestId:
+          type: string
+        traceId:
+          type: string
+        schemaVersion:
+          type: string
+        dataVersion:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DialogueHistoryResponse:
+      type: object
+      required:
+        - success
+        - dialogues
+        - stats
+      properties:
+        success:
+          type: boolean
+        dialogues:
+          type: array
+          items:
+            $ref: '#/components/schemas/DialogueTurn'
+        stats:
+          type: object
+          properties:
+            totalTurns:
+              type: integer
+            uniqueTurnIndexes:
+              type: integer
+            speakers:
+              type: object
+
+    DialogueTurn:
+      type: object
+      required:
+        - turnId
+        - sessionId
+        - versionId
+        - turnIndex
+        - speaker
+        - message
+        - createdAt
+      properties:
+        turnId:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        versionId:
+          type: string
+          format: uuid
+        turnIndex:
+          type: integer
+        chunkIndex:
+          type: integer
+        speaker:
+          type: string
+          enum: [teacher, student, assistant]
+        message:
+          type: string
+        sourceService:
+          type: string
+        requestId:
+          type: string
+        traceId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    PublishRequest:
+      type: object
+      required:
+        - versionId
+        - lockedBy
+      properties:
+        versionId:
+          type: string
+          format: uuid
+        lockedBy:
+          type: string
+
+    PublishResponse:
+      type: object
+      required:
+        - success
+        - snapshot
+      properties:
+        success:
+          type: boolean
+        snapshot:
+          $ref: '#/components/schemas/SnapshotEnvelope'
+
+    VersionListResponse:
+      type: object
+      required:
+        - success
+        - versions
+        - stats
+      properties:
+        success:
+          type: boolean
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/VersionMetadata'
+        stats:
+          type: object
+          properties:
+            totalVersions:
+              type: integer
+            statusBreakdown:
+              type: object
+            latestClassroomReady:
+              type: string
+            lockedVersions:
+              type: integer
+
+    VersionMetadata:
+      type: object
+      required:
+        - versionId
+        - status
+        - classroomReady
+        - createdAt
+        - updatedAt
+      properties:
+        versionId:
+          type: string
+          format: uuid
+        versionTag:
+          type: string
+        status:
+          type: string
+        classroomReady:
+          type: boolean
+        locked:
+          type: boolean
+        lockedAt:
+          type: string
+          format: date-time
+        lockedBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        schemaVersion:
+          type: string
+        dataVersion:
+          type: integer

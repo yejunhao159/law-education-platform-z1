@@ -30,6 +30,16 @@ export async function POST(request: NextRequest) {
     const snapshot: TeachingSessionSnapshot | undefined = body.snapshot;
     const sessionIdFromBody: string | undefined = body.sessionId;
 
+    // 🔍 Debug: 检查接收到的数据
+    console.log('🔍 [API] 接收到的snapshot数据检查:', {
+      hasAct1: !!snapshot?.act1,
+      plaintiffType: typeof snapshot?.act1?.basicInfo?.parties?.plaintiff?.[0],
+      plaintiffValue: snapshot?.act1?.basicInfo?.parties?.plaintiff?.[0],
+      evidenceItemType: (snapshot?.act1?.evidence as any)?.items?.[0]?.type,
+      evidenceItemDescription: (snapshot?.act1?.evidence as any)?.items?.[0]?.description,
+      extractionMethod: snapshot?.act1?.metadata?.extractionMethod,
+    });
+
     const validation = validateTeachingSessionSnapshot(snapshot);
     if (!validation.success || !validation.data) {
       const message = validation.error
@@ -75,7 +85,6 @@ export async function POST(request: NextRequest) {
         createdAt: savedSession.createdAt,
         updatedAt: savedSession.updatedAt,
         completedAt: savedSession.completedAt,
-        saveType: savedSession.saveType,
       },
     });
   } catch (error) {

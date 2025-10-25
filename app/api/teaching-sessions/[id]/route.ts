@@ -145,7 +145,6 @@ export async function PATCH(
         sessionState: updated.sessionState,
         updatedAt: updated.updatedAt,
         completedAt: updated.completedAt,
-        saveType: updated.saveType,
       },
     });
   } catch (error) {
